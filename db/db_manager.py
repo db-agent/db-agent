@@ -10,14 +10,23 @@ class DatabaseManager:
         try:
             # Dynamically import the corresponding connector module
             module = importlib.import_module(f'db.connectors.{db_type}_connector')
-            # Get the connector class (assumes the class name matches the module name but with CamelCase)
-            class_name = ''.join(word.title() for word in db_type.split('_')) + 'Connector'
+
+            # Explicitly map db_type to class names to handle special cases
+            class_name_map = {
+                'mysql': 'MySQLConnector',  # Map 'mysql' db_type to 'MySQLConnector' class
+                # Add more mappings as needed for other databases
+            }
+            class_name = class_name_map.get(db_type)
+
+            if not class_name:
+                raise ValueError(f"No connector class found for db_type '{db_type}'")
+
             connector_class = getattr(module, class_name)
             if not issubclass(connector_class, BaseConnector):
                 raise TypeError(f"{class_name} must be a subclass of BaseConnector")
             # Instantiate the connector with the provided configuration
             return connector_class(config)
-        except (ImportError, AttributeError) as e:
+        except (ImportError, AttributeError, ValueError, TypeError) as e:
             raise ImportError(f"Could not load database connector for {db_type}: {e}")
 
     def query(self, query, params=None):

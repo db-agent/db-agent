@@ -1,4 +1,4 @@
-from app.config_loader import ConfigLoader
+from config_loader import ConfigLoader
 from db.db_manager import DatabaseManager
 from services.db_service import DBService
 from services.openai_service import OpenAIInterface
