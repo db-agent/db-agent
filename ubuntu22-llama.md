@@ -46,5 +46,15 @@ sudo systemctl restart ollama
 ollama run llama3
 sudo docker run -d --network=host -v open-webui:/app/backend/data -e OLLAMA_BASE_URL=http://127.0.0.1:11434 --name open-webui --restart always ghcr.io/open-webui/open-webui:main
 ```
+## Test Your model
 
+```
+ curl http://<IP>:11434/api/chat -d '{
+  "model": "llama3",
+  "messages": [
+    { "role": "user", "content": "What are God Particles?" }
+  ],
+  "stream": false
+}'
+```
 
