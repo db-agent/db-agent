@@ -48,8 +48,6 @@ sudo apt install docker-ce -y
 ```
 
 
-## Restart service
-
 ```
 sudo systemctl daemon-reload
 sudo systemctl restart ollama
