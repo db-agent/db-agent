@@ -1,5 +1,23 @@
 
+# Pre-Installed Driver
 
+### Spin up Ollama
+
+```
+docker run -d --gpus=all -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
+```
+### Run Llama 8B model
+
+```
+docker exec -it ollama ollama run llama3.1
+```
+### Run Open Web UI
+
+```
+sudo docker run -d --network=host -v open-webui:/app/backend/data -e OLLAMA_BASE_URL=http://127.0.0.1:11434 --name open-webui --restart always ghcr.io/open-webui/open-webui:main
+```
+
+# On Blank Ubuntu Instance
 ## Update the Package
 ```
 sudo apt update -y
