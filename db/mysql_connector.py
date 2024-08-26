@@ -1,7 +1,7 @@
-from mysql.connector import connect, Error
-from db.connectors.base_connector import BaseConnector
+import pymysql
+from pymysql import MySQLError
 
-class MySQLConnector(BaseConnector):
+class MySQLConnector():
     def __init__(self, config):
         self.config = config
         self.connection = None
@@ -9,9 +9,9 @@ class MySQLConnector(BaseConnector):
 
     def connect(self):
         try:
-            self.connection = connect(**self.config)
-            self.cursor = self.connection.cursor(dictionary=True)
-        except Error as e:
+            self.connection = pymysql.connect(**self.config)
+            self.cursor = self.connection.cursor(pymysql.cursors.DictCursor)
+        except MySQLError as e:
             print(f"Error connecting to MySQL database: {e}")
 
     def query(self, query, params=None):
@@ -23,7 +23,7 @@ class MySQLConnector(BaseConnector):
                 return self.cursor.fetchall()
             else:
                 self.connection.commit()
-        except Error as e:
+        except MySQLError as e:
             print(f"Error executing MySQL query: {e}")
 
     def close(self):

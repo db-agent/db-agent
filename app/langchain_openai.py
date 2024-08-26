@@ -6,9 +6,7 @@ project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
 from config_loader import ConfigLoader
-from db.db_manager import DatabaseManager
-from services.db_service import DBService
-from services.openai_service import OpenAIInterface
+
 
 from langchain.chains import create_sql_query_chain
 from langchain_openai import ChatOpenAI
@@ -21,11 +19,10 @@ def main():
     openai_api_key = config_loader.openai_api_key
 
     # Initialize database manager with MySQL connector
-    db_manager = DatabaseManager('mysql', db_config)
+    
 
     # Initialize services
-    db_service = DBService(db_manager)
-    openai_service = OpenAIInterface(openai_api_key)
+  
     os.environ["OPENAI_API_KEY"] = openai_api_key
     db = SQLDatabase.from_uri(
     f"mysql://{db_config['user']}:"
@@ -41,8 +38,6 @@ def main():
     print(response)
     print(db.run(response))
 
-    # Clean up resources
-    db_manager.close()
 
 if __name__ == "__main__":
     main()
