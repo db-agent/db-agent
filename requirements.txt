@@ -2,3 +2,5 @@ transformers>=4.21.0
 torch>=1.11.0
 tokenizers>=0.10.3
 tqdm>=4.64.0
+fbgemm-gpu
+accelerate>0.32.1

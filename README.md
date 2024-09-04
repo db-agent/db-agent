@@ -14,6 +14,7 @@ DatapilotGPT - A copliot to help you interact with your data using natural langu
 ```bash
 sudo apt-get update
 pip install -r requirements.txt
+pip install fbgemm-gpu --index-url https://download.pytorch.org/whl/cu121/
 ```
 
 

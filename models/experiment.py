@@ -1,5 +1,6 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 import torch
+from transformers import pipeline
 
 def sql_generator():
     # Set up the device to use CUDA if available
@@ -27,5 +28,14 @@ def sql_generator():
     generated_sql = response[0]['generated_text']
     print(f"Generated SQL Query:\n{generated_sql}")
 
+
+def test_chat():
+    messages = [
+        {"role": "user", "content": "Who are you?"},
+    ]
+    pipe = pipeline("text-generation", model="meta-llama/Meta-Llama-3.1-405B-Instruct-FP8",
+                    cache_dir="~/personal")
+    pipe(messages)
+
 if __name__ == "__main__":
-    sql_generator()
+    test_chat()
