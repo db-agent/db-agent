@@ -28,13 +28,14 @@ def sql_generator():
     generated_sql = response[0]['generated_text']
     print(f"Generated SQL Query:\n{generated_sql}")
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def test_chat():
     messages = [
         {"role": "user", "content": "Who are you?"},
     ]
     pipe = pipeline("text-generation", model="meta-llama/Meta-Llama-3.1-405B-Instruct-FP8",
-                    cache_dir="~/personal")
+                    cache_dir="~/personal",device=device)
     pipe(messages)
 
 if __name__ == "__main__":
