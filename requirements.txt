@@ -4,3 +4,7 @@ tokenizers>=0.10.3
 tqdm>=4.64.0
 fbgemm-gpu
 accelerate>0.32.1
+
+SQLAlchemy==2.0.30
+PyMySQL==1.1.1
+mysql-connector-python==9.1.0

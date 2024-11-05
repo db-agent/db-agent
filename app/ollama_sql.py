@@ -18,36 +18,36 @@ DB_PASSWORD = "mypassword"    # Set in Docker command using POSTGRES_PASSWORD
 OLLAMA_SERVER_URL = "http://localhost:11434"  # Assuming your Ollama server is running on localhost with port 11400
 
 # Function to get the schema of the PostgreSQL database
-def get_db_schema():
-    conn = None
-    schema_info = ""
-    try:
-        conn = psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            database=DB_NAME,
-            user=DB_USER,
-            password=DB_PASSWORD
-        )
-        cur = conn.cursor()
-        # Get table and column details
-        cur.execute("""
-            SELECT table_name, column_name, data_type
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-            ORDER BY table_name, ordinal_position;
-        """)
-        rows = cur.fetchall()
-        schema_info += "Database Schema:\n\n"
-        for table_name, column_name, data_type in rows:
-            schema_info += f"Table: {table_name}, Column: {column_name}, Type: {data_type}\n"
-        cur.close()
-    except Exception as e:
-        st.error(f"Error retrieving schema: {e}")
-    finally:
-        if conn is not None:
-            conn.close()
-    return schema_info
+# def get_db_schema():
+#     conn = None
+#     schema_info = ""
+#     try:
+#         conn = psycopg2.connect(
+#             host=DB_HOST,
+#             port=DB_PORT,
+#             database=DB_NAME,
+#             user=DB_USER,
+#             password=DB_PASSWORD
+#         )
+#         cur = conn.cursor()
+#         # Get table and column details
+#         cur.execute("""
+#             SELECT table_name, column_name, data_type
+#             FROM information_schema.columns
+#             WHERE table_schema = 'public'
+#             ORDER BY table_name, ordinal_position;
+#         """)
+#         rows = cur.fetchall()
+#         schema_info += "Database Schema:\n\n"
+#         for table_name, column_name, data_type in rows:
+#             schema_info += f"Table: {table_name}, Column: {column_name}, Type: {data_type}\n"
+#         cur.close()
+#     except Exception as e:
+#         st.error(f"Error retrieving schema: {e}")
+#     finally:
+#         if conn is not None:
+#             conn.close()
+#     return schema_info
 
 # Function to convert natural language to SQL using Ollama LLaMA 3.2
 def nl_to_sql(natural_language_query, schema_info):
@@ -101,39 +101,61 @@ def nl_to_sql(natural_language_query, schema_info):
         return f"Error communicating with Ollama: {str(e)}"
 
 # Function to execute SQL query on PostgreSQL
-def run_query(query):
-    conn = None
-    try:
-        conn = psycopg2.connect(
-            host=DB_HOST,
-            port=DB_PORT,
-            database=DB_NAME,
-            user=DB_USER,
-            password=DB_PASSWORD
-        )
-        cur = conn.cursor()
-        cur.execute(query)
-        if cur.description:
-            # Fetch column names
-            colnames = [desc[0] for desc in cur.description]
-            # Fetch all rows
-            rows = cur.fetchall()
-            # Create a DataFrame for display
-            result_df = pd.DataFrame(rows, columns=colnames)
-            cur.close()
-            return result_df
-        else:
-            conn.commit()
-            return "Query executed successfully but no results to display."
-    except Exception as e:
-        return f"Error executing query: {e}"
-    finally:
-        if conn is not None:
-            conn.close()
+# def run_query(query):
+#     conn = None
+#     try:
+#         conn = psycopg2.connect(
+#             host=DB_HOST,
+#             port=DB_PORT,
+#             database=DB_NAME,
+#             user=DB_USER,
+#             password=DB_PASSWORD
+#         )
+#         cur = conn.cursor()
+#         cur.execute(query)
+#         if cur.description:
+#             # Fetch column names
+#             colnames = [desc[0] for desc in cur.description]
+#             # Fetch all rows
+#             rows = cur.fetchall()
+#             # Create a DataFrame for display
+#             result_df = pd.DataFrame(rows, columns=colnames)
+#             cur.close()
+#             return result_df
+#         else:
+#             conn.commit()
+#             return "Query executed successfully but no results to display."
+#     except Exception as e:
+#         return f"Error executing query: {e}"
+#     finally:
+#         if conn is not None:
+#             conn.close()
 
 # Streamlit App Interface
 st.title("DB Copilot: Natural Language to SQL")
 st.markdown("### Enter a natural language query to interact with your PostgreSQL database")
+
+st.title("Database Hostname Input")
+
+db_hostname = st.text_input("Please enter your DB_HOSTNAME:")
+db_user = st.text_input("Please enter your DB_USER:")
+db_password = st.text_input("Please enter your DB_PASSWORD:")
+db_name = st.text_input("Please enter your DB_NAME:")
+db_port = st.text_input("Please enter your DB_PORT:")
+
+driver_options = ["postgres","mysql", "mssql","oracle"]
+selected_option = st.selectbox("Select DB Hostname:", driver_options)
+db_driver = selected_option
+
+
+from db.config_loader_v2 import KeyStorage
+
+KeyStorage.set_key("DB_HOST",db_hostname)
+KeyStorage.set_key("DB_USER",db_user)
+KeyStorage.set_key("DB_PASSWORD",db_password)
+KeyStorage.set_key("DB_NAME",db_name)
+KeyStorage.set_key("DB_PORT",db_port)
+KeyStorage.set_key("DB_DRIVER",db_driver)
 
 # Display the schema of the database
 with st.expander("Show Database Schema"):
