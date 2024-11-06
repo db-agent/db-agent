@@ -54,15 +54,18 @@ class SqlAlchemy:
         schema_info = ""  
         try:
             inspector = inspect(self.engine)
-            schema_info += "Database Schema:\n\n"
+            # schema_info += "Database Schema:\n\n"
             tables = inspector.get_table_names(schema='public')
             for table_name in tables:
                 # Get columns for each table
                 columns = inspector.get_columns(table_name, schema='public')
+                schema_info += f"{table_name.upper()}\n\n"
                 for column in columns:
                     column_name = column['name']
                     data_type = column['type']
                     schema_info += f"Table: {table_name}, Column: {column_name}, Type: {data_type}\n"
+                
+                schema_info += "\n\n"
 
         except Exception as e:
             schema_info = f"Error retrieving schema: {e}"        
