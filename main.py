@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 from db.key_storage import KeyStorage
 from db.sql_alchemy import SqlAlchemy
-from llm.ollama import nl_to_sql
-
+from llm.ollama import nl_to_sql_ollama
+import time
 
 # Streamlit App Interface
 st.title("DB Copilot: Natural Language to SQL")
@@ -11,35 +11,58 @@ st.markdown("### Enter a natural language query to interact with your PostgreSQL
 
 sql_alchemy = None
 
-with st.expander("Enter Database Configuration"):
+st.markdown(
+    """
+    <style>
+        [data-testid="stSidebar"][aria-expanded="true"] {
+            min-width: 250px;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-    db_hostname = st.text_input("Please enter your DB_HOSTNAME:",value="localhost")
-    db_user = st.text_input("Please enter your DB_USER:",value="myuser")
-    db_password = st.text_input("Please enter your DB_PASSWORD:",value="mypassword")
-    db_name = st.text_input("Please enter your DB_NAME:",value="mydatabase")
-    db_port = st.text_input("Please enter your DB_PORT:",value="5432")
 
-    # db_hostname = "localhost"
-    # db_user = "myuser"
-    # db_password = "mypassword"
-    # db_name ="mydatabase"
-    # db_port = "5432"
 
-    driver_options = ["postgres","mysql", "mssql","oracle"]
-    selected_option = st.selectbox("Select DB Hostname:", driver_options)
-    db_driver = selected_option
+with st.sidebar:
+    st.header("⚙️ Config")
 
-    llm_uri = st.text_input("Please enter your DB_PORT:",value="http://localhost:11434")
+    with st.expander("Database Configuration"):
 
-    if db_hostname and db_user and db_password and db_name and db_port and db_driver:
-        KeyStorage.set_key("DB_HOST",db_hostname)
-        KeyStorage.set_key("DB_USER",db_user)
-        KeyStorage.set_key("DB_PASSWORD",db_password)
-        KeyStorage.set_key("DB_NAME",db_name)
-        KeyStorage.set_key("DB_PORT",db_port)
-        KeyStorage.set_key("DB_DRIVER",db_driver)
-        KeyStorage.set_key("OLLAMA_SERVER_URL",llm_uri)
-        sql_alchemy = SqlAlchemy(KeyStorage)
+        driver_options = ["postgres","mysql", "mssql","oracle"]
+        selected_option = st.selectbox("SELECT DATABASE:", driver_options,index=0)
+        db_driver = selected_option
+
+        db_hostname = st.text_input("HOSTNAME:",value="localhost")
+        db_user = st.text_input("USER:",value="myuser")
+        db_password = st.text_input("PASSWORD:",value="mypassword")
+        db_name = st.text_input("NAME:",value="mydatabase")
+        db_port = st.text_input("PORT:",value="5432")
+
+
+        if db_hostname and db_user and db_password and db_name and db_port and db_driver:
+            KeyStorage.set_key("DB_HOST",db_hostname)
+            KeyStorage.set_key("DB_USER",db_user)
+            KeyStorage.set_key("DB_PASSWORD",db_password)
+            KeyStorage.set_key("DB_NAME",db_name)
+            KeyStorage.set_key("DB_PORT",db_port)
+            KeyStorage.set_key("DB_DRIVER",db_driver)
+            sql_alchemy = SqlAlchemy(KeyStorage)
+
+    
+    with st.expander("LLM Configuration"):
+        llm_options = ["ollama","openai", "groq","anthropic","other"]
+        selected_llm_option = st.selectbox("SELECT LLM:", llm_options,index=0)
+        llm_driver = selected_llm_option
+
+        llm_uri = st.text_input("LLM URI:",value="http://localhost:11434")
+        llm_api_key = st.text_input("API KEY:",value=None)
+
+        if llm_uri:
+            KeyStorage.set_key("LLM_DRIVER",llm_driver)
+            KeyStorage.set_key("LLM_URI",llm_uri)
+            KeyStorage.set_key("LLM_API_KEY",llm_api_key)
+
 
 
 if db_hostname and db_user and db_password and db_name and db_port and db_driver and sql_alchemy:
@@ -53,12 +76,14 @@ natural_language_query = st.text_area("Your query in plain English:")
 
 if st.button("Generate SQL and Run"):
     if natural_language_query:
-        with st.spinner("Generating SQL using LLaMA 3.2..."):
-            sql_query = nl_to_sql(natural_language_query, schema_info, KeyStorage)
+        with st.spinner(f"Generating SQL Query using {llm_driver}"):
+            if llm_driver == "ollama":
+                sql_query = nl_to_sql_ollama(natural_language_query, schema_info, KeyStorage)
+
             st.subheader("Generated SQL Query")
             st.code(sql_query, language="sql")
 
-        with st.spinner("Executing SQL on PostgreSQL..."):
+        with st.spinner(f"Executing SQL on {db_driver}"):
             query_result = sql_alchemy.run_query(sql_query)
             if isinstance(query_result, str):
                 st.error(f"Error: {query_result}")
