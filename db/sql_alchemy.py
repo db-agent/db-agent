@@ -2,6 +2,10 @@ from sqlalchemy import create_engine, text, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import pandas as pd
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 engine_uri = {
     "mysql": "mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}",
@@ -23,14 +27,19 @@ class SqlAlchemy:
         connection_string_template = engine_uri.get(self.DB_DRIVER)
         if not connection_string_template:
             raise ValueError(f"Unsupported database driver: {self.DB_DRIVER}")
-        
-        self.CONNECTION_STRING = connection_string_template.format(
-            DB_USER=self.DB_USER,
-            DB_PASSWORD=self.DB_PASSWORD,
-            DB_HOST=self.DB_HOST,
-            DB_PORT=self.DB_PORT,
-            DB_NAME=self.DB_NAME
-        )
+
+        if os.getenv("DATABASE_URL"):
+            self.CONNECTION_STRING = os.getenv("DATABASE_URL")
+        elif config_loader.get_key("DB_URI") is not None:
+            self.CONNECTION_STRING = os.getenv("DB_URI")
+        else:
+            self.CONNECTION_STRING = connection_string_template.format(
+                DB_USER=self.DB_USER,
+                DB_PASSWORD=self.DB_PASSWORD,
+                DB_HOST=self.DB_HOST,
+                DB_PORT=self.DB_PORT,
+                DB_NAME=self.DB_NAME
+            )
 
         # Create the SQLAlchemy engine
         self.engine = create_engine(self.CONNECTION_STRING)
