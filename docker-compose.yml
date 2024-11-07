@@ -1,0 +1,46 @@
+
+services:
+  postgres:
+    image: postgres:latest
+    container_name: pg-database
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: mydatabase
+    ports:
+      - "5432:5432"
+    networks:
+      - my_network
+
+    volumes:
+      - pg_data:/var/lib/postgresql/data  # Persists the Postgres data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql  # Mount the init.sql file to run on container startup
+
+  streamlit:
+    build: .
+    container_name: streamlit-app
+    ports:
+      - "8501:8501"
+    environment:
+      DATABASE_URL: postgresql://myuser:mypassword@postgres:5432/mydatabase
+
+    networks:
+      - my_network
+    depends_on:
+      - postgres
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    volumes:
+      - ollama:/root/.ollama  # This volume will persist data
+    ports:
+      - "11434:11434"  # Ollama port mapping
+
+volumes:
+  pg_data:
+  ollama:
+
+networks:
+  my_network:
+    external: false  # Create the custom Docker network if not already created
