@@ -24,9 +24,16 @@ def nl_to_sql_ollama(natural_language_query, schema_info, KeyStorage, max_retry=
     - Determine the necessary SQL operations (SELECT, JOIN, WHERE, GROUP BY, etc.) based on the query requirements.
     - Ensure that your query accurately addresses the natural language question.
 
-    4. Output the SQL query:
-    - Do not include any explanations or descriptions.
+    4. Generate the SQL query:
     - Use proper SQL syntax and formatting for readability.
+    - Include only the necessary tables and columns to answer the query.
+    - Implement appropriate JOINs, WHERE clauses, and other SQL operations as required.
+    - If aggregations or grouping are needed, include GROUP BY and HAVING clauses as appropriate.
+    - Order the results if specified in the natural language query.
+    - Use schema to understand user query.
+
+    5. Output the SQL query:
+    - Do not include any explanations or descriptions.
     - Enclose your SQL query within <sql_query> tags.
 
     Remember, your task is to generate only the SQL query. Do not provide any additional text, explanations, or descriptions outside of the <sql_query> tags."""
@@ -53,11 +60,10 @@ def nl_to_sql_ollama(natural_language_query, schema_info, KeyStorage, max_retry=
         "model": "llama3.2:1b",
         "prompt": prompt,
         "stream": False,
-        "options": {
-            "temperature": 0.3,
-            "top_p" : 0.5,
-            "top_k" : 20
-        },
+        "options" : {
+            "temperature" : 0.1,
+            "top_k" : 5
+        }
     }
 
     retries = 0

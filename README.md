@@ -38,9 +38,6 @@ docker compose build
 docker compose up
 ```
 
-```bash
-docker run --network=my_network -d -v ollama:/root/.ollama -p 9001:9001 --name ollama ollama/ollama
-```
 
 ```bash
 docker exec -it ollama ollama run llama3.2:1b
