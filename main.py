@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from db.key_storage import KeyStorage
 from db.sql_alchemy import SqlAlchemy
-from llm.ollama import nl_to_sql_ollama_docker, nl_to_sql_ollama
+from llm.ollama import nl_to_sql_ollama
 import time
 import os
 from dotenv import load_dotenv
@@ -68,9 +68,9 @@ with st.sidebar:
         KeyStorage.set_key("LLM_MODE",llm_local_mode)
 
 
-        if llm_local_mode == "False":
-            llm_uri = "http://localhost:11434"
-            KeyStorage.set_key("LLM_URI",llm_uri)
+        if llm_local_mode == "True":
+            llm_uri = os.getenv("OLLAMA_HOST")
+            KeyStorage.set_key("OLLAMA_HOST",llm_uri)
         else:
             llm_uri = os.getenv("LLM_URI")
             KeyStorage.set_key("LLM_URI",llm_uri)
@@ -103,8 +103,8 @@ if st.button("Generate SQL and Run"):
     if natural_language_query:
         with st.spinner(f"Generating SQL Query using {llm_driver}"):
             if llm_driver == "ollama":
-                if KeyStorage.get_key("LLM_MODE") == "False":
-                    sql_query = nl_to_sql_ollama_docker(natural_language_query, schema_info, KeyStorage)
+                if KeyStorage.get_key("LLM_MODE") == "True":
+                    sql_query = nl_to_sql_ollama(natural_language_query, schema_info, KeyStorage)
                 else:
                     sql_query = nl_to_sql_ollama(natural_language_query, schema_info, KeyStorage)
 
