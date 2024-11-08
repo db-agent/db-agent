@@ -1,4 +1,3 @@
-
 services:
   postgres:
     image: postgres:latest
@@ -8,39 +7,46 @@ services:
       POSTGRES_PASSWORD: mypassword
       POSTGRES_DB: mydatabase
     ports:
-      - "5432:5432"
+      - "5432:5432"  # Publicly accessible on port 5432
     networks:
-      - my_network
-
+      - my_network  # This keeps communication internal to the Docker network (can be omitted if no internal communication needed)
     volumes:
-      - pg_data:/var/lib/postgresql/data  # Persists the Postgres data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql  # Mount the init.sql file to run on container startup
+      - pg_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
 
   streamlit:
     build: .
     container_name: streamlit-app
     ports:
-      - "8501:8501"
+      - "8501:8501"  # Publicly accessible on port 8501
     environment:
       DATABASE_URL: postgresql://myuser:mypassword@postgres:5432/mydatabase
-
     networks:
-      - my_network
+      - my_network  # Optional, remove if no communication needed with other services
     depends_on:
       - postgres
 
   ollama:
     image: ollama/ollama:latest
     container_name: ollama
+    networks:
+      - my_network  # Optional, remove if no communication needed with other services
     volumes:
-      - ollama:/root/.ollama  # This volume will persist data
+      - ollama:/root/.ollama
     ports:
-      - "11434:11434"  # Ollama port mapping
+      - "9001:9001"  # Publicly accessible on port 11434
+    environment:
+      OLLAMA_HOST: http://ollama:9001
+    deploy:
+      resources:
+        limits:
+          memory: 2G
 
 volumes:
   pg_data:
   ollama:
 
+# Define the network, but you can remove this section if you want to use the default Docker bridge network
 networks:
   my_network:
-    external: false  # Create the custom Docker network if not already created
+    external: false
