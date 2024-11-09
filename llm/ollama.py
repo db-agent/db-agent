@@ -40,9 +40,9 @@ def nl_to_sql_ollama(natural_language_query, schema_info, KeyStorage, max_retry=
 
     if KeyStorage.get_key("LLM_MODE") == "True":
         # OLLAMA_SERVER_URL = KeyStorage.get_key("LLM_URI") + "/api/chat"
-        OLLAMA_SERVER_URL = os.getenv("OLLAMA_HOST") 
+        OLLAMA_SERVER_URL = KeyStorage.get_key("LLM_URI")
     else:
-        OLLAMA_SERVER_URL = os.getenv("LLM_URI") 
+        OLLAMA_SERVER_URL = KeyStorage.get_key("LLM_URI")
     headers = {
         'Content-Type': 'application/json',  # Define content type as JSON
     }
@@ -61,8 +61,7 @@ def nl_to_sql_ollama(natural_language_query, schema_info, KeyStorage, max_retry=
         "prompt": prompt,
         "stream": False,
         "options" : {
-            "temperature" : 0.1,
-            "top_k" : 5
+            "temperature" : 0.4,
         }
     }
 
