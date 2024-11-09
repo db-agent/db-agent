@@ -3,9 +3,27 @@ import pandas as pd
 from db.key_storage import KeyStorage
 from db.sql_alchemy import SqlAlchemy
 from llm.ollama import nl_to_sql_ollama
+from llm.inference_server import InferenceServerClient
 import time
 import os
 from dotenv import load_dotenv
+from config.config_manager import get_config, set_config
+
+
+# Load configuration at startup
+if "config_loaded" not in st.session_state:
+    config = get_config()
+    st.session_state.update(config)
+    st.session_state["config_loaded"] = True
+
+# Display and update settings using session state
+# st.session_state["USER_EMAIL"] = st.text_input("Enter your email", st.session_state["USER_EMAIL"])
+# st.session_state["THEME"] = st.selectbox("Theme", ["Light", "Dark"], index=0 if st.session_state["THEME"] == "Light" else 1)
+
+# Save settings to environment variables
+# if st.button("Save Settings"):
+#     set_config(st.session_state["USER_EMAIL"], st.session_state["THEME"])
+#     st.success("Settings saved!")
 
 load_dotenv()
 # Streamlit App Interface
@@ -55,38 +73,19 @@ with st.sidebar:
             sql_alchemy = SqlAlchemy(KeyStorage)
 
     
-    with st.expander("LLM Configuration"):
-        llm_options = ["ollama","openai", "groq","anthropic","other"]
-        selected_llm_option = st.selectbox("SELECT LLM:", llm_options,index=0)
-        llm_driver = selected_llm_option
+    with st.expander("Model Selection"):
+        model_options = ["defog/llama-3-sqlcoder-8b","defog/sqlcoder-70b-alpha", "mistralai/Mamba-Codestral-7B-v0.1"]
+        selected_model_options = st.selectbox("SELECT LLM:", model_options,index=0)
+        model_name = selected_model_options
+        
+        inference_server_address = st.text_input("Inference Server:",value=None)
+        set_config(model_name, inference_server_address)
+        
+        KeyStorage.set_key("model_name",model_name)
+        KeyStorage.set_key("inference_server_address",inference_server_address)
+        model_api_key = st.text_input("API KEY:",value=None)
 
-        llm_local_mode_options = ["True","False"]
-        llm_local_mode = st.selectbox("LLM LOCAL MODE:",llm_local_mode_options,index=0)
-        llm_uri = st.text_input("LLM URI:",value=None)
-
-
-        KeyStorage.set_key("LLM_MODE",llm_local_mode)
-
-
-        if llm_local_mode == "True":
-            llm_uri = "http://ollama:9001"
-            KeyStorage.set_key("LLM_URI",llm_uri)
-        else:
-            KeyStorage.set_key("LLM_URI",llm_uri)
-
-
-        # if os.getenv("LLM_URL"):
-        #     llm_uri = os.getenv("LLM_URL")
-        #     KeyStorage.set_key("LLM_URI",llm_uri)
-
-        # if os.getenv("LLM_URL") is None:
-
-        llm_api_key = st.text_input("API KEY:",value=None)
-
-        if llm_uri:
-            KeyStorage.set_key("LLM_DRIVER",llm_driver)
-            KeyStorage.set_key("LLM_API_KEY",llm_api_key)
-
+   
 
 
 if db_hostname and db_user and db_password and db_name and db_port and db_driver and sql_alchemy:
@@ -100,15 +99,18 @@ natural_language_query = st.text_area("Your query in plain English:")
 
 if st.button("Generate SQL and Run"):
     if natural_language_query:
-        with st.spinner(f"Generating SQL Query using {llm_driver}"):
-            if llm_driver == "ollama":
-                if KeyStorage.get_key("LLM_MODE") == "True":
-                    sql_query = nl_to_sql_ollama(natural_language_query, schema_info, KeyStorage)
-                else:
-                    sql_query = nl_to_sql_ollama(natural_language_query, schema_info, KeyStorage)
+       
 
-            st.subheader("Generated SQL Query")
-            st.code(sql_query, language="sql")
+        with st.spinner(f"Generating SQL Query using {model_name}"):
+            inference_client = InferenceServerClient(
+            server_url=f"http://{inference_server_address}/v1/chat/completions",
+            model_name=model_name
+        )
+        print(model_name,inference_server_address)
+        sql_query=inference_client.generate(natural_language_query,schema_info)
+
+        st.subheader("Generated SQL Query")
+        st.code(sql_query, language="sql")
 
         with st.spinner(f"Executing SQL on {db_driver}"):
             query_result = sql_alchemy.run_query(sql_query)
