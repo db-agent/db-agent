@@ -40,18 +40,4 @@ class InferenceServerClient:
         except requests.exceptions.RequestException as e:
             return f"Error: {e}"
 
-# Example usage
-def main():
-    prompt = "What is the capital of France?"
 
-    # Inference Server client: specify server URL and model name
-    inference_client = InferenceServerClient(
-        server_url="http://198.145.127.92:8000/v1/chat/completions",
-        model_name="defog/llama-3-sqlcoder-8b"
-    )
-    
-    # Generate response
-    print("Inference Server Response:", inference_client.generate(prompt))
-
-if __name__ == "__main__":
-    main()
