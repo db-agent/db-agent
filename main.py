@@ -69,10 +69,9 @@ with st.sidebar:
 
 
         if llm_local_mode == "True":
-            llm_uri = os.getenv("OLLAMA_HOST")
-            KeyStorage.set_key("OLLAMA_HOST",llm_uri)
+            llm_uri = "http://ollama:9001"
+            KeyStorage.set_key("LLM_URI",llm_uri)
         else:
-            llm_uri = os.getenv("LLM_URI")
             KeyStorage.set_key("LLM_URI",llm_uri)
 
 
