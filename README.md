@@ -58,7 +58,17 @@ docker run --gpus all \
 	ghcr.io/huggingface/text-generation-inference:latest \
 	--model-id bigscience/bloomz-560m
 ```
+- meta-llama/Llama-3.2-1B
+```
+# Deploy with docker on Linux:
+docker run --gpus all \
+	-v ~/.cache/huggingface:/root/.cache/huggingface \
+ 	-e HF_TOKEN="<secret>" \
+	-p 8000:80 \
+	ghcr.io/huggingface/text-generation-inference:latest \
+	--model-id meta-llama/Llama-3.2-1B
 
+```
 ### Embedding 
 
 ```
