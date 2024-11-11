@@ -2,28 +2,12 @@ import streamlit as st
 import pandas as pd
 from db.key_storage import KeyStorage
 from db.sql_alchemy import SqlAlchemy
-from llm.ollama import nl_to_sql_ollama
-from llm.inference_server import InferenceServerClient
+from models.inference_server import InferenceServerClient
 import time
 import os
 from dotenv import load_dotenv
-from config.config_manager import get_config, set_config
 
 
-# Load configuration at startup
-if "config_loaded" not in st.session_state:
-    config = get_config()
-    st.session_state.update(config)
-    st.session_state["config_loaded"] = True
-
-# Display and update settings using session state
-# st.session_state["USER_EMAIL"] = st.text_input("Enter your email", st.session_state["USER_EMAIL"])
-# st.session_state["THEME"] = st.selectbox("Theme", ["Light", "Dark"], index=0 if st.session_state["THEME"] == "Light" else 1)
-
-# Save settings to environment variables
-# if st.button("Save Settings"):
-#     set_config(st.session_state["USER_EMAIL"], st.session_state["THEME"])
-#     st.success("Settings saved!")
 
 load_dotenv()
 # Streamlit App Interface
@@ -34,6 +18,7 @@ sql_alchemy = None
 
 st.markdown(
     """
+   
     <style>
         [data-testid="stSidebar"][aria-expanded="true"] {
             min-width: 250px;
@@ -46,8 +31,9 @@ st.markdown(
 
 
 with st.sidebar:
+   
     st.header("⚙️ Config")
-
+    
     with st.expander("Database Configuration"):
 
         driver_options = ["postgres","mysql", "mssql","oracle"]
@@ -79,7 +65,7 @@ with st.sidebar:
         model_name = selected_model_options
         
         inference_server_address = st.text_input("Inference Server:",value=None)
-        set_config(model_name, inference_server_address)
+        
         
         KeyStorage.set_key("model_name",model_name)
         KeyStorage.set_key("inference_server_address",inference_server_address)
