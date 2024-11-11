@@ -27,8 +27,27 @@ docker compose up
 
 ## Inference Options
 
-### Huggingface Models
+### Local Llama3.2 with Ollama
 
+```
+docker run -d --gpus=all -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
+
+docker exec -it ollama ollama run llama3.2:1b
+```
+
+### Huggingface Models ( TGI )
+
+- defog/llama-3-sqlcoder-8b
+
+```
+# Deploy with docker on Linux:
+docker run --gpus all \
+	-v ~/.cache/huggingface:/root/.cache/huggingface \
+ 	-e HF_TOKEN="<secret>" \
+	-p 8000:80 \
+	ghcr.io/huggingface/text-generation-inference:latest \
+	--model-id defog/llama-3-sqlcoder-8b
+```
 - bigscience/bloomz-560m
 
 ```
