@@ -1,9 +1,4 @@
-# dpgpt
-
-DatapilotGPT - A copliot to help you interact with your data using natural language
-
-- You can find the [demo video](https://www.loom.com/share/a8d7f8b56e1349ea99a7417835000e52?sid=75947c3a-e9db-4e7a-afb2-36c4c0150863) for better understanding of one of the usecase.
-- Some of the [Example prompts](https://www.datapilotgpt.com/post/introduction-sql-gpt-llm-langchain) and how it can be helpful
+# Db-Copilot
 
 # Quickstart Guide
 
@@ -16,16 +11,8 @@ Before starting, make sure you have the following installed on your system:
 - Docker
 - Docker Compose
 
-If you don't have them installed, please follow the official documentation for installation:
 
-- [Install Docker](https://docs.docker.com/get-docker/)
-- [Install Docker Compose](https://docs.docker.com/compose/install/)
-
----
-
-## Docker Guide
-
-Follow these steps to build and run your containers.
+## Quickstart Guide to launch the application with Ollama ( Llama 3.2 )
 
 
 To start, you need to build your Docker images using `docker-compose`:
@@ -38,8 +25,17 @@ docker compose build
 docker compose up
 ```
 
+## Inference Options
 
-```bash
-docker exec -it ollama ollama run llama3.2:1b
+### Huggingface Models
+
+- bigscience/bloomz-560m
+
 ```
-restart both docker container
+docker run --gpus all \
+	-v ~/.cache/huggingface:/root/.cache/huggingface \
+ 	-e HF_TOKEN="<secret>" \
+	-p 8000:80 \
+	ghcr.io/huggingface/text-generation-inference:latest \
+	--model-id bigscience/bloomz-560m
+```
