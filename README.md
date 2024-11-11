@@ -58,3 +58,16 @@ docker run --gpus all \
 	ghcr.io/huggingface/text-generation-inference:latest \
 	--model-id bigscience/bloomz-560m
 ```
+
+### Embedding 
+
+```
+# Use a pipeline as a high-level helper
+from transformers import pipeline
+
+messages = [
+    {"role": "user", "content": "Who are you?"},
+]
+pipe = pipeline("text-generation", model="defog/llama-3-sqlcoder-8b")
+pipe(messages)
+```
