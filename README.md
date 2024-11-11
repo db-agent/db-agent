@@ -1,4 +1,4 @@
-# Db-Copilot
+# DataPilot
 
 # Quickstart Guide
 
