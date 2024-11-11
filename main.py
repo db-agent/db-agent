@@ -60,7 +60,8 @@ with st.sidebar:
 
     
     with st.expander("Model Selection"):
-        model_options = ["defog/llama-3-sqlcoder-8b","defog/sqlcoder-70b-alpha", "mistralai/Mamba-Codestral-7B-v0.1"]
+        model_options = ["defog/llama-3-sqlcoder-8b","defog/sqlcoder-70b-alpha", 
+                         "mistralai/Mamba-Codestral-7B-v0.1","google/codegemma-7b-it"]
         selected_model_options = st.selectbox("SELECT LLM:", model_options,index=0)
         model_name = selected_model_options
         
