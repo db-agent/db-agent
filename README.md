@@ -43,7 +43,7 @@ docker exec -it ollama ollama run llama3.2:1b
 # Deploy with docker on Linux:
 docker run --gpus all \
 	-v ~/.cache/huggingface:/root/.cache/huggingface \
- 	-e HF_TOKEN="<secret>" \
+ 	-e HF_TOKEN=$HF_TOKEN \
 	-p 8000:80 \
 	ghcr.io/huggingface/text-generation-inference:latest \
 	--model-id defog/llama-3-sqlcoder-8b
@@ -53,7 +53,7 @@ docker run --gpus all \
 ```
 docker run --gpus all \
 	-v ~/.cache/huggingface:/root/.cache/huggingface \
- 	-e HF_TOKEN="<secret>" \
+ 	-e HF_TOKEN=$HF_TOKEN \
 	-p 8000:80 \
 	ghcr.io/huggingface/text-generation-inference:latest \
 	--model-id bigscience/bloomz-560m
