@@ -1,4 +1,5 @@
 import requests
+import streamlit as st
 
 class InferenceServerClient:
     def __init__(self, server_url, model_name):
@@ -11,7 +12,7 @@ class InferenceServerClient:
         self.server_url = server_url
         self.model_name = model_name
 
-    def generate(self, user_question, db_schema):
+    def generate_sql(self, user_question, db_schema):
         """
         Sends a request to the inference server to generate a response based on the prompt.
         
@@ -40,4 +41,40 @@ class InferenceServerClient:
         except requests.exceptions.RequestException as e:
             return f"Error: {e}"
 
+    def query_llm_for_code(self,question, df):
+        """Send the question to the LLaMA backend and receive code for visualization."""
+        # Prepare the prompt
+        prompt = f"""Generate Python code for Streamlit to answer the question about this data:
+        
+        Data columns: {', '.join(df.columns)}
+        Question: {question}
+        
+        Provide code that uses Streamlit to display a visualization related to the question.
+        """
+
+        # Define the payload for the request
+        payload = {
+            "model": self.model_name,
+            "messages": [
+                {"role": "user", "content": prompt}
+            ]
+        }
+
+        # Send the POST request to the LLaMA server
+        try:
+            response = requests.post(
+                self.server_url,
+                json=payload,
+                headers={"Content-Type": "application/json"}
+            )
+
+            # Check if the response was successful
+            response.raise_for_status()
+            
+            # Extract and return the content from the response
+            return response.json()["choices"][0]["message"]["content"]
+
+        except requests.exceptions.RequestException as e:
+            st.error(f"Error communicating with LLaMA server: {e}")
+            return ""
 
