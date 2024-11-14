@@ -4,13 +4,6 @@
 
 [Watch the demo video](https://youtu.be/KT84qySZw1I)
 
-## Demo Video
-
-<iframe width="600" height="400" src="https://youtu.be/KT84qySZw1I" frameborder="0" allowfullscreen></iframe>
-
-
-
-
 
 ## Quickstart Guide to launch the application with Ollama ( Llama 3.2 )
 
