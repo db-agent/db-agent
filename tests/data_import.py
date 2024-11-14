@@ -6,9 +6,9 @@ import psycopg2
 # PostgreSQL credentials
 PG_HOST = "localhost"
 PG_PORT = 5432
-PG_USER = "myuser"
-PG_PASSWORD = "mypassword"
-PG_DATABASE = "mydatabase"
+PG_USER = "postgres"
+PG_PASSWORD = "postgres"
+PG_DATABASE = "postgres"
 
 # Kaggle dataset identifier
 KAGGLE_DATASET = "shashwatwork/dataco-smart-supply-chain-for-big-data-analysis"
