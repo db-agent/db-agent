@@ -16,12 +16,12 @@ engine_uri = {
 
 class SqlAlchemy:
     def __init__(self, config_loader):
-        self.DB_HOST = config_loader.get_key("DB_HOST")
-        self.DB_USER = config_loader.get_key("DB_USER")
-        self.DB_PASSWORD = config_loader.get_key("DB_PASSWORD")
-        self.DB_NAME = config_loader.get_key("DB_NAME")
-        self.DB_PORT = config_loader.get_key("DB_PORT")
-        self.DB_DRIVER = config_loader.get_key("DB_DRIVER")
+        self.DB_HOST = os.getenv("DB_HOST")
+        self.DB_USER = os.getenv("DB_USER")
+        self.DB_PASSWORD = os.getenv("DB_PASSWORD")
+        self.DB_NAME = os.getenv("DB_NAME")
+        self.DB_PORT = os.getenv("DB_PORT")
+        self.DB_DRIVER = os.getenv("DB_DRIVER")
 
         # Construct the connection string based on the DB_DRIVER
         connection_string_template = engine_uri.get(self.DB_DRIVER)
@@ -30,8 +30,6 @@ class SqlAlchemy:
 
         if os.getenv("DATABASE_URL"):
             self.CONNECTION_STRING = os.getenv("DATABASE_URL")
-        elif config_loader.get_key("DB_URI") is not None:
-            self.CONNECTION_STRING = os.getenv("DB_URI")
         else:
             self.CONNECTION_STRING = connection_string_template.format(
                 DB_USER=self.DB_USER,

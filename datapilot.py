@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
-from connectors.key_storage import KeyStorage
 from connectors.sql_alchemy import SqlAlchemy
-from llm.huggingface_text_gen import InferenceServerClient
+from llm.huggingface_text_gen import HuggingFaceTextGen
+from config.config import ConfigStore 
 import time
 import os
 from dotenv import load_dotenv
@@ -10,8 +10,10 @@ from dotenv import load_dotenv
 
 
 load_dotenv()
+ConfigStore.load_from_env()
+
 # Streamlit App Interface
-st.title("DB Copilot: Natural Language to SQL")
+st.title("DataPilot: Your AI Copilot for Data Analytics")
 st.markdown("### Enter a natural language query to interact with your PostgreSQL database")
 
 sql_alchemy = None
@@ -36,49 +38,37 @@ with st.sidebar:
     
     with st.expander("Database Configuration"):
 
+
         driver_options = ["postgres","mysql", "mssql","oracle"]
         selected_option = st.selectbox("SELECT DATABASE:", driver_options,index=0)
         db_driver = selected_option
-
-        db_hostname = st.text_input("HOSTNAME:",value="localhost")
-        db_user = st.text_input("USER:",value="myuser")
-        db_password = st.text_input("PASSWORD:",value="mypassword")
-        db_name = st.text_input("NAME:",value="mydatabase")
-        db_port = st.text_input("PORT:",value="5432")
-        db_uri = st.text_input("URI:",value=None)
-
-
-        if db_hostname and db_user and db_password and db_name and db_port and db_driver:
-            KeyStorage.set_key("DB_HOST",db_hostname)
-            KeyStorage.set_key("DB_USER",db_user)
-            KeyStorage.set_key("DB_PASSWORD",db_password)
-            KeyStorage.set_key("DB_NAME",db_name)
-            KeyStorage.set_key("DB_PORT",db_port)
-            KeyStorage.set_key("DB_DRIVER",db_driver)
-            KeyStorage.set_key("DB_URI",db_uri)
-            sql_alchemy = SqlAlchemy(KeyStorage)
+        ConfigStore.set_key("DB_DRIVER", db_driver)
+        ConfigStore.set_key("DB_HOST", st.text_input("DB_HOST:", value=ConfigStore.get_key("DB_HOST", "")))
+        ConfigStore.set_key("DB_USER", st.text_input("USER:", value=ConfigStore.get_key("DB_USER", "")))
+        ConfigStore.set_key("DB_PASSWORD", st.text_input("PASSWORD:", value=ConfigStore.get_key("DB_PASSWORD", "")))
+        ConfigStore.set_key("DB_NAME", st.text_input("NAME:", value=ConfigStore.get_key("DB_NAME", "")))
+        ConfigStore.set_key("DB_PORT", st.text_input("PORT:", value=ConfigStore.get_key("DB_PORT", "")))
+        ConfigStore.save_to_env()
+        sql_alchemy = SqlAlchemy(ConfigStore)
 
     
     with st.expander("Model Selection"):
-        model_options = ["defog/llama-3-sqlcoder-8b","defog/sqlcoder-70b-alpha", 
-                         "mistralai/Mamba-Codestral-7B-v0.1","google/codegemma-7b-it"]
+        model_options = ["defog/llama-3-sqlcoder-8b",
+                         "defog/sqlcoder-70b-alpha",
+                         "google/codegemma-7b-it"]
         selected_model_options = st.selectbox("SELECT LLM:", model_options,index=0)
         model_name = selected_model_options
-        
-        inference_server_address = st.text_input("Inference Server:",value=None)
-        
-        
-        KeyStorage.set_key("model_name",model_name)
-        KeyStorage.set_key("inference_server_address",inference_server_address)
+        ConfigStore.set_key("LLM",model_name)
+        ConfigStore.set_key("LLM_ENDPOINT", st.text_input("LLM_ENDPOINT:", value=ConfigStore.get_key("LLM_ENDPOINT", "")))
+        ConfigStore.save_to_env()
         model_api_key = st.text_input("API KEY:",value=None)
 
    
 
 
-if db_hostname and db_user and db_password and db_name and db_port and db_driver and sql_alchemy:
-    with st.expander("Show Database Schema"):
-        schema_info = sql_alchemy.get_db_schema()
-        st.text(schema_info)
+with st.expander("Show Database Schema"):
+    schema_info = sql_alchemy.get_db_schema()
+    st.text(schema_info)
 
 
 natural_language_query = st.text_area("Your query in plain English:")
@@ -89,12 +79,12 @@ if st.button("Generate SQL and Run"):
        
 
         with st.spinner(f"Generating SQL Query using {model_name}"):
-            inference_client = InferenceServerClient(
-            server_url=f"http://{inference_server_address}/v1/chat/completions",
+            inference_client = HuggingFaceTextGen(
+            server_url=f"http://{ConfigStore.get_key('LLM_ENDPOINT', '')}/v1/chat/completions",
             model_name=model_name
         )
-        print(model_name,inference_server_address)
-        sql_query=inference_client.generate(natural_language_query,schema_info)
+        print(model_name,ConfigStore.get_key("LLM_ENDPOINT", ""))
+        sql_query=inference_client.generate_sql(natural_language_query,schema_info)
 
         st.subheader("Generated SQL Query")
         st.code(sql_query, language="sql")
