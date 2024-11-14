@@ -2,7 +2,10 @@
 
 ## Demo Video
 
-[Watch the demo video](assets/datapilot-demo-1.mp4)
+<video width="600" controls>
+  <source src="assets/datapilot-demo-1.mp4" type="video/mp4">
+</video>
+
 
 
 ## Quickstart Guide to launch the application with Ollama ( Llama 3.2 )
