@@ -1,7 +1,8 @@
-SQLAlchemy==2.0.30
-PyMySQL==1.1.1
-mysql-connector-python==9.1.0
-psycopg2==2.9.9
-pandas==2.2.3
-streamlit==1.39.0
-python-dotenv==1.0.1
+SQLAlchemy
+PyMySQL
+mysql-connector-python
+psycopg2-binary
+pandas
+streamlit
+python-dotenv
+kagglehub 
