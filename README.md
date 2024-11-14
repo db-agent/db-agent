@@ -4,13 +4,8 @@
 ## Quickstart Guide to launch the application with Ollama ( Llama 3.2 )
 
 
-To start, you need to build your Docker images using `docker-compose`:
-
 ```bash
 docker compose build
-```
-
-```bash
 docker compose up
 ```
 

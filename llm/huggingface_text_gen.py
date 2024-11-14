@@ -1,5 +1,6 @@
 import requests
 from dotenv import load_dotenv
+import re
 
 load_dotenv()
 
@@ -24,7 +25,7 @@ class HuggingFaceTextGen:
         """
         prompt = (
             "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n"
-            f"Generate a SQL query to answer this question: `{user_question}`\n"
+            f"Generate a SQL query only to answer this question without explaination: `{user_question}`\n"
             "DDL statements:\n"
             f"{db_schema}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
         )
@@ -40,8 +41,25 @@ class HuggingFaceTextGen:
         try:
             response = requests.post(self.server_url, headers=headers, json=data)
             response.raise_for_status()  # Check if the request was successful
-            return response.json().get("choices", [{}])[0].get("message", {}).get("content", "No response")
+            return self.extract_sql_statement(response.json().get("choices", [{}])[0].get("message", {}).get("content", "No response"))
+            # return response.json().get("choices", [{}])[0].get("message", {}).get("content", "No response")
         except requests.exceptions.RequestException as e:
             return f"Error: {e}"
+    def extract_sql_statement(self,input_string):
+        """
+        Extracts the SQL statement from a given string.
+
+        Args:
+            input_string (str): The string containing the SQL statement.
+
+        Returns:
+            str: The extracted SQL statement, or None if no statement is found.
+        """
+        sql_pattern = re.compile(
+            r"(?i)\bSELECT\b.*?\bFROM\b.*?(?:;|$)",  # Matches SQL statements starting with SELECT and containing FROM
+            re.DOTALL  # Enables matching across multiple lines
+        )
+        match = sql_pattern.search(input_string)
+        return match.group(0).strip() if match else None
 
 
