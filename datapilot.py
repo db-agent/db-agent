@@ -14,22 +14,38 @@ load_dotenv()
 ConfigStore.load_from_env()
 
 # Streamlit App Interface
-st.title("DataPilot: Your AI Copilot for Data Analytics")
-st.markdown("### Enter a natural language query to interact with your PostgreSQL database")
+st.title("DataPilot: AI Copilot for Data Analytics")
 
 sql_alchemy = None
 
-st.markdown(
-    """
-   
+github_url = "https://github.com/becloudready/DataPilot"
+
+custom_css = f"""
     <style>
-        [data-testid="stSidebar"][aria-expanded="true"] {
-            min-width: 250px;
-        }
+        /* Hide the Streamlit menu, header, and footer */
+        #MainMenu {{ visibility: hidden; }}
+        header {{ visibility: hidden; }}
+        footer {{ visibility: hidden; }}
+
+        /* Position the GitHub ribbon at the top-right corner */
+        .github-ribbon {{
+            position: fixed;
+            top: 0;
+            right: 0;
+            z-index: 1000;
+        }}
     </style>
-    """,
-    unsafe_allow_html=True
-)
+
+    <!-- Fork me on GitHub ribbon -->
+    <a href="{github_url}" target="_blank" class="github-ribbon">
+        <img decoding="async" width="149" height="149" 
+             src="https://github.blog/wp-content/uploads/2008/12/forkme_right_green_007200.png" 
+             alt="Fork me on GitHub" loading="lazy">
+    </a>
+"""
+
+# Apply the custom CSS
+st.markdown(custom_css, unsafe_allow_html=True)
 
 
 # Initialize query history in session state
@@ -40,7 +56,7 @@ if "query_history" not in st.session_state:
 def display_query_history():
     st.write("### Query History")
     for i, (nl_query, sql_query) in enumerate(st.session_state["query_history"], 1):
-        # st.markdown(f"**Query {i}:** {nl_query}")
+        st.markdown(f"**Query {i}:** {nl_query}")
         st.code(sql_query, language="sql")
 
 with st.sidebar:
@@ -69,24 +85,23 @@ with st.sidebar:
                          "google/codegemma-7b-it"]
         selected_model_options = st.selectbox("SELECT LLM:", model_options,index=0)
         model_name = selected_model_options
+        model_api_key = st.text_input("API KEY:",value=None)
+
         ConfigStore.set_key("LLM",model_name)
         ConfigStore.set_key("LLM_ENDPOINT", st.text_input("LLM_ENDPOINT:", value=ConfigStore.get_key("LLM_ENDPOINT", "")))
         ConfigStore.save_to_env()
-        model_api_key = st.text_input("API KEY:",value=None)
-
-   
-
-
-with st.expander("Show Database Schema"):
-    schema_info = sql_alchemy.get_db_schema()
-    st.text(schema_info)
+        
+    with st.expander("Show Database Schema"):
+        schema_info = sql_alchemy.get_db_schema()
+        st.text(schema_info)
 
 
-natural_language_query = st.text_area("Your query in plain English:")
+nl_query = st.text_area("Ask a question about your data:")
 
 
-if st.button("Generate SQL and Run"):
-    if natural_language_query:
+if st.button("▶️  Execute"):
+
+    if nl_query:
        
 
         with st.spinner(f"Generating SQL Query using {model_name}"):
@@ -94,13 +109,13 @@ if st.button("Generate SQL and Run"):
             server_url=f"http://{ConfigStore.get_key('LLM_ENDPOINT', '')}/v1/chat/completions",
             model_name=model_name
         )
-        print(model_name,ConfigStore.get_key("LLM_ENDPOINT", ""))
-        sql_query=inference_client.generate_sql(natural_language_query,schema_info)
+        # print(model_name,ConfigStore.get_key("LLM_ENDPOINT", ""))
+        sql_query=inference_client.generate_sql(nl_query,schema_info)
 
         st.subheader("Generated SQL Query")
         st.code(sql_query, language="sql")
 
-        st.session_state.query_history.append((natural_language_query, sql_query))
+        st.session_state.query_history.append((nl_query, sql_query))
         save_query_history(st.session_state["query_history"])
 
 
