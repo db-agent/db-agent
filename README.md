@@ -1,5 +1,9 @@
 # DataPilot
 
+## Demo Video
+
+[Watch the demo video](assets/datapilot-demo-1.mp4)
+
 
 ## Quickstart Guide to launch the application with Ollama ( Llama 3.2 )
 
