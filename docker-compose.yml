@@ -12,7 +12,7 @@ services:
       - my_network  # This keeps communication internal to the Docker network (can be omitted if no internal communication needed)
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./tests/init.sql:/docker-entrypoint-initdb.d/init.sql
 
   streamlit:
     build: .
@@ -26,21 +26,21 @@ services:
     depends_on:
       - postgres
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    networks:
-      - my_network  # Optional, remove if no communication needed with other services
-    volumes:
-      - ollama:/root/.ollama
-    ports:
-      - "9001:9001"  # Publicly accessible on port 11434
-    environment:
-      OLLAMA_HOST: http://ollama:9001
-    deploy:
-      resources:
-        limits:
-          memory: 2G
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama
+  #   networks:
+  #     - my_network  # Optional, remove if no communication needed with other services
+  #   volumes:
+  #     - ollama:/root/.ollama
+  #   ports:
+  #     - "9001:9001"  # Publicly accessible on port 11434
+  #   environment:
+  #     OLLAMA_HOST: http://ollama:9001
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 2G
 
 volumes:
   pg_data:
