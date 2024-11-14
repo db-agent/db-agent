@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 from connectors.sql_alchemy import SqlAlchemy
 from llm.huggingface_text_gen import HuggingFaceTextGen
-from config.config import ConfigStore 
+from config.config import ConfigStore
+from helpers.query_history import * 
 import time
 import os
 from dotenv import load_dotenv
@@ -31,6 +32,16 @@ st.markdown(
 )
 
 
+# Initialize query history in session state
+if "query_history" not in st.session_state:
+    st.session_state["query_history"] = load_query_history()
+
+# Function to display query history
+def display_query_history():
+    st.write("### Query History")
+    for i, (nl_query, sql_query) in enumerate(st.session_state["query_history"], 1):
+        # st.markdown(f"**Query {i}:** {nl_query}")
+        st.code(sql_query, language="sql")
 
 with st.sidebar:
    
@@ -89,6 +100,10 @@ if st.button("Generate SQL and Run"):
         st.subheader("Generated SQL Query")
         st.code(sql_query, language="sql")
 
+        st.session_state.query_history.append((natural_language_query, sql_query))
+        save_query_history(st.session_state["query_history"])
+
+
         with st.spinner(f"Executing SQL on {db_driver}"):
             query_result = sql_alchemy.run_query(sql_query)
             if isinstance(query_result, str):
@@ -125,3 +140,5 @@ if st.button("Generate SQL and Run"):
                     st.write("No results returned by the query.")
     else:
         st.warning("Please enter a natural language query.")
+
+display_query_history()
