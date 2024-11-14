@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
-from db.key_storage import KeyStorage
-from db.sql_alchemy import SqlAlchemy
-from models.inference_server import InferenceServerClient
+from connectors.key_storage import KeyStorage
+from connectors.sql_alchemy import SqlAlchemy
+from llm.huggingface_text_gen import InferenceServerClient
 import time
 import os
 from dotenv import load_dotenv

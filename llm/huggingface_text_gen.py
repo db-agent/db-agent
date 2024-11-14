@@ -1,6 +1,10 @@
 import requests
+from dotenv import load_dotenv
 
-class InferenceServerClient:
+load_dotenv()
+
+
+class HuggingFaceTextGen:
     def __init__(self, server_url, model_name):
         """
         Initialize the inference server client with a custom server URL and model name.
@@ -11,7 +15,7 @@ class InferenceServerClient:
         self.server_url = server_url
         self.model_name = model_name
 
-    def generate(self, user_question, db_schema):
+    def generate_sql(self, user_question, db_schema):
         """
         Sends a request to the inference server to generate a response based on the prompt.
         
