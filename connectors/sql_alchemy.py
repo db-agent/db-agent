@@ -21,7 +21,8 @@ class SqlAlchemy:
         self.DB_PASSWORD = os.getenv("DB_PASSWORD")
         self.DB_NAME = os.getenv("DB_NAME")
         self.DB_PORT = os.getenv("DB_PORT")
-        self.DB_DRIVER = os.getenv("DB_DRIVER")
+        self.DB_DRIVER = os.getenv("DB_DRIVER", "postgres")
+
 
         # Construct the connection string based on the DB_DRIVER
         connection_string_template = engine_uri.get(self.DB_DRIVER)
