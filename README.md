@@ -2,9 +2,8 @@
 
 ## Demo Video
 
-<video width="600" controls>
-  <source src="assets/datapilot-demo-1.mp4" type="video/mp4">
-</video>
+[Watch the demo video](https://youtu.be/KT84qySZw1I)
+
 
 
 
