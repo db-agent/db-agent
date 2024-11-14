@@ -16,7 +16,7 @@ ConfigStore.load_from_env()
 # Streamlit App Interface
 st.title("DataPilot: AI Copilot for Data Analytics")
 
-sql_alchemy = None
+sql_alchemy = 'postgres'
 
 github_url = "https://github.com/becloudready/DataPilot"
 
