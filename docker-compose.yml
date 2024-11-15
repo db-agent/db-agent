@@ -25,7 +25,7 @@ services:
       - my_network  # Optional, remove if no communication needed with other services
     depends_on:
       - postgres
-  
+
   python-script:
     image: python:3.9
     container_name: python-runner
@@ -34,9 +34,9 @@ services:
     networks:
       - my_network
     volumes:
-      - ./tests/data_import.py:/data_import  # Mount your Python script directory
+      - ./tests/:/scripts  # Mount your Python script directory
     working_dir: /scripts
-    entrypoint: ["sh", "-c", "while ! nc -z postgres 5432; do sleep 1; done; pip3 install psycopg2-binary; python3 data_import.py"]
+    entrypoint: ["sh", "-c", "pip3 install psycopg2-binary kagglehub; python3 data_import.py"]
 
   huggingface-tgi:
     image: ghcr.io/huggingface/text-generation-inference:latest
@@ -55,29 +55,14 @@ services:
     ports:
       - "8000:80"  # Expose port 8000 on the host to port 80 in the container
     command: --model-id defog/llama-3-sqlcoder-8b
+    networks:
+      - my_network
 
-
-  # ollama:
-  #   image: ollama/ollama:latest
-  #   container_name: ollama
-  #   networks:
-  #     - my_network  # Optional, remove if no communication needed with other services
-  #   volumes:
-  #     - ollama:/root/.ollama
-  #   ports:
-  #     - "9001:9001"  # Publicly accessible on port 11434
-  #   environment:
-  #     OLLAMA_HOST: http://ollama:9001
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         memory: 2G
 
 volumes:
   pg_data:
   ollama:
 
-# Define the network, but you can remove this section if you want to use the default Docker bridge network
 networks:
   my_network:
     external: false
