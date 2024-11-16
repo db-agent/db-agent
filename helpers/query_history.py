@@ -1,4 +1,5 @@
 import os, json
+import streamlit as st
 
 PERSISTENCE_FILE = "query_history.json"
 
@@ -13,3 +14,13 @@ def load_query_history():
 def save_query_history(history):
     with open(PERSISTENCE_FILE, "w") as file:
         json.dump(history, file)
+
+def display_query_history():
+    st.write("### Query History")
+    for i, (nl_query, sql_query) in enumerate(reversed(st.session_state["query_history"]), 1):
+        with st.container():
+            st.write(f"**Query History:**")
+            st.markdown(f"**Description:** {nl_query}")
+            st.markdown("**Generated SQL:**")
+            st.code(sql_query, language="sql")
+

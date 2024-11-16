@@ -38,25 +38,25 @@ services:
     working_dir: /scripts
     entrypoint: ["sh", "-c", "sleep 5; pip3 install psycopg2-binary kagglehub; python3 data_import.py"]
 
-  huggingface-tgi:
-    image: ghcr.io/huggingface/text-generation-inference:latest
-    container_name: text-generation-inference
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    environment:
-      HF_TOKEN: "${HF_TOKEN}"  # Pass the HF_TOKEN environment variable
-    volumes:
-      - "~/.cache/huggingface:/root/.cache/huggingface"  # Cache directory for Hugging Face
-    ports:
-      - "8000:80"  # Expose port 8000 on the host to port 80 in the container
-    command: --model-id defog/llama-3-sqlcoder-8b
-    networks:
-      - my_network
+  # huggingface-tgi:
+  #   image: ghcr.io/huggingface/text-generation-inference:latest
+  #   container_name: text-generation-inference
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+  #   environment:
+  #     HF_TOKEN: "${HF_TOKEN}"  # Pass the HF_TOKEN environment variable
+  #   volumes:
+  #     - "~/.cache/huggingface:/root/.cache/huggingface"  # Cache directory for Hugging Face
+  #   ports:
+  #     - "8000:80"  # Expose port 8000 on the host to port 80 in the container
+  #   command: --model-id defog/llama-3-sqlcoder-8b
+  #   networks:
+  #     - my_network
 
 
 volumes:
