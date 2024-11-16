@@ -17,6 +17,8 @@ services:
   datapilot:
     build: .
     container_name: datapilot-app
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
     ports:
       - "8501:8501"  # Publicly accessible on port 8501
     networks:
