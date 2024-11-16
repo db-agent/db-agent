@@ -40,8 +40,11 @@ class HuggingFaceTextGen:
 
         try:
             response = requests.post(self.server_url, headers=headers, json=data)
+            print("******", response)
             response.raise_for_status()  # Check if the request was successful
-            return self.extract_sql_statement(response.json().get("choices", [{}])[0].get("message", {}).get("content", "No response"))
+            llm_respose = self.extract_sql_statement(response.json().get("choices", [{}])[0].get("message", {}).get("content", "No response"))
+            print("llm_response", llm_respose)
+            return self.extract_sql_statement(llm_respose)
             # return response.json().get("choices", [{}])[0].get("message", {}).get("content", "No response")
         except requests.exceptions.RequestException as e:
             return f"Error: {e}"
@@ -59,6 +62,7 @@ class HuggingFaceTextGen:
             r"(?i)\bSELECT\b.*?\bFROM\b.*?(?:;|$)",  # Matches SQL statements starting with SELECT and containing FROM
             re.DOTALL  # Enables matching across multiple lines
         )
+        print("Output from LLM", input_string)
         match = sql_pattern.search(input_string)
         return match.group(0).strip() if match else None
 
