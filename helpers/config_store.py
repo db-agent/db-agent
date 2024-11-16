@@ -15,7 +15,6 @@ def load_from_env():
     env_file = Path(".env")
     if env_file.exists():
         load_dotenv(env_file,override=True)
-        print("==",os.getenv("DB_HOST"))
         return {
             "DB_DRIVER": os.getenv("DB_DRIVER",'postgres'),
             "DB_HOST": os.getenv("DB_HOST"),

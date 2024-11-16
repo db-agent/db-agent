@@ -16,6 +16,7 @@ engine_uri = {
 
 class SqlAlchemy:
     def __init__(self):
+        load_dotenv(override=True)
         self.DB_HOST = os.getenv("DB_HOST")
         self.DB_USER = os.getenv("DB_USER")
         self.DB_PASSWORD = os.getenv("DB_PASSWORD")
@@ -29,17 +30,16 @@ class SqlAlchemy:
         if not connection_string_template:
             raise ValueError(f"Unsupported database driver: {self.DB_DRIVER}")
 
-        if os.getenv("DATABASE_URL"):
-            self.CONNECTION_STRING = os.getenv("DATABASE_URL")
-        else:
-            self.CONNECTION_STRING = connection_string_template.format(
-                DB_USER=self.DB_USER,
-                DB_PASSWORD=self.DB_PASSWORD,
-                DB_HOST=self.DB_HOST,
-                DB_PORT=self.DB_PORT,
-                DB_NAME=self.DB_NAME
-            )
-
+        # if os.getenv("DATABASE_URL"):
+        #     self.CONNECTION_STRING = os.getenv("DATABASE_URL")
+        # else:
+        self.CONNECTION_STRING = connection_string_template.format(
+            DB_USER=self.DB_USER,
+            DB_PASSWORD=self.DB_PASSWORD,
+            DB_HOST=self.DB_HOST,
+            DB_PORT=self.DB_PORT,
+            DB_NAME=self.DB_NAME
+        )
         # Create the SQLAlchemy engine
         self.engine = create_engine(self.CONNECTION_STRING)
         self.base = declarative_base()   
