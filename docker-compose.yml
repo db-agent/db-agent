@@ -19,8 +19,6 @@ services:
     container_name: datapilot-app
     ports:
       - "8501:8501"  # Publicly accessible on port 8501
-    environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
     networks:
       - my_network  # Optional, remove if no communication needed with other services
     depends_on:
@@ -61,7 +59,7 @@ services:
 
 volumes:
   pg_data:
-  ollama:
+
 
 networks:
   my_network:

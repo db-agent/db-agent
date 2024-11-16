@@ -1,7 +1,7 @@
 FROM python:3.9-slim
 
 RUN apt-get update && \
-    apt-get install python3-pip 
+    apt-get install python3-pip iputils-ping curl git wget vim -y
 
 WORKDIR /app
 
