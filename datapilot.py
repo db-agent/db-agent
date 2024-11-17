@@ -120,22 +120,16 @@ if st.button("▶️  Execute"):
         save_query_history(st.session_state["query_history"])
 
 
-        # with st.spinner(f"Executing SQL on {st.session_state.config['DB_DRIVER']}"):
-        #     query_result = sql_alchemy.run_query(sql_query)
-        #     if isinstance(query_result, str):
-        #         st.error(f"Error: {query_result}")
-        #     else:
-        #         st.success("Query executed successfully!")
-        #         if isinstance(query_result, pd.DataFrame) and not query_result.empty:
-        #             st.subheader("Query Results")
-        #             st.dataframe(query_result)
-
-        #             # Chart type dropdown
-        #             chart_type = st.selectbox("Select chart type to visualize results", ["None", "Line Chart", "Bar Chart", "Area Chart", "Pie Chart"])
-
-        #             # Display the selected chart
-                
-                
+        with st.spinner(f"Executing SQL on {st.session_state.config['DB_DRIVER']}"):
+            query_result = sql_alchemy.run_query(sql_query)
+            if isinstance(query_result, str):
+                st.error(f"Error: {query_result}")
+            else:
+                st.success("Query executed successfully!")
+                if isinstance(query_result, pd.DataFrame) and not query_result.empty:
+                    st.subheader("Query Results")
+                    st.dataframe(query_result)
+              
     else:
         st.warning("Please enter a natural language query.")
 
