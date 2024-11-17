@@ -62,7 +62,7 @@ class HuggingFaceTextGen:
             r"(?i)\bSELECT\b.*?\bFROM\b.*?(?:;|$)",  # Matches SQL statements starting with SELECT and containing FROM
             re.DOTALL  # Enables matching across multiple lines
         )
-        print("Output from LLM", input_string)
+        print("==extract_sql_statement==Output from LLM", input_string)
         match = sql_pattern.search(input_string)
         return match.group(0).strip() if match else None
 
