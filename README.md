@@ -5,12 +5,14 @@
 [Watch the demo video](https://youtu.be/KT84qySZw1I)
 
 
-## Quickstart Guide to launch the application with Ollama ( Llama 3.2 )
+## Quickstart - launch the application with defog/llama-3-sqlcoder-8b ( TGI )
 
+- You will need Huggingface token
+- Either Intel based laptop or Nvidia GPU
 
 ```bash
-docker compose build
-docker compose up
+docker compose -f docker-compose.demo.yml build
+docker compose -f docker-compose.demo.yml up -d
 ```
 
 ## Inference Options
