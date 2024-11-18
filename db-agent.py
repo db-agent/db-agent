@@ -17,7 +17,7 @@ load_dotenv()
 
 
 # Streamlit App Interface
-st.title("DataPilot: AI Copilot for Data Analytics")
+st.title("Talk to your DB in Natural Language")
 st.markdown(custom_css, unsafe_allow_html=True)
 
 
@@ -31,8 +31,6 @@ if "config" not in st.session_state:
 
 with st.sidebar:
    
-    st.header("⚙️ Config")
-    
     with st.expander("Database Configuration"):
 
         st.session_state.config = load_from_env()

@@ -3,9 +3,7 @@ services:
     image: postgres:latest
     container_name: pg-database
     environment:
-      POSTGRES_USER: datapilot
-      POSTGRES_PASSWORD: datapilot
-      POSTGRES_DB: datapilot
+      POSTGRES_PASSWORD: db-agent
     ports:
       - "5432:5432"  # Publicly accessible on port 5432
     networks:
@@ -14,9 +12,9 @@ services:
       - pg_data:/var/lib/postgresql/data
       - ./tests/init.sql:/docker-entrypoint-initdb.d/init.sql
 
-  datapilot:
+  db-agent:
     build: .
-    container_name: datapilot-app
+    container_name: db-agent-app
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
     ports:
@@ -36,7 +34,7 @@ services:
     volumes:
       - ./tests/:/scripts  # Mount your Python script directory
     working_dir: /scripts
-    entrypoint: ["sh", "-c", "sleep 5; pip3 install psycopg2-binary kagglehub; python3 data_import.py"]
+    entrypoint: ["sh", "-c", "sleep 10; pip3 install psycopg2-binary kagglehub; python3 data_import.py"]
 
   # huggingface-tgi:
   #   image: ghcr.io/huggingface/text-generation-inference:latest

@@ -2,13 +2,14 @@ import os
 import subprocess
 import kagglehub
 import psycopg2
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 # PostgreSQL credentials
 PG_HOST = "postgres"
 PG_PORT = 5432
-PG_USER = "datapilot"
-PG_PASSWORD = "datapilot"
-PG_DATABASE = "datapilot"
+PG_USER = "postgres"
+PG_PASSWORD = "db-agent"
+PG_DATABASE = "db-agent"
 
 # Kaggle dataset identifier
 KAGGLE_DATASET = "shashwatwork/dataco-smart-supply-chain-for-big-data-analysis"
@@ -72,6 +73,28 @@ CREATE TABLE IF NOT EXISTS sales_data (
 );
 """
 
+def create_database():
+    print("Creating PostgreSQL database if it does not exist...")
+    conn = psycopg2.connect(
+        host=PG_HOST,
+        port=PG_PORT,
+        user=PG_USER,
+        password=PG_PASSWORD,
+    )
+    conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)  # Required for database creation
+    cursor = conn.cursor()
+
+    # Check if database exists and create it if not
+    cursor.execute(f"SELECT 1 FROM pg_database WHERE datname = '{PG_DATABASE}';")
+    if not cursor.fetchone():
+        cursor.execute(f"CREATE DATABASE \"{PG_DATABASE}\";")
+        print(f"Database '{PG_DATABASE}' created successfully.")
+    else:
+        print(f"Database '{PG_DATABASE}' already exists.")
+
+    cursor.close()
+    conn.close()
+
 def download_dataset():
     print("Downloading dataset from Kaggle...")
     dataset_path = kagglehub.dataset_download(KAGGLE_DATASET)
@@ -112,17 +135,20 @@ def create_table_and_import_data(dataset_path):
     print("Data successfully imported into PostgreSQL.")
 
 if __name__ == "__main__":
-    # Step 1: Download dataset
+    # Step 1: Create database
+    create_database()
+
+    # Step 2: Download dataset
     dataset_dir = download_dataset()
 
-    # Step 2: Locate CSV file in the downloaded path
+    # Step 3: Locate CSV file in the downloaded path
     csv_file = os.path.join(dataset_dir, "DataCoSupplyChainDataset.csv")
     utf8_file = os.path.join(dataset_dir, "DataCoSupplyChainDataset_utf8.csv")
 
-    # Step 3: Convert to UTF-8
+    # Step 4: Convert to UTF-8
     convert_to_utf8(csv_file, utf8_file)
 
-    # Step 4: Create table and import data into PostgreSQL
+    # Step 5: Create table and import data into PostgreSQL
     create_table_and_import_data(utf8_file)
 
     print("All steps completed successfully!")

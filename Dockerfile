@@ -16,4 +16,4 @@ COPY . /app/
 
 EXPOSE 8501
 
-CMD ["streamlit", "run", "datapilot.py"]
+CMD ["streamlit", "run", "db-agent.py"]
