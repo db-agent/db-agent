@@ -1,4 +1,4 @@
-# DataPilot
+# db-agent
 
 ## Demo Video
 
