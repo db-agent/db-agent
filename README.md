@@ -11,6 +11,7 @@
 - Either Intel based laptop or Nvidia GPU
 
 ```bash
+export HF_TOKE=<YOUR TOKEN>
 docker compose -f docker-compose.demo.yml build
 docker compose -f docker-compose.demo.yml up -d
 ```
