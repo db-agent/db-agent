@@ -1,5 +1,7 @@
 # db-agent
 
+[![Docker Image CI](https://github.com/db-agent/db-agent/actions/workflows/docker-image.yml/badge.svg)](https://github.com/db-agent/db-agent/actions/workflows/docker-image.yml)
+
 ## Demo Video
 
 [Watch the demo video](https://youtu.be/KT84qySZw1I)
