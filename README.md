@@ -1,6 +1,8 @@
 # db-agent
 
 [![Docker Image CI](https://github.com/db-agent/db-agent/actions/workflows/docker-image.yml/badge.svg)](https://github.com/db-agent/db-agent/actions/workflows/docker-image.yml)
+[![Checkout the Website](https://img.shields.io/badge/Visit-My%20Website-brightgreen)](https://www.db-agent.com)
+
 
 ## Demo Video
 
