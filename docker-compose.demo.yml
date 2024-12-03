@@ -2,8 +2,6 @@ services:
   postgres:
     image: postgres:latest
     container_name: pg-database
-    environment:
-      POSTGRES_PASSWORD: db-agent
       
     ports:
       - "5432:5432"  # Publicly accessible on port 5432
@@ -21,9 +19,9 @@ services:
       LLM_ENDPOINT: huggingface-tgi
       LLM: defog/llama-3-sqlcoder-8b
       DB_DRIVER: postgres
-      DB_USER: db-agent
+      DB_USER: postgres
       DB_NAME: db-agent
-      DB_PASSWORD: db-agent
+      DB_PASSWORD: postgres
       DB_PORT: 5432
     ports:
       - "8501:8501"  # Publicly accessible on port 8501
@@ -42,7 +40,7 @@ services:
     volumes:
       - ./tests/:/scripts  # Mount your Python script directory
     working_dir: /scripts
-    entrypoint: ["sh", "-c", "sleep 10; pip3 install psycopg2-binary kagglehub; python3 data_import.py"]
+    entrypoint: ["sh", "-c", "sleep 10; pip3 install psycopg2-binary kagglehub; python3 data_import_lows.py; python3 data_import_sales.py"]
 
   huggingface-tgi:
     image: ghcr.io/huggingface/text-generation-inference:latest
