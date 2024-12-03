@@ -1,6 +1,6 @@
+import kagglehub
 import os
 import subprocess
-import kagglehub
 import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
@@ -8,68 +8,24 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 PG_HOST = "postgres"
 PG_PORT = 5432
 PG_USER = "postgres"
-PG_PASSWORD = "db-agent"
-PG_DATABASE = "db-agent"
+PG_PASSWORD = "postgres"
+PG_DATABASE = "db-lows-sku"
 
 # Kaggle dataset identifier
-KAGGLE_DATASET = "shashwatwork/dataco-smart-supply-chain-for-big-data-analysis"
+KAGGLE_DATASET = "polartech/40000-home-appliance-sku-data-from-lowescom"
 
 # Table creation SQL
 CREATE_TABLE_SQL = """
-CREATE TABLE IF NOT EXISTS sales_data (
-    type TEXT,
-    days_for_shipping_real INTEGER,
-    days_for_shipment_scheduled INTEGER,
-    benefit_per_order FLOAT,
-    sales_per_customer FLOAT,
-    delivery_status TEXT,
-    late_delivery_risk INTEGER,
-    category_id INTEGER,
-    category_name TEXT,
-    customer_city TEXT,
-    customer_country TEXT,
-    customer_email TEXT,
-    customer_fname TEXT,
-    customer_id INTEGER,
-    customer_lname TEXT,
-    customer_password TEXT,
-    customer_segment TEXT,
-    customer_state TEXT,
-    customer_street TEXT,
-    customer_zipcode TEXT,
-    department_id INTEGER,
-    department_name TEXT,
-    latitude FLOAT,
-    longitude FLOAT,
-    market TEXT,
-    order_city TEXT,
-    order_country TEXT,
-    order_customer_id INTEGER,
-    order_date DATE,
-    order_id INTEGER,
-    order_item_cardprod_id INTEGER,
-    order_item_discount FLOAT,
-    order_item_discount_rate FLOAT,
-    order_item_id INTEGER,
-    order_item_product_price FLOAT,
-    order_item_profit_ratio FLOAT,
-    order_item_quantity INTEGER,
-    sales FLOAT,
-    order_item_total FLOAT,
-    order_profit_per_order FLOAT,
-    order_region TEXT,
-    order_state TEXT,
-    order_status TEXT,
-    order_zipcode TEXT,
-    product_card_id INTEGER,
-    product_category_id INTEGER,
-    product_description TEXT,
-    product_image TEXT,
+CREATE TABLE IF NOT EXISTS home_appliance_sku (
+    id SERIAL PRIMARY KEY,
+    sku_id TEXT,
     product_name TEXT,
-    product_price FLOAT,
-    product_status TEXT,
-    shipping_date DATE,
-    shipping_mode TEXT
+    category TEXT,
+    sub_category TEXT,
+    price FLOAT,
+    rating FLOAT,
+    review_count INTEGER,
+    availability TEXT
 );
 """
 
@@ -123,7 +79,7 @@ def create_table_and_import_data(dataset_path):
     print("Importing dataset into PostgreSQL...")
     with open(dataset_path, 'r', encoding='utf-8') as f:
         cursor.copy_expert(f"""
-        COPY sales_data
+        COPY home_appliance_sku(sku_id, product_name, category, sub_category, price, rating, review_count, availability)
         FROM STDIN
         DELIMITER ','
         CSV HEADER;
@@ -142,8 +98,8 @@ if __name__ == "__main__":
     dataset_dir = download_dataset()
 
     # Step 3: Locate CSV file in the downloaded path
-    csv_file = os.path.join(dataset_dir, "DataCoSupplyChainDataset.csv")
-    utf8_file = os.path.join(dataset_dir, "DataCoSupplyChainDataset_utf8.csv")
+    csv_file = os.path.join(dataset_dir, "home_appliance_sku_data.csv")
+    utf8_file = os.path.join(dataset_dir, "home_appliance_sku_data_utf8.csv")
 
     # Step 4: Convert to UTF-8
     convert_to_utf8(csv_file, utf8_file)
