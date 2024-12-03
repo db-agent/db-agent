@@ -1,11 +1,25 @@
 ## Setup Test environment with Supply Chain Data from Kaggle
 
-- Download the data
+### Test queries ( Sales Data )
 
-```
-curl -L -o ~/Downloads/archive.zip\
-https://www.kaggle.com/api/v1/datasets/download/shashwatwork/dataco-smart-supply-chain-for-big-data-analysis
-```
+- most frequent customer states
+- highest sales customer
+- most common order region
+- show all  PENDING order_status 
+- top 5 highest selling products
+- Least popular products
+
+### Test queries ( SKU Data )
+
+- Find all SKUs that are out of stock or unavailable.
+- Show me the top 10 most expensive products
+- Which brands offer products in multiple categories?
+- Which categories have products available in the USA but not in Canada?
+- What products are currently on promotion?
+- List all products with discounts and their percentage discounts.
+- What are the best products in each category based on their bestseller rank?
+
+- Download the data
 
 - Login to your local PostgreSQL DB
 
@@ -85,11 +99,3 @@ CSV HEADER;
 
 ```
 
-### Test queries 
-
-- most frequent customer states
-- highest sales customer
-- most common order region
-- show all  PENDING order_status 
-- top 5 highest selling products
-- Least popular products
