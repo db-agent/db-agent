@@ -9,7 +9,7 @@ PG_HOST = "postgres"
 PG_PORT = 5432
 PG_USER = "postgres"
 PG_PASSWORD = "postgres"
-PG_DATABASE = "db-agent"
+PG_DATABASE = "db-sales"
 
 # Kaggle dataset identifier
 KAGGLE_DATASET = "shashwatwork/dataco-smart-supply-chain-for-big-data-analysis"
