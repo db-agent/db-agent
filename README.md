@@ -49,7 +49,7 @@ docker exec -it ollama ollama run hf.co/defog/sqlcoder-7b-2
 
 ## Running on Cloud
 
-- Run the application + model on Nvidia A100, H100 on [![Denvr Clou](https://img.shields.io/badge/Run%20On%20Denvr%20Cloud-brightgreen)](https://console.cloud.denvrdata.com/account/login)
+- Run the application + model on Nvidia A100, H100 on [![Denvr Cloud](https://img.shields.io/badge/Run%20O-Denvr%20Cloud-brightgreen)](https://console.cloud.denvrdata.com/account/login)
 
 ## Running the model locally
 
