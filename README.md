@@ -49,23 +49,11 @@ docker run --gpus all \
 ```
 - bigscience/bloomz-560m
 
+
+### Ollama 
 ```
-docker run --gpus all \
-	-v ~/.cache/huggingface:/root/.cache/huggingface \
- 	-e HF_TOKEN=$HF_TOKEN \
-	-p 8000:80 \
-	ghcr.io/huggingface/text-generation-inference:latest \
-	--model-id bigscience/bloomz-560m
-```
-- meta-llama/Llama-3.2-1B
-```
-# Deploy with docker on Linux:
-docker run --gpus all \
-	-v ~/.cache/huggingface:/root/.cache/huggingface \
- 	-e HF_TOKEN="<secret>" \
-	-p 8000:80 \
-	ghcr.io/huggingface/text-generation-inference:latest \
-	--model-id meta-llama/Llama-3.2-1B
+docker run -d --gpus=all -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
+docker exec -it ollama ollama run hf.co/defog/sqlcoder-7b-2
 
 ```
 ### Embedding 
