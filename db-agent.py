@@ -1,19 +1,27 @@
 import streamlit as st
 import pandas as pd
 from connectors.sql_alchemy import SqlAlchemy
-from llm.huggingface_text_gen import HuggingFaceTextGen
-from llm.text_gen_clients import OllamaClient
-from llm.text_gen_clients import LLMClientFactory
+from textgen.factory import LLMClientFactory
 
 from helpers.query_history import * 
 from helpers.config_store import *
 from helpers.css_settings import *
 from helpers.dp_charts import *
+import logging
 import time
 import os
 from dotenv import load_dotenv
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.FileHandler("application.log"),  # Logs to a file
+        logging.StreamHandler()  # Logs to stdout
+    ]
+)
 
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -71,8 +79,8 @@ with st.sidebar:
         ]
 
         llm_backend = [
+            "huggingface",
             "ollama",
-            "huggingface-tgi",
             "vllm"
             
         ]
@@ -116,24 +124,19 @@ if st.button("▶️  Execute"):
 
     if nl_query:
         model_name=st.session_state.config.get("MODEL")
+        backend = st.session_state.config.get('LLM_BACKEND')
 
-        # with st.spinner(f"Generating SQL Query using {model_name}"):
-        #     inference_client = HuggingFaceTextGen(
-        #     server_url=f"http://{st.session_state.config.get('LLM_ENDPOINT')}/v1/chat/completions",
-        #     model_name=model_name
-        # )
-        with st.spinner(f"Generating Ollama SQL Query using {model_name}"):
+
+        with st.spinner(f"Generating SQL Query using {model_name}"):
             inference_client = LLMClientFactory.get_client(
                 backend = st.session_state.config.get('LLM_BACKEND'),
                 server_url = st.session_state.config.get('LLM_ENDPOINT'),
                 model_name = st.session_state.config.get("MODEL")
             )
-            # inference_client = OllamaClient({st.session_state.config.get('LLM_ENDPOINT')}, 
-            #                 "hf.co/defog/sqlcoder-7b-2")
-        # print(model_name,ConfigStore.get_key("LLM_ENDPOINT", ""))
+        
         sql_query=inference_client.generate_sql(nl_query,schema_info)
 
-        st.subheader("Generated SQL Query")
+        st.text(f"Generated SQL Query: LLM backend {backend} serving {model_name}")
         st.code(sql_query, language="sql")
 
         st.session_state.query_history.append((nl_query, sql_query))
