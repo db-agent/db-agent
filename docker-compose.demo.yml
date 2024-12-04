@@ -8,7 +8,7 @@ services:
       - my_network  # Internal Docker network
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - ./tests/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
 
   db-agent:
     build: .
@@ -37,7 +37,7 @@ services:
     networks:
       - my_network
     volumes:
-      - ./tests/:/scripts  # Mount your Python script directory
+      - ./scripts/:/scripts  # Mount your Python script directory
     working_dir: /scripts
     entrypoint: ["sh", "-c", "sleep 10; pip3 install psycopg2-binary kagglehub; python3 data_import_lows.py; python3 data_import_sales.py"]
 

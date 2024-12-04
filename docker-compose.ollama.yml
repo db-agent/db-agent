@@ -10,7 +10,7 @@ services:
       - my_network
     volumes:
       - pg_data:/var/lib/postgresql/data
-      - ./tests/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
 
   db-agent:
     build: .
