@@ -55,7 +55,7 @@ class SqlAlchemy:
             session = Session()
             query_result = session.execute(text(query))
             query_result_to_df = pd.DataFrame(query_result.fetchall(), columns=query_result.keys())
-            print(query_result_to_df)
+            # print(query_result_to_df)
             return query_result_to_df
         except Exception as e:
             return f"An error occurred: {e}"

@@ -22,6 +22,7 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+logger.info("Logging initialized successfully!")
 
 load_dotenv()
 
@@ -40,56 +41,67 @@ if "config" not in st.session_state:
 
 
 with st.sidebar:
-   
     with st.expander("Database Configuration"):
-
         st.session_state.config = load_from_env()
         db_options = ["postgres", "mysql", "mssql", "oracle"]
 
         st.session_state.config["DB_DRIVER"] = st.selectbox(
-            "SELECT DATABASE:", ["postgres", "mysql", "mssql", "oracle"], 
-            db_options.index(st.session_state.config["DB_DRIVER"]))
+            "SELECT DATABASE:", db_options,
+            db_options.index(st.session_state.config["DB_DRIVER"])
+        )
         st.session_state.config["DB_HOST"] = st.text_input(
-            "DB_HOST:", st.session_state.config["DB_HOST"])
+            "DB_HOST:", st.session_state.config["DB_HOST"]
+        )
         st.session_state.config["DB_PORT"] = st.text_input(
-            "DB_PORT:", st.session_state.config["DB_PORT"])
+            "DB_PORT:", st.session_state.config["DB_PORT"]
+        )
         st.session_state.config["DB_USER"] = st.text_input(
-            "DB_USER:", st.session_state.config["DB_USER"])
+            "DB_USER:", st.session_state.config["DB_USER"]
+        )
         st.session_state.config["DB_PASSWORD"] = st.text_input(
-            "DB_PASS:", st.session_state.config["DB_PASSWORD"])
+            "DB_PASS:", st.session_state.config["DB_PASSWORD"]
+        )
         st.session_state.config["DB_NAME"] = st.text_input(
-            "DB_NAME:", st.session_state.config["DB_NAME"])
+            "DB_NAME:", st.session_state.config["DB_NAME"]
+        )
         
-        # Add a button to save the configuration to .env
         if st.button("Save DB Config"):
             save_to_env(st.session_state["config"])
             st.success("Database configuration saved!")
 
-        
-
-    
     with st.expander("Model Selection"):
         st.session_state["config"] = load_from_env()
 
-        model_options = [
-            "defog/llama-3-sqlcoder-8b",
-            "hf.co/defog/sqlcoder-7b-2",
-            "defog/sqlcoder-70b-alpha",
-            "google/codegemma-7b-it"
-        ]
+        # Define supported models for each backend
+        supported_models = {
+            "huggingface": ["defog/llama-3-sqlcoder-8b", "defog/sqlcoder-70b-alpha"],
+            "ollama": ["hf.co/defog/sqlcoder-7b-2"],
+            "vllm": ["google/codegemma-7b-it"]
+        }
 
         llm_backend = [
             "huggingface",
             "ollama",
             "vllm"
-            
         ]
+
+        # Dropdown to select the backend
+        st.session_state.config["LLM_BACKEND"] = st.selectbox(
+            "LLM_BACKEND:", 
+            llm_backend, 
+            index=llm_backend.index(st.session_state.config.get("LLM_BACKEND", llm_backend[0]))
+        )
+
+        # Dynamically update model options based on selected backend
+        selected_backend = st.session_state.config["LLM_BACKEND"]
+        filtered_model_options = supported_models.get(selected_backend, [])
 
         # Dropdown to select the model
         st.session_state.config["MODEL"] = st.selectbox(
             "SELECT Model:", 
-            model_options, 
-            index=model_options.index(st.session_state.config.get("MODEL", model_options[0]))
+            filtered_model_options, 
+            index=filtered_model_options.index(st.session_state.config.get("MODEL", filtered_model_options[0])) 
+            if filtered_model_options else 0
         )
 
         # Input for API key
@@ -97,16 +109,13 @@ with st.sidebar:
             "API KEY:", 
             value=st.session_state.config.get("LLM_API_KEY", "")
         )
-        st.session_state.config["LLM_BACKEND"] = st.selectbox(
-            "LLM_BACKEND:", 
-            llm_backend, 
-            index=llm_backend.index(st.session_state.config.get("LLM_BACKEND", llm_backend[0]))
-        )
+        
         # Input for LLM endpoint
         st.session_state.config["LLM_ENDPOINT"] = st.text_input(
             "LLM_ENDPOINT:", 
             value=st.session_state.config.get("LLM_ENDPOINT", "")
         )
+
         if st.button("Save LLM Config"):
             save_to_env(st.session_state.config)
 
