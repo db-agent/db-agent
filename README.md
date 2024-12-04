@@ -47,3 +47,21 @@ docker exec -it ollama ollama run hf.co/defog/sqlcoder-7b-2
 
 ```
 
+### Running the model locally
+
+- MacOS or X86/Nvidia based machines should have enough GPU memory to support the models.
+- Below error is from MacBook M2 Pro 32 GB
+
+```
+docker exec -it ollama ollama run hf.co/defog/sqlcoder-7b-2
+pulling manifest
+pulling 0068f25d1fc3... 100% ▕██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▏ 4.8 GB
+pulling d91e3b3ad4cb... 100% ▕██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▏  193 B
+verifying sha256 digest
+writing manifest
+success
+Error: model requires more system memory (9.3 GiB) than is available (7.8 GiB)
+```
+
+
+
