@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from connectors.sql_alchemy import SqlAlchemy
 from llm.huggingface_text_gen import HuggingFaceTextGen
+from llm.text_gen_clients import OllamaClient
+from llm.text_gen_clients import LLMClientFactory
 
 from helpers.query_history import * 
 from helpers.config_store import *
@@ -63,15 +65,23 @@ with st.sidebar:
 
         model_options = [
             "defog/llama-3-sqlcoder-8b",
+            "hf.co/defog/sqlcoder-7b-2",
             "defog/sqlcoder-70b-alpha",
             "google/codegemma-7b-it"
         ]
 
+        llm_backend = [
+            "ollama",
+            "huggingface-tgi",
+            "vllm"
+            
+        ]
+
         # Dropdown to select the model
-        st.session_state.config["LLM"] = st.selectbox(
-            "SELECT LLM:", 
+        st.session_state.config["MODEL"] = st.selectbox(
+            "SELECT Model:", 
             model_options, 
-            index=model_options.index(st.session_state.config.get("LLM", model_options[0]))
+            index=model_options.index(st.session_state.config.get("MODEL", model_options[0]))
         )
 
         # Input for API key
@@ -79,7 +89,11 @@ with st.sidebar:
             "API KEY:", 
             value=st.session_state.config.get("LLM_API_KEY", "")
         )
-
+        st.session_state.config["LLM_BACKEND"] = st.selectbox(
+            "LLM_BACKEND:", 
+            llm_backend, 
+            index=llm_backend.index(st.session_state.config.get("LLM_BACKEND", llm_backend[0]))
+        )
         # Input for LLM endpoint
         st.session_state.config["LLM_ENDPOINT"] = st.text_input(
             "LLM_ENDPOINT:", 
@@ -101,13 +115,21 @@ nl_query = st.text_area("Ask a question about your data:")
 if st.button("▶️  Execute"):
 
     if nl_query:
-        model_name=st.session_state.config.get("LLM")
+        model_name=st.session_state.config.get("MODEL")
 
-        with st.spinner(f"Generating SQL Query using {model_name}"):
-            inference_client = HuggingFaceTextGen(
-            server_url=f"http://{st.session_state.config.get('LLM_ENDPOINT')}/v1/chat/completions",
-            model_name=model_name
-        )
+        # with st.spinner(f"Generating SQL Query using {model_name}"):
+        #     inference_client = HuggingFaceTextGen(
+        #     server_url=f"http://{st.session_state.config.get('LLM_ENDPOINT')}/v1/chat/completions",
+        #     model_name=model_name
+        # )
+        with st.spinner(f"Generating Ollama SQL Query using {model_name}"):
+            inference_client = LLMClientFactory.get_client(
+                backend = st.session_state.config.get('LLM_BACKEND'),
+                server_url = st.session_state.config.get('LLM_ENDPOINT'),
+                model_name = st.session_state.config.get("MODEL")
+            )
+            # inference_client = OllamaClient({st.session_state.config.get('LLM_ENDPOINT')}, 
+            #                 "hf.co/defog/sqlcoder-7b-2")
         # print(model_name,ConfigStore.get_key("LLM_ENDPOINT", ""))
         sql_query=inference_client.generate_sql(nl_query,schema_info)
 
