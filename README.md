@@ -3,6 +3,7 @@
 [![Docker Image CI](https://github.com/db-agent/db-agent/actions/workflows/docker-image.yml/badge.svg)](https://github.com/db-agent/db-agent/actions/workflows/docker-image.yml)
 [![Checkout the Website](https://img.shields.io/badge/Visit-Our%20Website-brightgreen)](https://www.db-agent.com)
 [![Demo Video](https://img.shields.io/badge/Visit-Our%20Demo-red)](https://youtu.be/tt0oTIrY260)
+[![Denvr Cloud](https://img.shields.io/badge/Deploy%20On-Denvr%20Cloud-brightgreen)](https://console.cloud.denvrdata.com/account/login)
 
 
 
@@ -49,7 +50,7 @@ docker exec -it ollama ollama run hf.co/defog/sqlcoder-7b-2
 
 ## Running on Cloud
 
-- Run the application + model on Nvidia A100, H100 on [![Denvr Cloud](https://img.shields.io/badge/Run%20On-Denvr%20Cloud-brightgreen)](https://console.cloud.denvrdata.com/account/login)
+- Run the application + model on Nvidia A100, H100 on [![Denvr Cloud](https://img.shields.io/badge/Deploy%20On-Denvr%20Cloud-brightgreen)](https://console.cloud.denvrdata.com/account/login)
 
 ## Running the model locally
 
