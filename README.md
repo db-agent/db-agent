@@ -47,7 +47,11 @@ docker exec -it ollama ollama run hf.co/defog/sqlcoder-7b-2
 
 ```
 
-### Running the model locally
+## Running on Cloud
+
+- Run the application + model on Nvidia A100, H100 on [![Denvr Clou](https://img.shields.io/badge/Run%20On%20Denvr%20Cloud-brightgreen)](https://console.cloud.denvrdata.com/account/login)
+
+## Running the model locally
 
 - MacOS or X86/Nvidia based machines should have enough GPU memory to support the models.
 - Below error is from MacBook M2 Pro 32 GB
@@ -63,7 +67,5 @@ success
 Error: model requires more system memory (9.3 GiB) than is available (7.8 GiB)
 ```
 
-### Running on Cloud
 
-- Run the application + model on Nvidia A100, H100 on [![Denvr Clou](https://img.shields.io/badge/Run%20On%20Denvr%20Cloud-brightgreen)](https://console.cloud.denvrdata.com/account/login)
 
