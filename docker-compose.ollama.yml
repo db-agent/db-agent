@@ -2,10 +2,12 @@ services:
   postgres:
     image: postgres:latest
     container_name: pg-database
+    environment:
+      - POSTGRES_PASSWORD=postgres
     ports:
-      - "5432:5432"  # Publicly accessible on port 5432
+      - "5432:5432"
     networks:
-      - my_network  # Internal Docker network
+      - my_network
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./tests/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -15,15 +17,15 @@ services:
     container_name: db-agent-app
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
-      LLM_ENDPOINT: huggingface-tgi
-      LLM: defog/llama-3-sqlcoder-8b
+      LLM_ENDPOINT: ollama:11434
+      LLM: hf.co/defog/sqlcoder-7b-2
       DB_DRIVER: postgres
       DB_USER: postgres
-      DB_NAME: db-agent
+      DB_NAME: db-lows-sku
       DB_PASSWORD: postgres
       DB_PORT: 5432
     ports:
-      - "8501:8501"  # Publicly accessible on port 8501
+      - "8501:8501"
     networks:
       - my_network
     depends_on:
@@ -31,18 +33,18 @@ services:
 
   data-importer:
     image: python:3.9
-    container_name: python-runner
+    container_name: data-importer
     depends_on:
       - postgres
     networks:
       - my_network
     volumes:
-      - ./tests/:/scripts  # Mount your Python script directory
+      - ./scripts/:/scripts
     working_dir: /scripts
-    entrypoint: ["sh", "-c", "sleep 10; pip3 install psycopg2-binary kagglehub; python3 data_import_lows.py; python3 data_import_sales.py"]
+    entrypoint: ["sh", "-c", "sleep 10; pip3 install psycopg2-binary kagglehub pandas; python3 data_import_lows.py; python3 data_import_sales.py"]
 
   ollama:
-    image: ollama/ollama
+    image: ollama/ollama:latest  # Ensure you have the latest image
     container_name: ollama
     deploy:
       resources:
@@ -52,16 +54,24 @@ services:
               count: all
               capabilities: [gpu]
     volumes:
-      - ollama:/root/.ollama  # Persistent volume for Ollama
+      - ollama:/root/.ollama
+      - ./scripts/:/scripts
     ports:
-      - "11434:11434"  # Expose port 11434 on the host
+      - "11434:11434"
     networks:
       - my_network
-    entrypoint: ["sh", "-c", "ollama run hf.co/defog/sqlcoder-7b-2"]
+    depends_on:
+      - postgres
+    entrypoint: ["sh", "-c", "/scripts/ollama_start.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
 volumes:
   pg_data:
-  ollama:  # Declare Ollama volume
+  ollama:
 
 networks:
   my_network:

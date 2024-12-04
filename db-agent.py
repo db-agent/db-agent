@@ -75,7 +75,8 @@ with st.sidebar:
         # Define supported models for each backend
         supported_models = {
             "huggingface": ["defog/llama-3-sqlcoder-8b", "defog/sqlcoder-70b-alpha"],
-            "ollama": ["hf.co/defog/sqlcoder-7b-2"],
+            "ollama": ["hf.co/defog/sqlcoder-7b-2",
+                       "hf.co/MaziyarPanahi/sqlcoder-7b-2-GGUF:Q2_K"],
             "vllm": ["google/codegemma-7b-it"]
         }
 
