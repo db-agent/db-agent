@@ -13,10 +13,6 @@
 [Watch the demo video](https://youtu.be/KT84qySZw1I)
 
 
-## Quickstart - launch the application with defog/llama-3-sqlcoder-8b ( TGI )
-
-- You will need Huggingface token
-- Either Intel based laptop or Nvidia GPU
 
 ```bash
 export HF_TOKEN=<YOUR TOKEN>
@@ -24,15 +20,7 @@ docker compose -f docker-compose.demo.yml build
 docker compose -f docker-compose.demo.yml up -d
 ```
 
-## Inference Options
-
-### Local Llama3.2 with Ollama
-
-```
-docker run -d --gpus=all -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
-
-docker exec -it ollama ollama run llama3.2:1b
-```
+## Inference Options ( with GPUs )
 
 ### Huggingface Models ( TGI )
 
@@ -47,24 +35,15 @@ docker run --gpus all \
 	ghcr.io/huggingface/text-generation-inference:latest \
 	--model-id defog/llama-3-sqlcoder-8b
 ```
-- bigscience/bloomz-560m
 
 
 ### Ollama 
+
+- hf.co/defog/sqlcoder-7b-2
+
 ```
 docker run -d --gpus=all -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
 docker exec -it ollama ollama run hf.co/defog/sqlcoder-7b-2
 
 ```
-### Embedding 
 
-```
-# Use a pipeline as a high-level helper
-from transformers import pipeline
-
-messages = [
-    {"role": "user", "content": "Who are you?"},
-]
-pipe = pipeline("text-generation", model="defog/llama-3-sqlcoder-8b")
-pipe(messages)
-```
