@@ -23,6 +23,11 @@ docker compose -f docker-compose.demo.yml up -d
 
 ## Inference Options ( with GPUs )
 
+### GPU Memory requirements
+
+- Ollama - hf.co/defog/sqlcoder-7b-2 - ~7GB of VRAM
+- TGI - defog/llama-3-sqlcoder-8b - ~26.78 GB VRAM
+
 ### Huggingface Models ( TGI )
 
 - defog/llama-3-sqlcoder-8b
@@ -50,23 +55,14 @@ docker exec -it ollama ollama run hf.co/defog/sqlcoder-7b-2
 
 ## Running on Cloud
 
-- Run the application + model on Nvidia A100, H100 on [![Denvr Cloud](https://img.shields.io/badge/Deploy%20On-Denvr%20Cloud-brightgreen)](https://console.cloud.denvrdata.com/account/login)
-
+- Run the application + model on Nvidia A100, H100
+- 
 ## Running the model locally
 
 - MacOS or X86/Nvidia based machines should have enough GPU memory to support the models.
-- Below error is from MacBook M2 Pro 32 GB
+- Ollama - hf.co/defog/sqlcoder-7b-2 requires 7GB of GPU VRAM
+- TGI - defog/llama-3-sqlcoder-8b - ~26.78 GB
 
-```
-docker exec -it ollama ollama run hf.co/defog/sqlcoder-7b-2
-pulling manifest
-pulling 0068f25d1fc3... 100% ▕██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▏ 4.8 GB
-pulling d91e3b3ad4cb... 100% ▕██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▏  193 B
-verifying sha256 digest
-writing manifest
-success
-Error: model requires more system memory (9.3 GiB) than is available (7.8 GiB)
-```
 
 
 
