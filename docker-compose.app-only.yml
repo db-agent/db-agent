@@ -1,0 +1,14 @@
+services:
+  db-agent:
+    build: .
+    container_name: db-agent-app
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
+    ports:
+      - "8501:8501"  # Publicly accessible on port 8501
+    networks:
+      - my_network  # Optional, remove if no communication needed with other services
+
+networks:
+  my_network:
+    external: false
