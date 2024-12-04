@@ -6,7 +6,7 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 import subprocess
 
 # PostgreSQL credentials
-PG_HOST = "localhost"
+PG_HOST = "postgres"
 PG_PORT = 5432
 PG_USER = "postgres"
 PG_PASSWORD = "postgres"
