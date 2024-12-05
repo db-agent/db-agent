@@ -61,35 +61,9 @@ services:
     networks:
       - my_network
 
-  ollama:
-    image: ollama/ollama:latest  # Ensure you have the latest image
-    container_name: ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    volumes:
-      - ollama:/root/.ollama
-      - ./scripts/:/scripts
-    ports:
-      - "11434:11434"
-    networks:
-      - my_network
-    depends_on:
-      - postgres
-    entrypoint: ["sh", "-c", "/scripts/ollama_start.sh"]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/status"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
 
 volumes:
   pg_data:
-  ollama:
 
 networks:
   my_network:
