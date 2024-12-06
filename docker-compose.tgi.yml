@@ -31,7 +31,7 @@ services:
 
   data-importer:
     image: python:3.9
-    container_name: python-runner
+    container_name: data-importer
     depends_on:
       - postgres
     networks:
@@ -54,6 +54,7 @@ services:
     environment:
       HF_TOKEN: "${HF_TOKEN}"  # Pass the HF_TOKEN environment variable
     volumes:
+      - huggingface:/data/hub/models
       - "~/.cache/huggingface:/root/.cache/huggingface"  # Cache directory for Hugging Face
     ports:
       - "8000:80"  # Expose port 8000 on the host to port 80 in the container
@@ -64,6 +65,7 @@ services:
 
 volumes:
   pg_data:
+  huggingface:
 
 networks:
   my_network:

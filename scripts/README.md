@@ -15,7 +15,6 @@
 - Show me the top 10 most expensive products
 - Which brands offer products in multiple categories?
 - Which categories have products available in the USA but not in Canada?
-- What products are currently on promotion?
 - List all products with discounts and their percentage discounts.
 - What are the best products in each category based on their bestseller rank?
 
