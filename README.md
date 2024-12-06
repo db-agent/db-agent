@@ -25,8 +25,11 @@ docker compose -f docker-compose.demo.yml up -d
 
 ### GPU Memory requirements
 
-- Ollama - hf.co/defog/sqlcoder-7b-2 - ~9548MiB of VRAM
-- TGI - defog/llama-3-sqlcoder-8b - ~64422MiB GB VRAM
+| Engine | Model                              | Memory | GPU         |
+|--------|------------------------------------|--------|-------------|
+| TGI    | meta-llama/Llama-3.2-1B-Instruct  | 36GB   | A100-40G    |
+| TGI    | meta-llama/Llama-3.2-1B-Instruct  | 72GB   | A100-80G    |
+
 
 ### Huggingface Models ( TGI )
 
