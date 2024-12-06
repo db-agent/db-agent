@@ -24,16 +24,39 @@ class TextGenBase(ABC):
         return server_url
 
     @abstractmethod
-    def construct_payload(self, user_question, db_schema):
+    def construct_sql_payload(self, user_question, db_schema):
+        pass
+
+    @abstractmethod
+    def construct_generic_payload(self, user_question, db_schema):
         pass
 
     @abstractmethod
     def parse_response(self, response):
         pass
 
+    def generate_generic_response(self, user_question):
+        try:
+            payload = self.construct_generic_payload(user_question)
+            headers = {"Content-Type": "application/json"}
+            logging.info(f"Sending Payload: {payload} to Server: {self.server_url}")
+            response = requests.post(self.server_url, headers=headers, json=payload)
+            response.raise_for_status()
+            raw_response = response.json()
+            return self.parse_response(raw_response)
+        except requests.exceptions.RequestException as e:
+            error_response = None
+            if hasattr(e.response, "text"):  # Check if the response object exists
+                error_response = e.response.text
+            error_message = f"Error: {e}.\n Response: {error_response}"
+            logging.error(error_message)  # Log the error for debugging purposes
+            return error_message
+        
+  
+
     def generate_sql(self, user_question, db_schema):
         try:
-            payload = self.construct_payload(user_question, db_schema)
+            payload = self.construct_sql_payload(user_question, db_schema)
             headers = {"Content-Type": "application/json"}
             response = requests.post(self.server_url, headers=headers, json=payload)
             response.raise_for_status()
@@ -46,6 +69,9 @@ class TextGenBase(ABC):
             error_message = f"Error: {e}.\n Response: {error_response}"
             logging.error(error_message)  # Log the error for debugging purposes
             return error_message
+        
+    
+    
 
     @staticmethod
     def _extract_sql_statement(input_string):

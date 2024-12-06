@@ -8,7 +8,7 @@ class OllamaClient(TextGenBase):
         logger.info("Overriding server URL for Ollama")
         return f"http://{server_url}/api/chat"
 
-    def construct_payload(self, user_question, db_schema):
+    def construct_sql_payload(self, user_question, db_schema):
         logger.info("Constructing payload for Ollama")
         prompt = (
             "<|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n"

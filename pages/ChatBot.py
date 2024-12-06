@@ -27,16 +27,16 @@ logger.info("Logging initialized successfully!")
 load_dotenv()
 
 st.set_page_config(page_icon="assets/logo.png")
-
-# Streamlit App Interface
-st.title("Talk to your DB in Natural Language")
-
+st.title("Yet Another ChatBot 🤖")
 st.markdown(custom_css, unsafe_allow_html=True)
+
+
 with st.sidebar:
     st.page_link('db-agent.py', label='DB Agent', icon='📊')
     st.page_link('pages/ChatBot.py', label='Yet Another ChatBot', icon='🤖')
 
 
+# Streamlit App Interface
 
 
 # Initialize query history in session state
@@ -48,44 +48,17 @@ if "config" not in st.session_state:
 
 
 with st.sidebar:
-    with st.expander("Database Configuration"):
-        st.session_state.config = load_from_env()
-        db_options = ["postgres", "mysql", "mssql", "oracle"]
-
-        st.session_state.config["DB_DRIVER"] = st.selectbox(
-            "SELECT DATABASE:", db_options,
-            db_options.index(st.session_state.config["DB_DRIVER"])
-        )
-        st.session_state.config["DB_HOST"] = st.text_input(
-            "DB_HOST:", st.session_state.config["DB_HOST"]
-        )
-        st.session_state.config["DB_PORT"] = st.text_input(
-            "DB_PORT:", st.session_state.config["DB_PORT"]
-        )
-        st.session_state.config["DB_USER"] = st.text_input(
-            "DB_USER:", st.session_state.config["DB_USER"]
-        )
-        st.session_state.config["DB_PASSWORD"] = st.text_input(
-            "DB_PASS:", st.session_state.config["DB_PASSWORD"]
-        )
-        st.session_state.config["DB_NAME"] = st.text_input(
-            "DB_NAME:", st.session_state.config["DB_NAME"]
-        )
-        
-        if st.button("Save DB Config"):
-            save_to_env(st.session_state["config"])
-            st.success("Database configuration saved!")
-
+    
     with st.expander("Model Selection"):
         st.session_state["config"] = load_from_env()
 
         # Define supported models for each backend
         supported_models = {
-            "huggingface": ["defog/llama-3-sqlcoder-8b",
+            "huggingface": ["meta-llama/Llama-3.2-1B-Instruct",
+                            "defog/llama-3-sqlcoder-8b",
                             "defog/sqlcoder-70b-alpha",
                             "microsoft/Phi-3.5-mini-instruct",
-                            "google/gemma-2-2b-it",
-                            "meta-llama/Llama-3.2-1B-Instruct"],
+                            "google/gemma-2-2b-it"],
             "ollama": ["hf.co/defog/sqlcoder-7b-2"],
             "vllm": ["microsoft/Phi-3.5-mini-instruct", 
                     "google/gemma-2-2b-it"]
@@ -133,53 +106,36 @@ with st.sidebar:
             st.success("LLM configuration saved!")
 
         
-    with st.expander("Show Database Schema"):
-        sql_alchemy = SqlAlchemy()
-        schema_info = sql_alchemy.get_db_schema()
-        st.text(schema_info)
-
     
 
+nl_query = st.text_area("Ask your question")
 
-nl_query = st.text_area("Ask a question about your data:")
 
-
-if st.button("▶️  Execute"):
+if st.button("▶️  Send  Query"):
 
     if nl_query:
         model_name=st.session_state.config.get("MODEL")
         backend = st.session_state.config.get('LLM_BACKEND')
 
 
-        with st.spinner(f"Generating SQL Query using {model_name}"):
+        with st.spinner(f"Reponse {model_name}"):
             inference_client = LLMClientFactory.get_client(
                 backend = st.session_state.config.get('LLM_BACKEND'),
                 server_url = st.session_state.config.get('LLM_ENDPOINT'),
                 model_name = st.session_state.config.get("MODEL")
             )
         
-        sql_query=inference_client.generate_sql(nl_query,schema_info)
+        response=inference_client.generate_generic_response(nl_query)
 
-        st.text(f"Generated SQL Query: LLM backend {backend} serving {model_name}")
-        st.code(sql_query, language="sql")
+        st.text(f"Response: LLM backend {backend} serving {model_name}")
+        st.markdown(response)
 
-        st.session_state.query_history.append((nl_query, sql_query))
+        st.session_state.query_history.append((nl_query, response))
         save_query_history(st.session_state["query_history"])
 
 
-        with st.spinner(f"Executing SQL on {st.session_state.config['DB_DRIVER']}"):
-            query_result = sql_alchemy.run_query(sql_query)
-            if isinstance(query_result, str):
-                st.error(f"Error: {query_result}")
-            else:
-                st.success("Query executed successfully!")
-                if isinstance(query_result, pd.DataFrame) and not query_result.empty:
-                    st.subheader("Query Results")
-                    st.dataframe(query_result)
               
     else:
         st.warning("Please enter a natural language query.")
-
-
 
 display_query_history()
