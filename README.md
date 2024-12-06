@@ -7,20 +7,6 @@
 
 
 
-
-
-## Demo Video
-
-[Watch the demo video](https://youtu.be/KT84qySZw1I)
-
-
-
-```bash
-export HF_TOKEN=<YOUR TOKEN>
-docker compose -f docker-compose.demo.yml build
-docker compose -f docker-compose.demo.yml up -d
-```
-
 ## Inference Options ( with GPUs )
 
 ### GPU Memory requirements
@@ -34,6 +20,10 @@ docker compose -f docker-compose.demo.yml up -d
 ### Huggingface Models ( TGI )
 
 - defog/llama-3-sqlcoder-8b
+- meta-llama/Llama-3.2-1B-Instruct
+- microsoft/Phi-3.5-mini-instruct
+- google/gemma-2-2b-it
+- meta-llama/Llama-3.2-1B-Instruct
 
 ```
 # Deploy with docker on Linux:
@@ -42,7 +32,7 @@ docker run --gpus all \
  	-e HF_TOKEN=$HF_TOKEN \
 	-p 8000:80 \
 	ghcr.io/huggingface/text-generation-inference:latest \
-	--model-id defog/llama-3-sqlcoder-8b
+	--model-id $MODEL
 ```
 
 
@@ -59,12 +49,17 @@ docker exec -it ollama ollama run hf.co/defog/sqlcoder-7b-2
 ## Running on Cloud
 
 - Run the application + model on Nvidia A100, H100
-- 
+
 ## Running the model locally
 
 - MacOS or X86/Nvidia based machines should have enough GPU memory to support the models.
-- Ollama - hf.co/defog/sqlcoder-7b-2 requires 7GB of GPU VRAM
-- TGI - defog/llama-3-sqlcoder-8b - ~26.78 GB
+
+```bash
+export HF_TOKEN=<YOUR TOKEN>
+docker compose -f docker-compose.demo.yml build
+docker compose -f docker-compose.demo.yml up -d
+```
+
 
 
 
