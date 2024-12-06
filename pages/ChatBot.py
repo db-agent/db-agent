@@ -130,8 +130,8 @@ if st.button("▶️  Send  Query"):
         st.text(f"Response: LLM backend {backend} serving {model_name}")
         st.markdown(response)
 
-        st.session_state.query_history.append((nl_query, response))
-        save_query_history(st.session_state["query_history"])
+        # st.session_state.query_history.append((nl_query, response))
+        # save_query_history(st.session_state["query_history"])
 
 
               
