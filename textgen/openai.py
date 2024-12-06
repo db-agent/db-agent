@@ -1,12 +1,19 @@
+from openai import OpenAI
 from .base import TextGenBase
 import logging
 
 logger = logging.getLogger(__name__)
 
-class HuggingFaceClient(TextGenBase):
+
+class OpenAIClient:
     def override_server_url(self, server_url):
         logger.info("Overriding server URL for HuggingFace")
-        return f"http://{server_url}/v1/chat/completions"
+        server_url= f"http://{server_url}/v1/"
+        self.client = OpenAI(
+            base_url=server_url,
+            api_key="-"
+        )
+        return server_url
 
     def construct_sql_payload(self, user_question, db_schema):
         prompt = (
@@ -22,19 +29,16 @@ class HuggingFaceClient(TextGenBase):
         }
     
     def construct_generic_payload(self, user_question):
-        prompt = user_question
-        return {
-            "model": self.model_name,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.7,
-            "max_new_tokens": 4096,
-            "max_length": 4096,
-            "top_p": 0.9,
-            "repetition_penalty": 1.1,
-            "stream": False,
-            "max_tokens": 1024
-
-        }
+        chat_completion = self.client.chat.completions.create(
+            model="meta-llama/Llama-3.2-1B-Instruct",
+            messages=[
+                {"role": "user", "content": user_question}
+            ],
+            stream=False,
+            max_tokens=1024,  # Maximum number of tokens to generate
+            temperature=0.7,  # Adds randomness to encourage a longer response
+            top_p=0.9         # Ensures diverse token sampling
+        )
 
     def parse_response(self, response):
         logger.info(f"Parsing response of {self.model_name} with TGI")

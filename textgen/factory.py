@@ -1,5 +1,6 @@
 from .huggingface import HuggingFaceClient
 from .ollama import OllamaClient
+from .openai import OpenAIClient
 
 class LLMClientFactory:
     @staticmethod
@@ -9,5 +10,7 @@ class LLMClientFactory:
             return HuggingFaceClient(server_url, model_name)
         elif backend == "ollama":
             return OllamaClient(server_url, model_name)
+        elif backend == "openai":
+            return OpenAIClient(server_url,model_name)
         else:
             raise ValueError(f"Unsupported LLM backend: {backend}")
