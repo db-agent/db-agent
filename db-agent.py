@@ -74,10 +74,14 @@ with st.sidebar:
 
         # Define supported models for each backend
         supported_models = {
-            "huggingface": ["defog/llama-3-sqlcoder-8b", "defog/sqlcoder-70b-alpha"],
-            "ollama": ["hf.co/defog/sqlcoder-7b-2",
-                       "hf.co/MaziyarPanahi/sqlcoder-7b-2-GGUF:Q2_K"],
-            "vllm": ["google/codegemma-7b-it"]
+            "huggingface": ["defog/llama-3-sqlcoder-8b",
+                            "defog/sqlcoder-70b-alpha",
+                            "microsoft/Phi-3.5-mini-instruct",
+                            "google/gemma-2-2b-it",
+                            "meta-llama/Llama-3.2-1B-Instruct"],
+            "ollama": ["hf.co/defog/sqlcoder-7b-2"],
+            "vllm": ["microsoft/Phi-3.5-mini-instruct", 
+                    "google/gemma-2-2b-it"]
         }
 
         llm_backend = [
@@ -119,6 +123,7 @@ with st.sidebar:
 
         if st.button("Save LLM Config"):
             save_to_env(st.session_state.config)
+            st.success("LLM configuration saved!")
 
         
     with st.expander("Show Database Schema"):
