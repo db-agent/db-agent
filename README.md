@@ -15,6 +15,7 @@
 |--------|------------------------------------|--------|-------------|
 | TGI    | meta-llama/Llama-3.2-1B-Instruct  | 36GB   | A100-40G    |
 | TGI    | meta-llama/Llama-3.2-1B-Instruct  | 72GB   | A100-80G    |
+| TGI    | meta-llama/Llama-3.2-1B-Instruct   | 9 GB  | RTX 3060 |
 
 
 ### Huggingface Models ( TGI )
