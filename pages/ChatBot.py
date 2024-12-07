@@ -26,7 +26,7 @@ logger.info("Logging initialized successfully!")
 
 load_dotenv()
 
-st.set_page_config(page_icon="assets/logo.png")
+st.set_page_config(page_title="ChatBot", page_icon="assets/logo.png")
 st.title("Yet Another ChatBot 🤖")
 st.markdown(custom_css, unsafe_allow_html=True)
 
