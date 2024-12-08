@@ -54,14 +54,16 @@ with st.sidebar:
 
         # Define supported models for each backend
         supported_models = {
-            "huggingface": ["meta-llama/Llama-3.2-1B-Instruct",
-                            "defog/llama-3-sqlcoder-8b",
+            "huggingface": ["defog/llama-3-sqlcoder-8b",
                             "defog/sqlcoder-70b-alpha",
                             "microsoft/Phi-3.5-mini-instruct",
-                            "google/gemma-2-2b-it"],
-            "ollama": ["hf.co/defog/sqlcoder-7b-2"],
+                            "google/gemma-2-2b-it",
+                            "meta-llama/Llama-3.2-1B-Instruct",
+                            "meta-llama/Llama-3.3-70B-Instruct"],
+            "ollama": ["hf.co/defog/sqlcoder-7b-2","llama3.3"],
             "vllm": ["microsoft/Phi-3.5-mini-instruct", 
-                    "google/gemma-2-2b-it"]
+                    "google/gemma-2-2b-it",
+                    "meta-llama/Llama-3.3-70B-Instruct"]
         }
 
         llm_backend = [
