@@ -58,7 +58,7 @@ services:
       - "~/.cache/huggingface:/root/.cache/huggingface"  # Cache directory for Hugging Face
     ports:
       - "8000:80"  # Expose port 8000 on the host to port 80 in the container
-    command: --model-id defog/llama-3-sqlcoder-8b
+    command: --model-id meta-llama/Llama-3.2-3B-Instruct
     networks:
       - my_network
 
