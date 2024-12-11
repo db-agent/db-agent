@@ -34,8 +34,11 @@ curl http://localhost:11434/api/chat -d '{
 - Launch the application with Sample database ( PostgreSQL )
 
 ```
-docker compose -f docker-compose.app.yml build
-docker compose -f docker-compose.app.yml up -d
+docker compose -f docker-compose.local.yml build
+docker compose -f docker-compose.local.yml up -d
+# Check logs
+docker compose -f docker-compose.local.yml logs -f
+
 ```
 - Access the application at `http://localhost:8501`
 
