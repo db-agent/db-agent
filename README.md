@@ -41,6 +41,13 @@ docker compose -f docker-compose.local.yml logs -f
 
 ```
 - Access the application at `http://localhost:8501`
+- Setup DB configuration as below
+
+<img width="493" alt="image" src="https://github.com/user-attachments/assets/490e5469-e299-471b-8c9c-fa0e002f2bb6">
+
+- Setup the Model configuration as below ( ensure LLM_ENDPOINT is your computers IP address )
+<img width="480" alt="image" src="https://github.com/user-attachments/assets/d7b6e8c0-85e5-4b17-954a-3b79187d5c95">
+
 
 ### Huggingface Models ( TGI )
 
