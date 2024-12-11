@@ -39,7 +39,7 @@ services:
     volumes:
       - ./scripts/:/scripts  # Mount your Python script directory
     working_dir: /scripts
-    entrypoint: ["sh", "-c", "sleep 10; pip3 install psycopg2-binary kagglehub; python3 data_import_lows.py; python3 data_import_sales.py"]
+    entrypoint: ["sh", "-c", "sleep 10; pip3 install psycopg2-binary kagglehub pandas; python3 data_import_lows.py; python3 data_import_sales.py"]
 
   huggingface-tgi:
     image: ghcr.io/huggingface/text-generation-inference:latest

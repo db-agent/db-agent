@@ -49,8 +49,19 @@ docker compose -f docker-compose.local.yml logs -f
 <img width="480" alt="image" src="https://github.com/user-attachments/assets/d7b6e8c0-85e5-4b17-954a-3b79187d5c95">
 
 
+## Running on Cloud
+
+- Run the application + model on Nvidia GPUs A100, H100
+
 ### Huggingface Models ( TGI )
 
+```bash
+export HF_TOKEN=<YOUR TOKEN>
+docker compose -f docker-compose.tgi.yml build
+docker compose -f docker-compose.tgi.yml up -d
+```
+
+### Other supported model
 - defog/llama-3-sqlcoder-8b
 - meta-llama/Llama-3.2-1B-Instruct
 - microsoft/Phi-3.5-mini-instruct
@@ -68,27 +79,11 @@ docker run --gpus all \
 ```
 
 
-### Ollama 
-
-- hf.co/defog/sqlcoder-7b-2
-
-```
-docker run -d --gpus=all -v ollama:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
-docker exec -it ollama ollama run hf.co/defog/sqlcoder-7b-2
-
-```
-
-## Running on Cloud
-
-- Run the application + model on Nvidia A100, H100
 
 
 
-```bash
-export HF_TOKEN=<YOUR TOKEN>
-docker compose -f docker-compose.demo.yml build
-docker compose -f docker-compose.demo.yml up -d
-```
+
+
 
 
 
