@@ -11,6 +11,10 @@ RUN echo "DB_DRIVER=postgres" > /app/.env && \
     echo "LLM=defog/llama-3-sqlcoder-8b" >> /app/.env && \
     echo "DB_HOST=postgres" >> /app/.env && \
     echo "DB_USER=postgres" >> /app/.env
+
+RUN mkdir -p ~/.streamlit && \
+    echo "[client]" > ~/.streamlit/config.toml  &&\
+    echo "showSidebarNavigation = false" >> ~/.streamlit/config.toml
     
 
 RUN pip install --no-cache-dir -r requirements.txt

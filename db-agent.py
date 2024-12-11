@@ -7,6 +7,7 @@ from helpers.query_history import *
 from helpers.config_store import *
 from helpers.css_settings import *
 from helpers.dp_charts import *
+from helpers.supported_models import *
 import logging
 import time
 import os
@@ -79,25 +80,7 @@ with st.sidebar:
     with st.expander("Model Selection"):
         st.session_state["config"] = load_from_env()
 
-        # Define supported models for each backend
-        supported_models = {
-            "huggingface": ["meta-llama/Llama-3.2-1B-Instruct",
-                            "microsoft/Phi-3.5-mini-instruct",
-                            "google/gemma-2-2b-it",
-                            "defog/llama-3-sqlcoder-8b",
-                            "defog/sqlcoder-70b-alpha",
-                            "meta-llama/Llama-3.3-70B-Instruct"],
-            "ollama": ["hf.co/defog/sqlcoder-7b-2","llama3.3"],
-            "vllm": ["microsoft/Phi-3.5-mini-instruct", 
-                    "google/gemma-2-2b-it",
-                    "meta-llama/Llama-3.3-70B-Instruct"]
-        }
 
-        llm_backend = [
-            "huggingface",
-            "ollama",
-            "vllm"
-        ]
 
         # Dropdown to select the backend
         st.session_state.config["LLM_BACKEND"] = st.selectbox(
@@ -129,7 +112,7 @@ with st.sidebar:
             "LLM_ENDPOINT:", 
             value=st.session_state.config.get("LLM_ENDPOINT", "")
         )
-        
+        token_size = st.slider("Total Token", 1024, 2048, 4096)
         
         if st.button("Save LLM Config"):
             save_to_env(st.session_state.config)
