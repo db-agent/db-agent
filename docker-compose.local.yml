@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:latest
+    container_name: pg-database
+    environment:
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"  # Publicly accessible on port 5432
+    networks:
+      - my_network  # Internal Docker network
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  db-agent:
+    build: .
+    container_name: db-agent-app
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
+    ports:
+      - "8501:8501"  # Publicly accessible on port 8501
+    networks:
+      - my_network  # Optional, remove if no communication needed with other services
+
+  data-importer:
+    image: python:3.9
+    container_name: data-importer
+    depends_on:
+      - postgres
+    networks:
+      - my_network
+    volumes:
+      - ./scripts/:/scripts  # Mount your Python script directory
+    working_dir: /scripts
+    entrypoint: ["sh", "-c", "sleep 10; pip3 install psycopg2-binary kagglehub pandas; python3 data_import_lows.py; python3 data_import_sales.py"]
+
+volumes:
+  pg_data:
+
+
+networks:
+  my_network:
+    external: false

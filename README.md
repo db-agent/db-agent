@@ -5,7 +5,39 @@
 [![Demo Video](https://img.shields.io/badge/Visit-Our%20Demo-red)](https://youtu.be/tt0oTIrY260)
 [![Denvr Cloud](https://img.shields.io/badge/Deploy%20On-Denvr%20Cloud-brightgreen)](https://console.cloud.denvrdata.com/account/login)
 
+## Running the model locally with Ollama
 
+- MacOS or X86/Nvidia based machines should have enough GPU memory to support the models.
+- Download and Install Ollama and docker
+- Pull the Llama3.2:1b model
+
+```
+curl http://localhost:11434/api/pull -d '{
+  "model": "llama3.2:1b"
+}'
+```
+
+- Validate if Ollama is serving the model
+
+```
+curl http://localhost:11434/api/chat -d '{
+  "model": "llama3.2:1b",
+  "messages": [
+    {
+      "role": "user",
+      "content": "why is the sky blue?"
+    }
+  ]
+}'
+```
+
+- Launch the application with Sample database ( PostgreSQL )
+
+```
+docker compose -f docker-compose.app.yml build
+docker compose -f docker-compose.app.yml up -d
+```
+- Access the application at `http://localhost:8501`
 
 ### Huggingface Models ( TGI )
 
@@ -40,9 +72,7 @@ docker exec -it ollama ollama run hf.co/defog/sqlcoder-7b-2
 
 - Run the application + model on Nvidia A100, H100
 
-## Running the model locally
 
-- MacOS or X86/Nvidia based machines should have enough GPU memory to support the models.
 
 ```bash
 export HF_TOKEN=<YOUR TOKEN>
