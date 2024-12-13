@@ -12,11 +12,16 @@ supported_models = {
                "hf.co/defog/sqlcoder-7b-2"],
     "vllm": ["microsoft/Phi-3.5-mini-instruct", 
             "google/gemma-2-2b-it",
-            "meta-llama/Llama-3.3-70B-Instruct"]
+            "meta-llama/Llama-3.3-70B-Instruct"],
+    "gemini": ["gemini-2.0-flash-exp",
+               "gemini-1.5-flash"],
+    "openai": ["gpt-4o"]
 }
 
 llm_backend = [
     "huggingface",
     "ollama",
-    "vllm"
+    "vllm",
+    "gemini",
+    "openai"
         ]

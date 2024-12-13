@@ -12,9 +12,10 @@ class TextGenBase(ABC):
     Abstract base class for text generation clients.
     """
 
-    def __init__(self, server_url, model_name):
+    def __init__(self, server_url, model_name,api_key=None):
         self.server_url = self.override_server_url(server_url)
         self.model_name = model_name
+        self.api_key = api_key
         logger.info(f"Initialized {self.__class__.__name__} with server_url={self.server_url} and model_name={self.model_name}")
 
     def override_server_url(self, server_url):

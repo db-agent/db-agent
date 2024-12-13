@@ -106,7 +106,8 @@ if st.button("▶️  Send  Query"):
             inference_client = LLMClientFactory.get_client(
                 backend = st.session_state.config.get('LLM_BACKEND'),
                 server_url = st.session_state.config.get('LLM_ENDPOINT'),
-                model_name = st.session_state.config.get("MODEL")
+                model_name = st.session_state.config.get("MODEL"),
+                api_key = st.session_state.config.get("LLM_API_KEY")
             )
         
         response=inference_client.generate_generic_response(nl_query)
