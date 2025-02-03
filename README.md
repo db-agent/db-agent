@@ -13,7 +13,7 @@
 
 ```
 curl http://localhost:11434/api/pull -d '{
-  "model": "llama3.2:1b"
+  "model": "deepseek-r1"
 }'
 ```
 
@@ -21,7 +21,7 @@ curl http://localhost:11434/api/pull -d '{
 
 ```
 curl http://localhost:11434/api/chat -d '{
-  "model": "llama3.2:1b",
+  "model": "deepseek-r1",
   "messages": [
     {
       "role": "user",
