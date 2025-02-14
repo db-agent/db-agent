@@ -27,7 +27,7 @@ logger.info("Logging initialized successfully!")
 
 load_dotenv()
 
-st.set_page_config(page_title="DB Agent",page_icon="assets/logo.png")
+# st.set_page_config(page_title="DB Agent",page_icon="assets/logo.png")
 
 # Streamlit App Interface
 st.title("Talk to your DB in Natural Language")
