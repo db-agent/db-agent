@@ -4,7 +4,7 @@
 [![Checkout the Website](https://img.shields.io/badge/Visit-Our%20Website-brightgreen)](https://www.db-agent.com)
 [![Demo Video](https://img.shields.io/badge/Visit-Our%20Demo-red)](https://youtu.be/tt0oTIrY260)
 [![Denvr Cloud](https://img.shields.io/badge/Deploy%20On-Denvr%20Cloud-brightgreen)](https://console.cloud.denvrdata.com/account/login)
-[![Live App](https://img.shields.io/badge/Deploy%20Live-App-brightgreen)](https://db-agent.streamlit.app/)
+[![Live App](https://img.shields.io/badge/Live-App-brightgreen)](https://db-agent.streamlit.app/)
 
 ## Running the model locally with Ollama
 
