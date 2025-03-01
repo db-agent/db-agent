@@ -30,7 +30,7 @@ load_dotenv()
 # st.set_page_config(page_title="DB Agent",page_icon="assets/logo.png")
 
 # Streamlit App Interface
-st.title("Talk to your DB in Natural Language")
+st.title("Chat with your Data")
 
 st.markdown(custom_css, unsafe_allow_html=True)
 with st.sidebar:
@@ -57,25 +57,25 @@ with st.sidebar:
             "SELECT DATABASE:", db_options,
             db_options.index(st.session_state.config["DB_DRIVER"])
         )
-        st.session_state.config["DB_HOST"] = st.text_input(
-            "DB_HOST:", st.session_state.config["DB_HOST"]
-        )
-        st.session_state.config["DB_PORT"] = st.text_input(
-            "DB_PORT:", st.session_state.config["DB_PORT"]
-        )
-        st.session_state.config["DB_USER"] = st.text_input(
-            "DB_USER:", st.session_state.config["DB_USER"]
-        )
-        st.session_state.config["DB_PASSWORD"] = st.text_input(
-            "DB_PASS:", st.session_state.config["DB_PASSWORD"]
-        )
-        st.session_state.config["DB_NAME"] = st.text_input(
-            "DB_NAME:", st.session_state.config["DB_NAME"]
-        )
+        # st.session_state.config["DB_HOST"] = st.text_input(
+        #     "DB_HOST:", st.session_state.config["DB_HOST"]
+        # )
+        # st.session_state.config["DB_PORT"] = st.text_input(
+        #     "DB_PORT:", st.session_state.config["DB_PORT"]
+        # )
+        # st.session_state.config["DB_USER"] = st.text_input(
+        #     "DB_USER:", st.session_state.config["DB_USER"]
+        # )
+        # st.session_state.config["DB_PASSWORD"] = st.text_input(
+        #     "DB_PASS:", st.session_state.config["DB_PASSWORD"]
+        # )
+        # st.session_state.config["DB_NAME"] = st.text_input(
+        #     "DB_NAME:", st.session_state.config["DB_NAME"]
+        # )
         
-        if st.button("Save DB Config"):
-            save_to_env(st.session_state["config"])
-            st.success("Database configuration saved!")
+        # if st.button("Save DB Config"):
+        #     save_to_env(st.session_state["config"])
+        #     st.success("Database configuration saved!")
 
     with st.expander("Model Selection"):
         st.session_state["config"] = load_from_env()
@@ -102,16 +102,16 @@ with st.sidebar:
         )
 
         # Input for API key
-        st.session_state.config["LLM_API_KEY"] = st.text_input(
-            "API KEY:", 
-            value=st.session_state.config.get("LLM_API_KEY", "")
-        )
+        # st.session_state.config["LLM_API_KEY"] = st.text_input(
+        #     "API KEY:", 
+        #     value=st.session_state.config.get("LLM_API_KEY", "")
+        # )
         
         # Input for LLM endpoint
-        st.session_state.config["LLM_ENDPOINT"] = st.text_input(
-            "LLM_ENDPOINT:", 
-            value=st.session_state.config.get("LLM_ENDPOINT", "")
-        )
+        # st.session_state.config["LLM_ENDPOINT"] = st.text_input(
+        #     "LLM_ENDPOINT:", 
+        #     value=st.session_state.config.get("LLM_ENDPOINT", "")
+        # )
         token_size = st.slider("Total Token", 1024, 2048, 4096)
         
         if st.button("Save LLM Config"):
@@ -135,16 +135,22 @@ if st.button("▶️  Execute"):
     if nl_query:
         model_name=st.session_state.config.get("MODEL")
         backend = st.session_state.config.get('LLM_BACKEND')
-
+        print(f"Selected backend: {backend}")
+        print(f"Selected model: {model_name}")
+        print(f"Selected API Key: {st.session_state.config.get('LLM_API_KEY')}")
+        print(f"Selected LLM Endpoint: {st.session_state.config.get('LLM_ENDPOINT')}")
 
         with st.spinner(f"Generating SQL Query using {model_name}"):
             inference_client = LLMClientFactory.get_client(
                 backend = st.session_state.config.get('LLM_BACKEND'),
-                server_url = st.session_state.config.get('LLM_ENDPOINT'),
-                model_name = st.session_state.config.get("MODEL"),
+                server_url = model_url[model_name],
+                model_name = model_name,
                 api_key = st.session_state.config.get("LLM_API_KEY")
             )
         
+        # inference_client = LLMClientFactory.get_client_by_name(server_url="https://inference-api.cloud.denvrdata.com/CodeLlama-34b-Instruct/v1/",
+        #                                                        model_name="CodeLlama-34b-Instruct")
+
         sql_query=inference_client.generate_sql(nl_query,schema_info)
 
         st.text(f"Generated SQL Query: LLM backend {backend} serving {model_name}")
