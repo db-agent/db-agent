@@ -13,7 +13,7 @@ class LLMClientFactory:
             return HuggingFaceClient(server_url, model_name)
         # elif backend == "localollama":
         #     return OllamaClient(server_url, model_name)
-        elif backend == "denvrai" or backend == "ollama":
+        elif backend == "denvrai" or backend == "ollama" or backend == "models" or backend == "denvrai-models":
             return DenvrAIClient(server_url, model_name)
         elif backend == "gemini":
             return GoogleGeminiClient(server_url,model_name,api_key)

@@ -1,7 +1,7 @@
 # Define supported models for each backend
 
 supported_models = {
-    "DenvrAI": ["defog/llama-3-sqlcoder-8b",
+    "DenvrAI-Models": ["defog/llama-3-sqlcoder-8b",
             "codellama/CodeLlama-34b-Instruct-hf"],
     "Ollama": ["deepseek-r1:1.5b",
                "llama3.2:1b"],
@@ -17,5 +17,5 @@ model_url = {
     "llama3.2:1b": "http://localhost:11434/v1"
 }
 
-llm_backend = ["DenvrAI","Ollama","gemini"]
+llm_backend = ["DenvrAI-Models","Ollama","gemini"]
     
