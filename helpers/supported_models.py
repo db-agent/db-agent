@@ -1,29 +1,21 @@
 # Define supported models for each backend
 
 supported_models = {
-    "huggingface": ["meta-llama/Llama-3.2-1B-Instruct",
-                    "microsoft/Phi-3.5-mini-instruct",
-                    "google/gemma-2-2b-it",
-                    "defog/llama-3-sqlcoder-8b",
-                    "defog/sqlcoder-70b-alpha",
-                    "meta-llama/Llama-3.3-70B-Instruct"],
-    "ollama": ["deepseek-r1:7b",
-               "llama3.2:1b",
-               "llama3.2:latest",
-               "llama3.3",
-               "hf.co/defog/sqlcoder-7b-2"],
-    "vllm": ["microsoft/Phi-3.5-mini-instruct", 
-            "google/gemma-2-2b-it",
-            "meta-llama/Llama-3.3-70B-Instruct"],
+    "DenvrAI-Models": ["defog/llama-3-sqlcoder-8b",
+            "codellama/CodeLlama-34b-Instruct-hf"],
+    "Ollama": ["deepseek-r1:1.5b",
+               "llama3.2:1b"],
     "gemini": ["gemini-2.0-flash-exp",
-               "gemini-1.5-flash"],
-    "openai": ["gpt-4o"]
+               "gemini-1.5-flash"]
+    
 }
 
-llm_backend = [
-    "huggingface",
-    "ollama",
-    "vllm",
-    "gemini",
-    "openai"
-        ]
+model_url = {
+    "codellama/CodeLlama-34b-Instruct-hf": "https://inference-api.cloud.denvrdata.com/CodeLlama-34b-Instruct/v1/",
+    "defog/llama-3-sqlcoder-8b": "http://130.250.171.57:8000/v1",
+    "deepseek-r1:1.5b": "http://localhost:11434/v1",
+    "llama3.2:1b": "http://localhost:11434/v1"
+}
+
+llm_backend = ["DenvrAI-Models","Ollama","gemini"]
+    

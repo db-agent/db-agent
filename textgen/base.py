@@ -2,10 +2,12 @@ import re
 import requests
 import logging
 from abc import ABC, abstractmethod
-
+import os
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+API_KEY = os.environ.get('API_KEY')
 
 class TextGenBase(ABC):
     """
@@ -15,7 +17,7 @@ class TextGenBase(ABC):
     def __init__(self, server_url, model_name,api_key=None):
         self.server_url = self.override_server_url(server_url)
         self.model_name = model_name
-        self.api_key = api_key
+        self.api_key = API_KEY
         logger.info(f"Initialized {self.__class__.__name__} with server_url={self.server_url} and model_name={self.model_name}")
 
     def override_server_url(self, server_url):
@@ -39,7 +41,8 @@ class TextGenBase(ABC):
     def generate_generic_response(self, user_question):
         try:
             payload = self.construct_generic_payload(user_question)
-            headers = {"Content-Type": "application/json"}
+            headers = {"Authorization": f"Bearer {self.api_key}",
+                       "Content-Type": "application/json"}
             logging.info(f"Sending Payload: {payload} to Server: {self.server_url}")
             response = requests.post(self.server_url, headers=headers, json=payload)
             response.raise_for_status()
