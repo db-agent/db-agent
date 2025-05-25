@@ -7,9 +7,9 @@
 [![Live App](https://img.shields.io/badge/Live-App-brightgreen)](https://db-agent.streamlit.app/)
 
 ---
-Latest News
+Latest News 🔥
 
-- [4 March 2025] - Presented in [AAAI-25 workshop](https://the-ai-alliance.github.io/AAAI-25-Workshop-on-Open-Source-AI-for-Mainstream-Use/program/) . The workshop paper can be found [here](https://drive.google.com/file/d/1oQ83on04XHN6BZKJjdDu90eWK6RprT8X/view?usp=sharing) 
+- [4 March 2025] - Presented in [AAAI-25 workshop](https://the-ai-alliance.github.io/AAAI-25-Workshop-on-Open-Source-AI-for-Mainstream-Use/program/) at Philadelphia . The workshop paper can be found [here](https://drive.google.com/file/d/1oQ83on04XHN6BZKJjdDu90eWK6RprT8X/view?usp=sharing) 
 
 ## Running the model locally with Ollama
 
