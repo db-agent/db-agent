@@ -1,3 +1,14 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/db-agent/db-agent/refs/heads/main/assets/logo.png">
+    <img alt="DB Agent" src="https://raw.githubusercontent.com/db-agent/db-agent/refs/heads/main/assets/logo.png" width=55%>
+  </picture>
+</p>
+
+<h3 align="center">
+Talk to your database
+</h3>
+
 # db-agent
 
 [![Docker Image CI](https://github.com/db-agent/db-agent/actions/workflows/docker-image.yml/badge.svg)](https://github.com/db-agent/db-agent/actions/workflows/docker-image.yml)
