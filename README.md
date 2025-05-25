@@ -6,6 +6,11 @@
 [![Denvr Cloud](https://img.shields.io/badge/Deploy%20On-Denvr%20Cloud-brightgreen)](https://console.cloud.denvrdata.com/account/login)
 [![Live App](https://img.shields.io/badge/Live-App-brightgreen)](https://db-agent.streamlit.app/)
 
+---
+Latest News
+
+[4 March 2025] - Presented in AAAI-25 workshop [Link to Event](https://the-ai-alliance.github.io/AAAI-25-Workshop-on-Open-Source-AI-for-Mainstream-Use/program/)
+
 ## Running the model locally with Ollama
 
 - MacOS or X86/Nvidia based machines should have enough GPU memory to support the models.
