@@ -1,25 +1,29 @@
-import streamlit as st
-import pandas as pd
-from connectors.sql_alchemy import SqlAlchemy
-from textgen.factory import LLMClientFactory
-
-from helpers.query_history import * 
-from helpers.config_store import *
-from helpers.css_settings import *
-from helpers.dp_charts import *
-from helpers.supported_models import *
 import logging
-import time
-import os
+
+import pandas as pd
+import streamlit as st
 from dotenv import load_dotenv
+
+from agent_runtime import (
+    AgentOrchestrator,
+    AgentRuntimeClient,
+    ConfigService,
+    OrchestratorEventType,
+    ToolRegistry,
+    create_sqlalchemy_tool,
+)
+from helpers.config_store import load_from_env, save_to_env
+from helpers.css_settings import custom_css
+from helpers.query_history import display_query_history, load_query_history, save_query_history
+from helpers.supported_models import llm_backend, supported_models
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[
-        logging.FileHandler("application.log"),  # Logs to a file
-        logging.StreamHandler()  # Logs to stdout
-    ]
+        logging.FileHandler("application.log"),
+        logging.StreamHandler(),
+    ],
 )
 
 logger = logging.getLogger(__name__)
@@ -27,146 +31,143 @@ logger.info("Logging initialized successfully!")
 
 load_dotenv()
 
-# st.set_page_config(page_title="DB Agent",page_icon="assets/logo.png")
-
-# Streamlit App Interface
 st.title("Talk to your DB in Natural Language")
-
 st.markdown(custom_css, unsafe_allow_html=True)
+
 with st.sidebar:
-    st.page_link('db-agent.py', label='DB Agent', icon='📊')
-    st.page_link('pages/ChatBot.py', label='Yet Another ChatBot', icon='🤖')
+    st.page_link("db-agent.py", label="DB Agent", icon="📊")
+    st.page_link("pages/ChatBot.py", label="Yet Another ChatBot", icon="🤖")
 
-
-
-
-# Initialize query history in session state
+# Initialize session state
 if "query_history" not in st.session_state:
     st.session_state["query_history"] = load_query_history()
 
 if "config" not in st.session_state:
     st.session_state["config"] = load_from_env()
 
+if "config_service" not in st.session_state:
+    st.session_state["config_service"] = ConfigService(st.session_state["config"])
+else:
+    st.session_state["config_service"].update(st.session_state["config"])
+
+if "tool_registry" not in st.session_state:
+    registry = ToolRegistry()
+    registry.register("sql", create_sqlalchemy_tool())
+    st.session_state["tool_registry"] = registry
+
+if "runtime_client" not in st.session_state:
+    orchestrator = AgentOrchestrator(
+        config_service=st.session_state["config_service"],
+        tool_registry=st.session_state["tool_registry"],
+    )
+    st.session_state["runtime_client"] = AgentRuntimeClient(orchestrator)
+
+config = st.session_state["config"]
+config_service: ConfigService = st.session_state["config_service"]
+runtime_client: AgentRuntimeClient = st.session_state["runtime_client"]
 
 with st.sidebar:
     with st.expander("Database Configuration"):
-        st.session_state.config = load_from_env()
         db_options = ["postgres", "mysql", "mssql", "oracle"]
+        current_driver = config.get("DB_DRIVER", db_options[0])
+        driver_index = db_options.index(current_driver) if current_driver in db_options else 0
+        config["DB_DRIVER"] = st.selectbox("SELECT DATABASE:", db_options, index=driver_index)
+        config["DB_HOST"] = st.text_input("DB_HOST:", value=config.get("DB_HOST", "") or "")
+        config["DB_PORT"] = st.text_input("DB_PORT:", value=config.get("DB_PORT", "") or "")
+        config["DB_USER"] = st.text_input("DB_USER:", value=config.get("DB_USER", "") or "")
+        config["DB_PASSWORD"] = st.text_input("DB_PASS:", value=config.get("DB_PASSWORD", "") or "")
+        config["DB_NAME"] = st.text_input("DB_NAME:", value=config.get("DB_NAME", "") or "")
 
-        st.session_state.config["DB_DRIVER"] = st.selectbox(
-            "SELECT DATABASE:", db_options,
-            db_options.index(st.session_state.config["DB_DRIVER"])
-        )
-        st.session_state.config["DB_HOST"] = st.text_input(
-            "DB_HOST:", st.session_state.config["DB_HOST"]
-        )
-        st.session_state.config["DB_PORT"] = st.text_input(
-            "DB_PORT:", st.session_state.config["DB_PORT"]
-        )
-        st.session_state.config["DB_USER"] = st.text_input(
-            "DB_USER:", st.session_state.config["DB_USER"]
-        )
-        st.session_state.config["DB_PASSWORD"] = st.text_input(
-            "DB_PASS:", st.session_state.config["DB_PASSWORD"]
-        )
-        st.session_state.config["DB_NAME"] = st.text_input(
-            "DB_NAME:", st.session_state.config["DB_NAME"]
-        )
-        
         if st.button("Save DB Config"):
-            save_to_env(st.session_state["config"])
+            save_to_env(config)
+            config_service.update(config)
             st.success("Database configuration saved!")
 
     with st.expander("Model Selection"):
-        st.session_state["config"] = load_from_env()
+        backend_default = config.get("LLM_BACKEND", llm_backend[0])
+        backend_index = llm_backend.index(backend_default) if backend_default in llm_backend else 0
+        config["LLM_BACKEND"] = st.selectbox("LLM_BACKEND:", llm_backend, index=backend_index)
 
-
-
-        # Dropdown to select the backend
-        st.session_state.config["LLM_BACKEND"] = st.selectbox(
-            "LLM_BACKEND:", 
-            llm_backend, 
-            index=llm_backend.index(st.session_state.config.get("LLM_BACKEND", llm_backend[0]))
-        )
-
-        # Dynamically update model options based on selected backend
-        selected_backend = st.session_state.config["LLM_BACKEND"]
+        selected_backend = config["LLM_BACKEND"]
         filtered_model_options = supported_models.get(selected_backend, [])
-
-        # Dropdown to select the model
-        st.session_state.config["MODEL"] = st.selectbox(
-            "SELECT Model:", 
-            filtered_model_options, 
-            index=filtered_model_options.index(st.session_state.config.get("MODEL", filtered_model_options[0])) 
-            if filtered_model_options else 0
+        if filtered_model_options:
+            model_default = config.get("MODEL", filtered_model_options[0])
+            model_index = (
+                filtered_model_options.index(model_default)
+                if model_default in filtered_model_options
+                else 0
+            )
+        else:
+            model_index = 0
+        config["MODEL"] = st.selectbox(
+            "SELECT Model:",
+            filtered_model_options or [""],
+            index=model_index,
         )
 
-        # Input for API key
-        st.session_state.config["LLM_API_KEY"] = st.text_input(
-            "API KEY:", 
-            value=st.session_state.config.get("LLM_API_KEY", "")
+        config["LLM_API_KEY"] = st.text_input(
+            "API KEY:",
+            value=config.get("LLM_API_KEY", "") or "",
         )
-        
-        # Input for LLM endpoint
-        st.session_state.config["LLM_ENDPOINT"] = st.text_input(
-            "LLM_ENDPOINT:", 
-            value=st.session_state.config.get("LLM_ENDPOINT", "")
+        config["LLM_ENDPOINT"] = st.text_input(
+            "LLM_ENDPOINT:",
+            value=config.get("LLM_ENDPOINT", "") or "",
         )
-        token_size = st.slider("Total Token", 1024, 2048, 4096)
-        
+        st.slider("Total Token", 1024, 2048, 4096, key="token_size")
+
         if st.button("Save LLM Config"):
-            save_to_env(st.session_state.config)
+            save_to_env(config)
+            config_service.update(config)
             st.success("LLM configuration saved!")
 
-        
     with st.expander("Show Database Schema"):
-        sql_alchemy = SqlAlchemy()
-        schema_info = sql_alchemy.get_db_schema()
-        st.text(schema_info)
+        try:
+            schema_tool = st.session_state["tool_registry"].get("sql")
+            schema_info = schema_tool.get_schema(config_service.get_config())
+            st.text(schema_info)
+        except Exception as exc:
+            st.error(f"Unable to load schema: {exc}")
 
-    
-
+config_service.update(config)
 
 nl_query = st.text_area("Ask a question about your data:")
+execute_pressed = st.button("▶️  Execute")
 
+if execute_pressed:
+    if nl_query.strip():
+        status_placeholder = st.empty()
+        sql_placeholder = st.empty()
+        meta_placeholder = st.empty()
+        result_placeholder = st.empty()
+        history_saved = False
 
-if st.button("▶️  Execute"):
-
-    if nl_query:
-        model_name=st.session_state.config.get("MODEL")
-        backend = st.session_state.config.get('LLM_BACKEND')
-
-
-        with st.spinner(f"Generating SQL Query using {model_name}"):
-            inference_client = LLMClientFactory.get_client(
-                backend = st.session_state.config.get('LLM_BACKEND'),
-                server_url = st.session_state.config.get('LLM_ENDPOINT'),
-                model_name = st.session_state.config.get("MODEL"),
-                api_key = st.session_state.config.get("LLM_API_KEY")
-            )
-        
-        sql_query=inference_client.generate_sql(nl_query,schema_info)
-
-        st.text(f"Generated SQL Query: LLM backend {backend} serving {model_name}")
-        st.code(sql_query, language="sql")
-
-        st.session_state.query_history.append((nl_query, sql_query))
-        save_query_history(st.session_state["query_history"])
-
-
-        with st.spinner(f"Executing SQL on {st.session_state.config['DB_DRIVER']}"):
-            query_result = sql_alchemy.run_query(sql_query)
-            if isinstance(query_result, str):
-                st.error(f"Error: {query_result}")
-            else:
-                st.success("Query executed successfully!")
-                if isinstance(query_result, pd.DataFrame) and not query_result.empty:
+        for event in runtime_client.stream_query(nl_query):
+            if event.type == OrchestratorEventType.STATUS:
+                status_placeholder.info(event.payload)
+            elif event.type == OrchestratorEventType.SQL:
+                backend = config.get("LLM_BACKEND") or config.get("LLM")
+                model_name = config.get("MODEL")
+                meta_placeholder.text(
+                    f"Generated SQL Query: LLM backend {backend} serving {model_name}"
+                )
+                sql_placeholder.code(event.payload, language="sql")
+                if not history_saved:
+                    st.session_state.query_history.append((nl_query, event.payload))
+                    save_query_history(st.session_state["query_history"])
+                    history_saved = True
+            elif event.type == OrchestratorEventType.RESULT:
+                status_placeholder.success("Query executed successfully!")
+                result = event.payload
+                if isinstance(result, pd.DataFrame) and not result.empty:
                     st.subheader("Query Results")
-                    st.dataframe(query_result)
-              
+                    result_placeholder.dataframe(result)
+                else:
+                    result_placeholder.write(result)
+            elif event.type == OrchestratorEventType.ERROR:
+                status_placeholder.error(event.payload)
+                break
     else:
         st.warning("Please enter a natural language query.")
-
 
 
 display_query_history()
