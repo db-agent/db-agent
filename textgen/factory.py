@@ -1,19 +1,28 @@
-from .huggingface import HuggingFaceClient
-from .ollama import OllamaClient
-from .openai_client import OpenAIClient
-from .google_gemini import GoogleGeminiClient
+"""Factory for instantiating provider specific LLM adapters."""
+
+from __future__ import annotations
+
+from agent_runtime.llm.base import LegacySQLWrapper
+from agent_runtime.llm.huggingface import HuggingFaceAdapter
+from agent_runtime.llm.ollama import OllamaAdapter
+from agent_runtime.llm.openai import OpenAIAdapter
+from agent_runtime.llm.gemini import GeminiAdapter
+
 
 class LLMClientFactory:
+    """Instantiate LLM adapters for the configured backend."""
+
     @staticmethod
-    def get_client(backend, server_url, model_name,api_key):
-        backend = backend.lower()
+    def get_client(backend, server_url, model_name, api_key):
+        backend = (backend or "").lower()
         if backend == "huggingface":
-            return HuggingFaceClient(server_url, model_name)
+            adapter = HuggingFaceAdapter(server_url, model_name, api_key)
         elif backend == "ollama":
-            return OllamaClient(server_url, model_name)
+            adapter = OllamaAdapter(server_url, model_name, api_key)
         elif backend == "openai":
-            return OpenAIClient(server_url,model_name)
+            adapter = OpenAIAdapter(server_url, model_name, api_key)
         elif backend == "gemini":
-            return GoogleGeminiClient(server_url,model_name,api_key)
+            adapter = GeminiAdapter(server_url, model_name, api_key)
         else:
             raise ValueError(f"Unsupported LLM backend: {backend}")
+        return LegacySQLWrapper(adapter)
