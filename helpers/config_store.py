@@ -40,7 +40,3 @@ def load_from_env():
         "LLM_API_KEY": st.secrets.get("LLM_API_KEY"),
         "LLM_ENDPOINT": st.secrets.get("LLM_ENDPOINT"),
     }
-
-# Example usage
-config = load_from_env()
-st.write(config)

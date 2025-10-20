@@ -8,3 +8,4 @@ python-dotenv
 kagglehub
 openai
 google-generativeai
+pytest
