@@ -10,7 +10,7 @@ from agent_runtime import (
     ConfigService,
     OrchestratorEventType,
     ToolRegistry,
-    create_sqlalchemy_tool,
+    register_default_tools,
 )
 from helpers.config_store import load_from_env, save_to_env
 from helpers.css_settings import custom_css
@@ -52,7 +52,10 @@ else:
 
 if "tool_registry" not in st.session_state:
     registry = ToolRegistry()
-    registry.register("sql", create_sqlalchemy_tool())
+    register_default_tools(
+        config_service=st.session_state["config_service"],
+        registry=registry,
+    )
     st.session_state["tool_registry"] = registry
 
 if "runtime_client" not in st.session_state:
