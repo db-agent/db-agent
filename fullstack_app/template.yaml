@@ -1,0 +1,130 @@
+# template.yaml — AWS SAM deployment template
+#
+# Deploy with:
+#   sam build
+#   sam deploy --guided
+#
+# This template defines:
+#   - Three Lambda functions (health, schema, query)
+#   - API Gateway (HTTP API) with CORS
+#   - Environment variables for config
+#
+# Architecture:
+#   Browser -> CloudFront/S3 (Next.js) -> API Gateway -> Lambda -> DB / LLM
+
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+
+Description: DB-Agent — Natural Language to SQL (serverless backend)
+
+Globals:
+  Function:
+    Runtime: python3.11
+    Handler: main.handler
+    Timeout: 30
+    MemorySize: 512
+    CodeUri: backend/
+    Environment:
+      Variables:
+        # Override these at deploy time or via AWS SSM Parameter Store
+        DB_URL: !Sub "{{resolve:ssm:/db-agent/${Stage}/DB_URL}}"
+        LLM_BASE_URL: !Sub "{{resolve:ssm:/db-agent/${Stage}/LLM_BASE_URL}}"
+        LLM_API_KEY: !Sub "{{resolve:secretsmanager:/db-agent/${Stage}/LLM_API_KEY}}"
+        LLM_MODEL: !Ref LLMModel
+        ALLOWED_ORIGINS: !Sub "https://${FrontendDomain}"
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+
+  LLMModel:
+    Type: String
+    Default: gpt-4o-mini
+    Description: LLM model name (must be available at the configured LLM_BASE_URL)
+
+  FrontendDomain:
+    Type: String
+    Default: localhost:3000
+    Description: Frontend domain for CORS allow-origin header
+
+Resources:
+
+  # ── API Gateway (HTTP API) ─────────────────────────────────────────────────
+  DbAgentApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Stage
+      CorsConfiguration:
+        AllowOrigins:
+          - !Sub "https://${FrontendDomain}"
+          - "http://localhost:3000"
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+
+  # ── Lambda: Health ─────────────────────────────────────────────────────────
+  HealthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "db-agent-health-${Stage}"
+      Description: GET /health — liveness check
+      MemorySize: 128   # lightweight — no LLM or heavy DB work
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref DbAgentApi
+            Path: /health
+            Method: GET
+
+  # ── Lambda: Schema ─────────────────────────────────────────────────────────
+  SchemaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "db-agent-schema-${Stage}"
+      Description: GET /schema — database schema inspection
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref DbAgentApi
+            Path: /schema
+            Method: GET
+
+  # ── Lambda: Query ─────────────────────────────────────────────────────────
+  QueryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "db-agent-query-${Stage}"
+      Description: POST /query — full NL-to-SQL pipeline
+      Timeout: 60       # LLM calls can take up to ~30s on large models
+      MemorySize: 1024  # More memory = faster cold starts for ML deps
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref DbAgentApi
+            Path: /query
+            Method: POST
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway base URL
+    Value: !Sub "https://${DbAgentApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
+    Export:
+      Name: !Sub "DbAgentApiUrl-${Stage}"
+
+  HealthFunctionArn:
+    Value: !GetAtt HealthFunction.Arn
+
+  SchemaFunctionArn:
+    Value: !GetAtt SchemaFunction.Arn
+
+  QueryFunctionArn:
+    Value: !GetAtt QueryFunction.Arn

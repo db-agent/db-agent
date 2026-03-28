@@ -1,4 +1,4 @@
-# ── Python ────────────────────────────────────────────────────────────────────
+# ── Python runtime ────────────────────────────────────────────────────────────
 __pycache__/
 **/__pycache__/
 *.py[cod]
@@ -6,16 +6,43 @@ __pycache__/
 *.pyd
 *.so
 
+# ── Python type checkers & linters ────────────────────────────────────────────
+.mypy_cache/
+**/.mypy_cache/
+.ruff_cache/
+**/.ruff_cache/
+.pytype/
+
 # ── Virtual environments ──────────────────────────────────────────────────────
 venv/
 .venv/
 env/
 .env/
 
-# ── Environment / secrets ─────────────────────────────────────────────────────
+# ── Secrets & environment variables ──────────────────────────────────────────
+# Block ALL .env variants everywhere
 .env
+.env.*
 **/.env
-# keep examples committed
+**/.env.*
+# Block secret/credential files by name
+secrets.toml
+**/secrets.toml
+credentials
+credentials.json
+**/credentials
+**/credentials.json
+# Block private keys and certificates
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+# Block AWS credential files
+.aws/credentials
+**/.aws/credentials
+# Keep example/template files committed
 !.env.example
 !**/.env.example
 
@@ -23,36 +50,72 @@ env/
 .pytest_cache/
 **/.pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
 .tox/
+coverage.xml
 
-# ── Databases ─────────────────────────────────────────────────────────────────
+# ── Databases & generated data ────────────────────────────────────────────────
 *.db
 *.sqlite
 *.sqlite3
-# but keep the data/ directory itself
+*.db-shm
+*.db-wal
+# keep the data/ placeholder committed
 !**/data/.gitkeep
 
-# ── Build / packaging ─────────────────────────────────────────────────────────
+# ── Python build & packaging ──────────────────────────────────────────────────
 dist/
 build/
 *.egg-info/
 *.egg
 wheels/
+*.dist-info/
+site/
+
+# ── Node / frontend runtime ───────────────────────────────────────────────────
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.tsbuildinfo
+
+# ── Next.js ───────────────────────────────────────────────────────────────────
+.next/
+**/.next/
+out/
+**/out/
+.vercel/
 
 # ── IDE & OS ──────────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.iml
 .DS_Store
+.DS_Store?
 Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+*.log.*
+logs/
+application.log
 
 # ── Streamlit ─────────────────────────────────────────────────────────────────
 .streamlit/
 
-# ── Logs ─────────────────────────────────────────────────────────────────────
-*.log
-application.log
+# ── AWS SAM ───────────────────────────────────────────────────────────────────
+.aws-sam/
+**/.aws-sam/
+samconfig.toml
+**/samconfig.toml
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+.dockerenv
 
 # ── Misc ──────────────────────────────────────────────────────────────────────
 .claude/
