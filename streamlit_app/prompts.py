@@ -11,7 +11,7 @@ Teaching note:
     Keeping prompts in one file makes them easy to iterate and test.
 """
 
-from app.db import get_schema
+from streamlit_app.db import get_schema
 
 
 # ── System prompt ─────────────────────────────────────────────────────────────

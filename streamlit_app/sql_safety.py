@@ -16,7 +16,7 @@ Teaching note:
 """
 
 import re
-from app.models import ValidationResult
+from streamlit_app.models import ValidationResult
 
 # Keywords that must never appear in a safe read-only query.
 _FORBIDDEN = {

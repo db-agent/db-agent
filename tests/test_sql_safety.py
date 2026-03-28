@@ -5,7 +5,7 @@ Run:  pytest tests/test_sql_safety.py -v
 """
 
 import pytest
-from app.sql_safety import validate_sql
+from streamlit_app.sql_safety import validate_sql
 
 
 # ── Safe queries ──────────────────────────────────────────────────────────────

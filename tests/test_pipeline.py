@@ -16,8 +16,8 @@ import pytest
 from unittest.mock import patch
 from sqlalchemy import create_engine, text
 
-import app.db as db_module
-from app.pipeline import run_pipeline
+import streamlit_app.db as db_module
+from streamlit_app.pipeline import run_pipeline
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────

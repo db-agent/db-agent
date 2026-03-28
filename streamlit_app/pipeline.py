@@ -31,12 +31,12 @@ Teaching note:
     so the caller never sees an unhandled exception.
 """
 
-from app.config import LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
-from app.models import LLMConfig, PipelineOutput, SQLResponse, ValidationResult
-from app.prompts import SYSTEM_PROMPT, build_user_prompt
-from app.llm import call_llm, parse_sql_response
-from app.sql_safety import validate_sql
-from app.db import run_query, get_schema
+from streamlit_app.config import LLM_BASE_URL, LLM_API_KEY, LLM_MODEL
+from streamlit_app.models import LLMConfig, PipelineOutput, SQLResponse, ValidationResult
+from streamlit_app.prompts import SYSTEM_PROMPT, build_user_prompt
+from streamlit_app.llm import call_llm, parse_sql_response
+from streamlit_app.sql_safety import validate_sql
+from streamlit_app.db import run_query, get_schema
 
 
 def run_pipeline(question: str, llm_config: LLMConfig | None = None) -> PipelineOutput:

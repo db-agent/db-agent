@@ -9,7 +9,7 @@ Teaching note:
 
 from typing import Any
 from sqlalchemy import create_engine, text, inspect
-from app.config import DB_URL
+from streamlit_app.config import DB_URL
 
 
 # ── Engine (singleton) ────────────────────────────────────────────────────────

@@ -10,7 +10,7 @@ Teaching note:
 
 import pytest
 from sqlalchemy import create_engine, text
-import app.db as db_module
+import streamlit_app.db as db_module
 
 
 @pytest.fixture(autouse=True)

@@ -16,7 +16,7 @@ Teaching note:
 import json
 import re
 from openai import OpenAI
-from app.models import LLMConfig, SQLResponse
+from streamlit_app.models import LLMConfig, SQLResponse
 
 
 def call_llm(system_prompt: str, user_prompt: str, config: LLMConfig) -> str:

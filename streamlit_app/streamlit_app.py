@@ -16,10 +16,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import streamlit as st
 import pandas as pd
-from app.config import APP_TITLE, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL, DB_URL
-from app.models import LLMConfig
-from app.pipeline import run_pipeline
-from app.db import get_schema
+from streamlit_app.config import APP_TITLE, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL, DB_URL
+from streamlit_app.models import LLMConfig
+from streamlit_app.pipeline import run_pipeline
+from streamlit_app.db import get_schema
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
