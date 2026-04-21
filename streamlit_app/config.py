@@ -10,11 +10,26 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parent.parent / ".env", override=True)
+_REPO_ROOT = Path(__file__).parent.parent
+
+load_dotenv(_REPO_ROOT / ".env", override=True)
+
+
+def _resolve_db_url(url: str) -> str:
+    """Convert relative SQLite paths to absolute so CWD doesn't matter."""
+    prefix = "sqlite:///"
+    if not url.startswith(prefix):
+        return url
+    path = Path(url[len(prefix):])
+    if path.is_absolute():
+        return url
+    return f"{prefix}{(_REPO_ROOT / path).resolve()}"
+
 
 # ── Database ──────────────────────────────────────────────────────────────────
-# Default to a local SQLite file so the demo runs with zero infrastructure.
-DB_URL: str = os.getenv("DB_URL", "sqlite:///./data/demo.db")
+DB_URL: str = _resolve_db_url(
+    os.getenv("DB_URL", f"sqlite:///{_REPO_ROOT / 'data/demo.db'}")
+)
 
 # ── LLM ──────────────────────────────────────────────────────────────────────
 # Any OpenAI-compatible endpoint works: OpenAI, Ollama, LM Studio, Groq …
