@@ -117,6 +117,15 @@ samconfig.toml
 # ── Docker ────────────────────────────────────────────────────────────────────
 .dockerenv
 
+# ── Databricks ────────────────────────────────────────────────────────────────
+.databricks/
+**/.databricks/
+.databrickscfg
+databricks.yml.local
+*.dbc
+.bundle/
+**/.bundle/
+
 # ── Jupyter ───────────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
 **/.ipynb_checkpoints/

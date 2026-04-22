@@ -1,0 +1,25 @@
+# Databricks Apps manifest
+# Deploy: databricks apps deploy db-agent --source-code-path ./databricks_app
+# Docs:   https://docs.databricks.com/dev-tools/databricks-apps/index.html
+
+command: ["streamlit", "run", "app.py"]
+
+env:
+  - name: "DATABRICKS_CATALOG"
+    value: "samples"
+  - name: "DATABRICKS_SCHEMA"
+    value: "accuweather"
+  - name: "DATABRICKS_HTTP_PATH"
+    value: "/sql/1.0/warehouses/fd728adfdc38070f"
+
+  # GitHub Models (Grok via GitHub Copilot endpoint)
+  - name: "LLM_BASE_URL"
+    value: "https://models.github.ai/inference"
+  - name: "LLM_MODEL"
+    value: "openai/gpt-4o"
+  # LLM_API_KEY is pulled at startup from secret scope db-agent / key github-token
+  # (see config.py). Override scope/key via these env vars:
+  - name: "DATABRICKS_SECRET_SCOPE"
+    value: "db-agent"
+  - name: "DATABRICKS_SECRET_KEY"
+    value: "github-token"
