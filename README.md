@@ -1,6 +1,6 @@
-<h3 align="center">
-DB Agent
-</h3>
+# DB Agent — Text-to-SQL AI Agent for Databricks, Snowflake, and AWS
+
+> An open-source **text-to-SQL AI agent** that converts natural language into safe SQL, with production deployment patterns for **Databricks**, **Snowflake**, and **AWS Lambda**. Schema-aware prompt engineering, SQL safety guardrails (SELECT-only validation), and three reference implementations you can deploy at work.
 
 ---
 
@@ -18,19 +18,23 @@ DB Agent
 
 ---
 
-A minimal, teachable **natural-language-to-SQL** system. Ask questions in plain English — DB Agent generates the SQL, validates it for safety, executes it, and shows you every step.
+## What is DB Agent?
+
+DB Agent is a minimal, teachable **natural-language-to-SQL system**. A user asks a question in plain English; DB Agent retrieves relevant schema context, prompts an LLM to generate a SQL query, validates the query against a SELECT-only safety layer, executes it against the target database, and returns the results with every intermediate step visible. It ships with three reference deployments — a Streamlit prototype, a Next.js + FastAPI full-stack app, and a native Databricks App with Unity Catalog integration — so teams can pick the pattern that matches their environment.
 
 ---
 
-## Two versions
+## Three deployment variants
 
-This repo contains two independent, fully working versions of DB Agent — same concept, different deployment targets.
+This repo contains three independent, fully working versions of DB Agent — same agentic pipeline, different deployment targets.
 
-| | [Streamlit App](./streamlit_app/) | [Full-Stack App](./fullstack_app/) |
-|---|---|---|
-| **Stack** | Python + Streamlit | Next.js + FastAPI |
-| **Best for** | Rapid prototyping, data teams | Production deployments, enterprise demos |
-| **Deploy on** | Snowflake, Databricks, Docker | AWS (Lambda + API Gateway), Neo Cloud |
+| | [Streamlit App](./streamlit_app/) | [Full-Stack App](./fullstack_app/) | [Databricks App](./databricks_app/) |
+|---|---|---|---|
+| **Stack** | Python + Streamlit | Next.js + FastAPI | Python + Streamlit (native Databricks App) |
+| **Best for** | Rapid prototyping, data teams | Production full-stack demos | Enterprise Databricks deployments |
+| **Auth** | `.env` + API keys | `.env` / AWS Secrets Manager | Databricks OAuth service principal |
+| **SQL target** | SQLite / Postgres / MySQL | SQLite / Postgres / MySQL | Unity Catalog Delta tables |
+| **Deploy on** | Snowflake, Databricks, Docker | AWS (Lambda + API Gateway) | `databricks apps deploy` |
 
 See each folder's README for setup and deployment instructions.
 
@@ -63,19 +67,19 @@ See [CONCEPTS.md](./CONCEPTS.md) for a plain-English glossary of every term.
 
 ---
 
-## Repository structure
 
-```
-db-agent/
-├── modules/           ← ★ learning modules (start here if you're new)
-│   ├── 01_llm_basics/
-│   ├── 02_structured_output/
-│   ├── 03_tool_use/
-│   ├── 04_agentic_loop/
-│   └── 05_mcp_server/
-├── streamlit_app/     ← Streamlit version (Snowflake / Databricks / Docker)
-├── fullstack_app/     ← Full-stack version (AWS / Neo Cloud)
-├── scripts/           ← shared utilities
-├── tests/             ← shared test suite
-└── CONCEPTS.md        ← plain-English glossary
-```
+## Workshops & Training
+
+The team behind DB Agent teaches production text-to-SQL and Databricks patterns through hands-on bootcamps.
+
+- **[Text-to-SQL AI Agent on Databricks — 2-Hour Hands-On Bootcamp](https://luma.com/2yxvrgm5)** — Saturday, April 25. Build and deploy the DB Agent stack live. Open to data and AI engineers.
+- **[Databricks Lakehouse Bootcamp — Build Production Pipelines in One Weekend](https://becloudready.com/programs/databricks-lakehouse-bootcamp)** — 2-day hands-on weekend covering Medallion Architecture (Bronze → Silver → Gold), Delta Lake, Unity Catalog, Databricks AI/BI (Genie), and Lakeflow workflows. Aligned with Databricks Certified Associate Developer exam.
+- **Private team workshops** — 1-day on-site or virtual workshops on text-to-SQL agents, SQL safety guardrails, and Databricks deployment patterns. Contact [BeCloudReady](https://becloudready.com/) (Databricks Registered Partner).
+
+Community: [TorontoAI](https://torontoai.io/) — 10,000+ data and AI practitioners across Toronto, the GTA, and the US East Coast.
+
+---
+
+## Maintained by
+
+[BeCloudReady](https://becloudready.com/) — Databricks Registered Partner. Organizers of [TorontoAI](https://torontoai.io/).
