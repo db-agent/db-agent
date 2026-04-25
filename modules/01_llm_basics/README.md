@@ -2,14 +2,7 @@
 
 **Concept:** How do you talk to a language model?
 
-This module ships in two flavours — pick whichever is easier for you:
-
-| Notebook | LLM provider | Cost | Setup |
-|----------|--------------|------|-------|
-| [`notebook_ollama.ipynb`](notebook_ollama.ipynb) | Local Ollama (`llama3.2:1b`) | Free, offline | Install Ollama + 1 GB model pull |
-| [`notebook_openai.ipynb`](notebook_openai.ipynb) | [GitHub Models](https://github.com/marketplace/models) (`openai/gpt-4o-mini`) | Free tier | GitHub PAT only |
-
-Both notebooks teach the same content with the same code — only `BASE_URL`, `API_KEY` and `MODEL` differ.
+Open [`llm_basics.ipynb`](llm_basics.ipynb) in a Databricks workspace (the free tier is enough) and run the cells top-to-bottom.
 
 ## What you'll learn
 
@@ -17,27 +10,29 @@ Both notebooks teach the same content with the same code — only `BASE_URL`, `A
 - The difference between `system`, `user`, and `assistant` roles
 - What the raw API response looks like before you parse it
 - How `temperature=0` makes responses deterministic
+- How to keep a multi-turn conversation
 
-## Prerequisites
+## Setup
 
-**Common:**
-```bash
-pip install openai python-dotenv
-```
+1. Import `llm_basics.ipynb` into your Databricks workspace.
+2. Attach it to any cluster or serverless compute (the free tier works).
+3. Run the first cell — it installs `openai` and restarts Python.
+4. Run the widgets cell. Three input boxes appear at the top of the notebook:
+   - **API_KEY** — paste your [GitHub Models token](https://github.com/settings/tokens) (default scopes are fine).
+   - **BASE_URL** — leave as `https://models.github.ai/inference`.
+   - **MODEL** — leave as `openai/gpt-4o-mini`, or pick another from the [GitHub Models marketplace](https://github.com/marketplace?type=models).
+5. Run the remaining cells in order.
 
-**Option A — Ollama (offline):**
-```bash
-brew install ollama          # or see https://ollama.com
-ollama pull llama3.2:1b      # ~1 GB, one-time download
-ollama serve                 # keep running in a separate terminal
-```
+## Switching providers
 
-**Option B — GitHub Models (hosted, free tier):**
-1. Create a token at https://github.com/settings/tokens (default permissions are enough).
-2. Put it in `.env` at the repo root:
-   ```
-   GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
-   ```
+The same notebook works with any OpenAI-compatible endpoint. Just change the widget values:
+
+| Provider | `BASE_URL` | `MODEL` |
+|----------|------------|---------|
+| GitHub Models (free) | `https://models.github.ai/inference` | `openai/gpt-4o-mini` |
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
+| Databricks Model Serving | `https://<workspace-host>/serving-endpoints` | your serving endpoint name |
+| Groq | `https://api.groq.com/openai/v1` | `llama-3.1-8b-instant` |
 
 ## Key takeaway
 
