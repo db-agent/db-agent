@@ -2,7 +2,7 @@
 
 **Concept:** How do we get reliable, machine-readable JSON from an LLM?
 
-Open `notebook.ipynb` and run every cell top to bottom.
+Open [`structured_output.ipynb`](structured_output.ipynb) in a Databricks workspace (the free tier is enough) and run the cells top-to-bottom.
 
 ## What you'll learn
 
@@ -10,22 +10,20 @@ Open `notebook.ipynb` and run every cell top to bottom.
 - How to ask for JSON via the system prompt (prompt engineering)
 - How to use JSON mode (`response_format`) for guaranteed valid JSON
 - How to use Pydantic to validate the JSON matches your expected schema
+- How to defensively parse real-world LLM output
 
-## Prerequisites
+## Setup
 
-```bash
-pip install openai pydantic python-dotenv
-```
+1. Import `structured_output.ipynb` into your Databricks workspace.
+2. Attach it to any cluster or serverless compute.
+3. Run the first cell — it installs `openai` + `pydantic` and restarts Python.
+4. Fill in the `API_KEY` widget with your [GitHub Models token](https://github.com/settings/tokens).
+5. Run the remaining cells.
 
 ## Key takeaway
-
-LLM output is text by default — and text is unparseable at scale.
-Structured output is the foundation of every reliable AI application:
 
 ```
 LLM(prompt) → raw text      ← fragile
 LLM(prompt) + JSON mode → {"sql": "...", "explanation": "..."}  ← robust
 Pydantic(json) → SQLResponse(sql="...", explanation="...")      ← typed + validated
 ```
-
-This is exactly how `streamlit_app/llm.py` + `streamlit_app/models.py` work.

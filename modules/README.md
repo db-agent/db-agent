@@ -2,40 +2,34 @@
 
 Work through these modules in order. Each one builds on the last.
 
----
-
 ```
 modules/
-├── 01_llm_basics/          ← What is an LLM API call?
-├── 02_structured_output/   ← How do we get reliable JSON from an LLM?
-├── 03_tool_use/            ← How does the LLM call tools / functions?
-├── 04_agentic_loop/        ← How does an agent retry, reflect, and recover?
-└── 05_mcp_server/          ← What is MCP? Build a server in 50 lines.
+├── 01_llm_basics/        ← What is an LLM API call?
+├── 02_structured_output/ ← How do we get reliable JSON from an LLM?
+├── 03_tool_use/          ← How does the LLM call tools / functions?
+├── 04_agentic_loop/      ← How does an agent retry, reflect, and recover?
+└── 05_mcp_server/        ← What is MCP? Build a server in 50 lines.
 ```
 
----
+Every module is a **single Databricks notebook** — no local install, no `.env`, no laptop dependencies. Designed for the **Databricks free tier**.
 
-## Prerequisites
+## Setup (once)
 
-```bash
-# From the repo root
-pip install -r requirements.txt
-cp .env.example .env   # then add your LLM_API_KEY
-```
+1. Sign up for a free Databricks workspace at https://www.databricks.com/try.
+2. Create a [GitHub Models token](https://github.com/settings/tokens) (default scopes are fine — it's free).
+3. Import this folder into Databricks (Workspace → Import → Git or upload).
 
-Modules 01–02 are Jupyter notebooks — open them with:
-```bash
-jupyter notebook
-# or
-jupyter lab
-```
+## How each notebook is structured
 
-Modules 03–05 are standalone Python scripts — run them directly:
-```bash
-python modules/03_tool_use/agent.py
-```
+Every notebook follows the same pattern:
 
----
+1. **Step 1** — `%pip install` what's needed and restart Python.
+2. **Step 2** — Databricks widgets at the top (`API_KEY`, `BASE_URL`, `MODEL`, plus `CATALOG`/`SCHEMA` for the DB-backed modules). No secrets in code.
+3. **Step 3+** — Teaching content, top-to-bottom.
+
+## Data
+
+Modules 03–05 use Databricks' built-in `samples` catalog (`bakehouse`, `nyctaxi`, `accuweather`, `tpch`, …). The agent introspects whatever schema you point the widgets at — change `SCHEMA` and re-run to try a different domain.
 
 ## The big picture
 

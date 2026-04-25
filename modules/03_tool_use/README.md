@@ -2,41 +2,40 @@
 
 **Concept:** Instead of generating text, the LLM *calls functions* and decides what data to fetch.
 
+Open [`tool_use.ipynb`](tool_use.ipynb) in a Databricks workspace (the free tier is enough) and run the cells top-to-bottom.
+
 ## The shift
 
-In the DB Agent's fixed pipeline (`streamlit_app/pipeline.py`), the developer hard-codes every step:
+In a hard-coded pipeline, **you** decide the flow:
+
 ```
 schema → prompt → LLM → parse → validate → execute
 ```
-The LLM only fills in the SQL. **You** decide the flow.
 
-With tool use, you hand the LLM a list of available functions. **The LLM decides:**
-- Which function to call
-- When to call it
-- What arguments to pass
+With tool use, the LLM decides:
 
 ```
 question → LLM sees tools → calls get_schema() → calls run_query(sql=...) → writes answer
 ```
 
-## Run it
+## Setup
 
-```bash
-cd /path/to/db-agent
-python modules/03_tool_use/agent.py
-# or with your own question:
-python modules/03_tool_use/agent.py "How many products are in each category?"
-```
+1. Import `tool_use.ipynb` into Databricks.
+2. Attach to any cluster or serverless compute.
+3. Run the first cell — installs `openai` and restarts Python.
+4. Fill the widgets at the top:
+   - `API_KEY` — your [GitHub Models token](https://github.com/settings/tokens)
+   - `CATALOG` — defaults to `samples`
+   - `SCHEMA` — defaults to `bakehouse` (try `nyctaxi`, `accuweather`, or `tpch` for variety)
+5. Run the remaining cells. The notebook talks to Databricks' built-in `samples` catalog — no data setup needed.
 
 ## What to look at
 
-1. `TOOLS` list — the JSON schema that tells the LLM what functions exist
+1. `TOOLS` — the JSON schema that tells the LLM what functions exist
 2. `run_tool()` — your code that actually executes when the LLM makes a call
-3. The `while finish_reason == "tool_calls"` loop — how multi-step tool use works
-4. Compare to `streamlit_app/pipeline.py` — same result, but the LLM is now driving
+3. The `while` loop — how multi-step tool use works
+4. `validate_sql()` — the safety guardrail that blocks writes
 
 ## Key teaching moment
 
-The LLM doesn't know the database schema until it calls `get_schema()`.
-It decides to call that tool **on its own**, then uses the result to write the SQL.
-The developer never told it "first get the schema" — the LLM figured that out.
+The LLM doesn't know the database schema until it calls `get_schema()`. It decides to call that tool **on its own** — the developer never said "first get the schema".
