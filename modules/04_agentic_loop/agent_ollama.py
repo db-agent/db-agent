@@ -1,6 +1,6 @@
 """
-Module 04 — Agentic Loop
-========================
+Module 04 — Agentic Loop (Ollama variant)
+=========================================
 Teaching goal: show how an agent retries on errors, limits its steps,
 and maintains conversation history across multiple questions.
 
@@ -11,9 +11,11 @@ New concepts vs Module 03:
   - ReAct-style system prompt (Reason + Act) improves reliability
 
 Run:
-    python modules/04_agentic_loop/agent.py
-    python modules/04_agentic_loop/agent.py "Which customers have never ordered?"
-    python modules/04_agentic_loop/agent.py --repl
+    python modules/04_agentic_loop/agent_ollama.py
+    python modules/04_agentic_loop/agent_ollama.py "Which customers have never ordered?"
+    python modules/04_agentic_loop/agent_ollama.py --repl
+
+Prefer a hosted, free LLM? See agent_openai.py (GitHub Models).
 """
 
 import sys
@@ -33,11 +35,12 @@ from streamlit_app.sql_safety import validate_sql
 
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
-client = OpenAI(
-    base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
-    api_key=os.getenv("LLM_API_KEY", "no-key"),
-)
-MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+# Defaults to local Ollama — override via .env to point at any OpenAI-compatible endpoint.
+BASE_URL = os.getenv("LLM_BASE_URL", "http://localhost:11434/v1")
+API_KEY  = os.getenv("LLM_API_KEY",  "ollama")   # Ollama ignores this; required by the client
+MODEL    = os.getenv("LLM_MODEL",    "llama3.2:1b")
+
+client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
 
 MAX_STEPS = 8   # safety limit — exceeding this means the agent is stuck
 
