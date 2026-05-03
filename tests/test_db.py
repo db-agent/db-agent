@@ -4,13 +4,14 @@ test_db.py — Tests for the DB layer using an in-memory SQLite database.
 Run:  pytest tests/test_db.py -v
 
 Teaching note:
-    We monkeypatch app.db._engine so tests never touch the real demo.db.
-    In-memory SQLite (sqlite:///:memory:) is created fresh per test.
+    We monkeypatch db._engine so tests never touch the real demo.db.
+    A fresh in-memory SQLite (sqlite:///:memory:) is created per test.
 """
 
 import pytest
 from sqlalchemy import create_engine, text
-import streamlit_app.db as db_module
+
+import db as db_module
 
 
 @pytest.fixture(autouse=True)
@@ -18,7 +19,6 @@ def in_memory_db(monkeypatch):
     """Replace the module-level engine with an in-memory SQLite engine."""
     engine = create_engine("sqlite:///:memory:")
 
-    # Create a minimal schema
     with engine.connect() as conn:
         conn.execute(text("""
             CREATE TABLE customers (
@@ -57,7 +57,7 @@ def test_schema_column_has_type():
     schema = db_module.get_schema()
     for col in schema["customers"]:
         assert "type" in col
-        assert col["type"]  # not empty
+        assert col["type"]
 
 
 # ── Query execution ───────────────────────────────────────────────────────────
@@ -86,3 +86,7 @@ def test_run_query_empty_result():
         "SELECT * FROM customers WHERE city = 'Atlantis'"
     )
     assert rows == []
+
+
+def test_check_connection_truthy():
+    assert db_module.check_connection() is True

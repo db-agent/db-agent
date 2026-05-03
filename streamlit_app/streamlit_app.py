@@ -1,25 +1,40 @@
 """
-streamlit_app.py — The web UI. Run with: streamlit run app/streamlit_app.py
+streamlit_app.py — The web UI. Run with:
+
+    streamlit run streamlit_app/streamlit_app.py
 
 Teaching note:
-    Streamlit re-runs this entire file on every user interaction.
-    We keep state (chat history) in st.session_state so it survives reruns.
-    The UI is intentionally simple — every panel maps to one pipeline stage.
+    Streamlit re-runs this entire file top-to-bottom on every user
+    interaction. Two patterns make that tractable:
+
+      • st.session_state holds anything that must survive reruns
+        (chat history, sidebar inputs that the user has already filled in)
+
+      • st.cache_resource memoizes one-time setup (DB seeding, expensive
+        client construction) for the lifetime of the container
+
+    The UI is intentionally simple — every panel maps to one pipeline stage
+    so a learner can read this file alongside pipeline.py and see the
+    correspondence: prompt → SQL → validation → results.
 """
 
 import sys
 from pathlib import Path
 
-# Streamlit adds the script's own directory (app/) to sys.path, not the project
-# root — so `from app.config import ...` would fail without this line.
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Streamlit adds the entrypoint's directory to sys.path; we add it explicitly
+# too so the module is import-safe under pytest, `python -m streamlit run`,
+# and Streamlit Community Cloud — all three work without surprises.
+sys.path.insert(0, str(Path(__file__).parent))
 
 import streamlit as st
 import pandas as pd
-from streamlit_app.config import APP_TITLE, LLM_BASE_URL, LLM_API_KEY, LLM_MODEL, DB_URL
-from streamlit_app.models import LLMConfig
-from streamlit_app.pipeline import run_pipeline
-from streamlit_app.db import get_schema
+
+import config
+from models import LLMConfig
+from pipeline import run_pipeline
+from db import get_schema, check_connection
+from bootstrap import ensure_demo_db_seeded
+
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -32,14 +47,11 @@ st.set_page_config(
 # ── CSS polish ────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-/* Readable content width */
 .block-container {
-    max-width: 860px;
-    padding-top: 2rem;
+    max-width: 900px;
+    padding-top: 1.5rem;
     padding-bottom: 4rem;
 }
-
-/* Status badges */
 .badge {
     display: inline-block;
     font-size: 0.72rem;
@@ -50,50 +62,52 @@ st.markdown("""
     margin-right: 0.35rem;
     vertical-align: middle;
 }
-.badge-blue { background: #dbeafe; color: #1e40af; }
-.badge-gray { background: #f1f5f9; color: #475569; }
-
-/* Small uppercase section label */
+.badge-blue  { background: #dbeafe; color: #1e40af; }
+.badge-green { background: #dcfce7; color: #166534; }
+.badge-gray  { background: #f1f5f9; color: #475569; }
 .section-label {
-    font-size: 0.7rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: #9ca3af;
-    margin-bottom: 0.35rem;
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: #9ca3af; margin-bottom: 0.35rem;
 }
-
-/* Question text inside a result card */
 .question-text {
-    font-size: 1.05rem;
-    font-weight: 600;
-    margin-bottom: 0.75rem;
-    color: inherit;
+    font-size: 1.05rem; font-weight: 600;
+    margin-bottom: 0.75rem; color: inherit;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Session state: seed from env once ────────────────────────────────────────
+
+# ── Bootstrap: seed the demo DB once per container ────────────────────────────
+# On Streamlit Community Cloud the filesystem is ephemeral, so the SQLite
+# file disappears on every cold start. ensure_demo_db_seeded() is cached
+# with @st.cache_resource so the actual seed runs at most once per process.
+db_status = ensure_demo_db_seeded()
+
+
+# ── Session state: seed defaults from config once ────────────────────────────
 if "llm_base_url" not in st.session_state:
-    st.session_state["llm_base_url"] = LLM_BASE_URL
+    st.session_state["llm_base_url"] = config.LLM_BASE_URL
 if "llm_api_key" not in st.session_state:
-    st.session_state["llm_api_key"] = LLM_API_KEY
+    st.session_state["llm_api_key"] = config.LLM_API_KEY
 if "llm_model" not in st.session_state:
-    st.session_state["llm_model"] = LLM_MODEL
+    st.session_state["llm_model"] = config.LLM_MODEL
 if "history" not in st.session_state:
     st.session_state["history"] = []
 
+
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("### DB Agent")
+    st.markdown("### 🗄️ DB Agent")
     st.caption("Natural-language SQL · safe & explainable")
     st.divider()
 
+    # ── LLM settings ──────────────────────────────────────────────────────
     st.markdown("**LLM Settings**")
+    st.caption("Override at any time — values seeded from secrets / .env.")
     st.text_input(
         "API endpoint",
         placeholder="https://api.openai.com/v1",
-        help="Any OpenAI-compatible base URL — OpenAI, Ollama, Groq, LM Studio",
+        help="Any OpenAI-compatible base URL — OpenAI, GitHub Models, Groq, Ollama, LM Studio.",
         key="llm_base_url",
     )
     st.text_input(
@@ -109,10 +123,25 @@ with st.sidebar:
     )
     st.divider()
 
+    # ── Database connection ──────────────────────────────────────────────
     st.markdown("**Database**")
-    st.caption(f"`{DB_URL}`")
+    _db_kind = config.DB_URL.split("://")[0] if "://" in config.DB_URL else "unknown"
+    st.markdown(
+        f"<span style='color:#9ca3af;font-size:0.7rem;text-transform:uppercase'>Driver</span><br>"
+        f"<code style='font-size:0.78rem'>{_db_kind}</code>",
+        unsafe_allow_html=True,
+    )
+    if config.IS_SQLITE:
+        st.caption(f"Bootstrap: `{db_status}`")
+
+    if check_connection():
+        st.success("Database connected", icon="✅")
+    else:
+        st.error("Database unreachable", icon="❌")
+
     st.divider()
 
+    # ── Schema browser ────────────────────────────────────────────────────
     st.markdown("**Schema**")
     try:
         schema = get_schema()
@@ -131,6 +160,7 @@ with st.sidebar:
         st.error(f"Schema unavailable: {e}")
     st.divider()
 
+    # ── Examples ──────────────────────────────────────────────────────────
     st.markdown("**Try an example**")
     examples = [
         "How many customers are there?",
@@ -143,10 +173,11 @@ with st.sidebar:
         if st.button(ex, key=f"ex_{ex}", use_container_width=True):
             st.session_state["pending_question"] = ex
 
+
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown("# DB Agent")
-_model_label = st.session_state.get("llm_model") or LLM_MODEL or "LLM"
-_db_label = DB_URL.split("://")[0] if "://" in DB_URL else DB_URL
+_model_label = st.session_state.get("llm_model") or config.LLM_MODEL or "LLM"
+_db_label = config.DB_URL.split("://")[0] if "://" in config.DB_URL else config.DB_URL
 st.markdown(
     "Safe, explainable natural-language SQL &nbsp;·&nbsp; "
     f"<span class='badge badge-blue'>{_model_label}</span>"
@@ -155,21 +186,24 @@ st.markdown(
 )
 st.divider()
 
+
 # ── Question input ────────────────────────────────────────────────────────────
 default_question = st.session_state.pop("pending_question", "")
 question = st.chat_input("Ask a question about your data …")
 active_question = question or default_question
 
+
 # ── Run pipeline ──────────────────────────────────────────────────────────────
 if active_question:
     llm_config = LLMConfig(
-        base_url=st.session_state.get("llm_base_url", LLM_BASE_URL),
-        api_key=st.session_state.get("llm_api_key", LLM_API_KEY),
-        model=st.session_state.get("llm_model", LLM_MODEL),
+        base_url=st.session_state.get("llm_base_url", config.LLM_BASE_URL),
+        api_key =st.session_state.get("llm_api_key",  config.LLM_API_KEY),
+        model   =st.session_state.get("llm_model",    config.LLM_MODEL),
     )
     with st.spinner("Generating SQL …"):
         output = run_pipeline(active_question, llm_config=llm_config)
     st.session_state["history"].append(output)
+
 
 # ── Empty state ───────────────────────────────────────────────────────────────
 if not st.session_state["history"]:
@@ -181,6 +215,7 @@ if not st.session_state["history"]:
         "</div>",
         unsafe_allow_html=True,
     )
+
 
 # ── Result history ────────────────────────────────────────────────────────────
 for output in reversed(st.session_state["history"]):
@@ -213,12 +248,12 @@ for output in reversed(st.session_state["history"]):
                 st.success(f"Safety check passed — {output.validation.reason}", icon="✅")
             else:
                 st.error(f"Safety check failed — {output.validation.reason}", icon="🚫")
-                continue  # blocked query: don't show a (nonexistent) result table
+                continue  # blocked: don't render a (nonexistent) result table
 
         # Results table
         if output.rows is not None:
             st.markdown("<div class='section-label'>Results</div>", unsafe_allow_html=True)
-            if len(output.rows) == 0:
+            if not output.rows:
                 st.info("Query executed successfully — no rows returned.")
             else:
                 row_count = len(output.rows)

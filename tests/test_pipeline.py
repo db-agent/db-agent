@@ -4,20 +4,21 @@ test_pipeline.py — Integration tests for the full pipeline.
 Run:  pytest tests/test_pipeline.py -v
 
 Teaching note:
-    We stub out the LLM call (call_llm) and the DB engine so the pipeline
-    tests run instantly with no external dependencies.
+    We stub call_llm and patch the DB engine so the pipeline tests run
+    instantly with no external dependencies.
 
-    The key thing being tested here is the orchestration logic:
-    does the pipeline correctly route through validation, skip execution
-    on unsafe SQL, and populate the right output fields?
+    The orchestration logic is what's under test here:
+      • does it route through validation?
+      • does it skip execution on unsafe SQL?
+      • does it populate the right output fields on each branch?
 """
 
 import pytest
 from unittest.mock import patch
 from sqlalchemy import create_engine, text
 
-import streamlit_app.db as db_module
-from streamlit_app.pipeline import run_pipeline
+import db as db_module
+from pipeline import run_pipeline
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -52,7 +53,7 @@ def make_llm_response(sql: str, explanation: str = "A test query.") -> str:
 
 def test_pipeline_returns_rows_for_valid_question():
     llm_reply = make_llm_response("SELECT * FROM products")
-    with patch("app.pipeline.call_llm", return_value=llm_reply):
+    with patch("pipeline.call_llm", return_value=llm_reply):
         output = run_pipeline("Show all products")
 
     assert output.error is None
@@ -65,7 +66,7 @@ def test_pipeline_returns_rows_for_valid_question():
 
 def test_pipeline_populates_schema_context():
     llm_reply = make_llm_response("SELECT * FROM products")
-    with patch("app.pipeline.call_llm", return_value=llm_reply):
+    with patch("pipeline.call_llm", return_value=llm_reply):
         output = run_pipeline("List products")
 
     assert "products" in output.schema_context
@@ -73,7 +74,7 @@ def test_pipeline_populates_schema_context():
 
 def test_pipeline_stores_question():
     llm_reply = make_llm_response("SELECT * FROM products")
-    with patch("app.pipeline.call_llm", return_value=llm_reply):
+    with patch("pipeline.call_llm", return_value=llm_reply):
         output = run_pipeline("What are the products?")
 
     assert output.question == "What are the products?"
@@ -83,7 +84,7 @@ def test_pipeline_stores_question():
 
 def test_pipeline_blocks_unsafe_sql():
     llm_reply = make_llm_response("DROP TABLE products")
-    with patch("app.pipeline.call_llm", return_value=llm_reply):
+    with patch("pipeline.call_llm", return_value=llm_reply):
         output = run_pipeline("Delete everything")
 
     assert output.validation is not None
@@ -93,7 +94,7 @@ def test_pipeline_blocks_unsafe_sql():
 
 def test_pipeline_blocks_multi_statement():
     llm_reply = make_llm_response("SELECT 1; DROP TABLE products")
-    with patch("app.pipeline.call_llm", return_value=llm_reply):
+    with patch("pipeline.call_llm", return_value=llm_reply):
         output = run_pipeline("Do something bad")
 
     assert not output.validation.is_safe
@@ -103,7 +104,7 @@ def test_pipeline_blocks_multi_statement():
 # ── Error handling ────────────────────────────────────────────────────────────
 
 def test_pipeline_handles_llm_parse_error():
-    with patch("app.pipeline.call_llm", return_value="not valid json at all"):
+    with patch("pipeline.call_llm", return_value="not valid json at all"):
         output = run_pipeline("Broken LLM response")
 
     assert output.error is not None
@@ -111,9 +112,8 @@ def test_pipeline_handles_llm_parse_error():
 
 
 def test_pipeline_handles_db_error():
-    # LLM returns SQL that references a table that doesn't exist
     llm_reply = make_llm_response("SELECT * FROM nonexistent_table")
-    with patch("app.pipeline.call_llm", return_value=llm_reply):
+    with patch("pipeline.call_llm", return_value=llm_reply):
         output = run_pipeline("Query ghost table")
 
     assert output.error is not None

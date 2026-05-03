@@ -1,9 +1,23 @@
 """
-config.py — Load all configuration from environment variables.
+config.py — Environment + secrets for the Streamlit app.
 
 Teaching note:
     Centralizing config here means every other module imports from one place.
-    No magic strings scattered across the codebase.
+    Resolution order, highest priority first:
+
+      1. Streamlit Community Cloud secrets   (st.secrets — secrets.toml UI)
+      2. Process environment variables       (os.environ — Docker, shells)
+      3. Local .env file at the repo root    (python-dotenv — local dev)
+      4. Hard-coded defaults below           (last-resort fallback)
+
+    The same module works in three deploy targets without code changes:
+      • Local laptop      → reads .env
+      • Docker / server   → reads container env vars
+      • Streamlit Cloud   → reads st.secrets
+
+    The sidebar in streamlit_app.py also lets the user override LLM settings
+    interactively at runtime — useful when you want to swap models without
+    redeploying.
 """
 
 import os
@@ -12,11 +26,36 @@ from dotenv import load_dotenv
 
 _REPO_ROOT = Path(__file__).parent.parent
 
-load_dotenv(_REPO_ROOT / ".env", override=True)
+# .env is for local dev only; never present in production deploys.
+# override=False means real environment variables win — important on Cloud.
+load_dotenv(_REPO_ROOT / ".env", override=False)
 
 
+# ── Secrets resolver ──────────────────────────────────────────────────────────
+def _secret(name: str, default: str = "") -> str:
+    """
+    Read a setting from Streamlit secrets, then env vars, then default.
+
+    Why this exists:
+        Streamlit Community Cloud injects secrets via st.secrets only —
+        they are NOT auto-exported as environment variables. Without this
+        helper, every os.getenv() call on Cloud would silently return "".
+
+    The import is local because importing streamlit at module load time
+    breaks pytest collection (no ScriptRunContext outside a streamlit run).
+    """
+    try:
+        import streamlit as st  # local import — see docstring
+        if name in st.secrets:
+            return str(st.secrets[name]).strip()
+    except Exception:
+        pass  # not running under streamlit, or secrets.toml not configured
+    return os.environ.get(name, default).strip()
+
+
+# ── Database ──────────────────────────────────────────────────────────────────
 def _resolve_db_url(url: str) -> str:
-    """Convert relative SQLite paths to absolute so CWD doesn't matter."""
+    """Convert a relative SQLite path to an absolute one so CWD doesn't matter."""
     prefix = "sqlite:///"
     if not url.startswith(prefix):
         return url
@@ -26,16 +65,21 @@ def _resolve_db_url(url: str) -> str:
     return f"{prefix}{(_REPO_ROOT / path).resolve()}"
 
 
-# ── Database ──────────────────────────────────────────────────────────────────
 DB_URL: str = _resolve_db_url(
-    os.getenv("DB_URL", f"sqlite:///{_REPO_ROOT / 'data/demo.db'}")
+    _secret("DB_URL", f"sqlite:///{_REPO_ROOT / 'data' / 'demo.db'}")
 )
 
-# ── LLM ──────────────────────────────────────────────────────────────────────
-# Any OpenAI-compatible endpoint works: OpenAI, Ollama, LM Studio, Groq …
-LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1")
-LLM_API_KEY: str  = os.getenv("LLM_API_KEY", "")
-LLM_MODEL: str    = os.getenv("LLM_MODEL", "gpt-4o-mini")
+# True when DB_URL points at SQLite — used by the auto-seed bootstrap so that
+# Postgres / MySQL deployments don't trigger a SQLite-only seeder.
+IS_SQLITE: bool = DB_URL.startswith("sqlite:///")
+
+
+# ── LLM ───────────────────────────────────────────────────────────────────────
+# Any OpenAI-compatible endpoint works: OpenAI, GitHub Models, Groq, Ollama, …
+LLM_BASE_URL: str = _secret("LLM_BASE_URL", "https://api.openai.com/v1")
+LLM_API_KEY:  str = _secret("LLM_API_KEY",  "")
+LLM_MODEL:    str = _secret("LLM_MODEL",    "gpt-4o-mini")
+
 
 # ── Misc ──────────────────────────────────────────────────────────────────────
 APP_TITLE: str = "DB Agent"

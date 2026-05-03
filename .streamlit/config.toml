@@ -1,0 +1,20 @@
+# .streamlit/config.toml — Streamlit Community Cloud reads this on every boot.
+#
+# Docs: https://docs.streamlit.io/library/advanced-features/configuration
+
+[browser]
+# Don't ship anonymous usage telemetry from the deployed app.
+gatherUsageStats = false
+
+[server]
+# Streamlit Cloud sets these for you; values here are the local-dev defaults
+# and a sane upload cap so a malformed CSV can't OOM the container.
+maxUploadSize = 50
+
+[theme]
+base = "light"
+primaryColor = "#1e40af"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f8fafc"
+textColor = "#0f172a"
+font = "sans serif"
