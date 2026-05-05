@@ -69,9 +69,7 @@ See [CONCEPTS.md](./CONCEPTS.md) for a plain-English glossary of every term.
 
 The team behind DB Agent teaches production text-to-SQL and Databricks patterns through hands-on bootcamps.
 
-- **[Text-to-SQL AI Agent on Databricks — 2-Hour Hands-On Bootcamp](https://www.toronto-ai.org/events/databricks-text-to-sql-ai-agent-may-2026)** — Build and deploy the DB Agent stack live. Open to data and AI engineers.
-- **[Databricks Lakehouse Bootcamp — Build Production Pipelines in One Weekend](https://becloudready.com/programs/databricks-lakehouse-bootcamp)** — 2-day hands-on weekend covering Medallion Architecture (Bronze → Silver → Gold), Delta Lake, Unity Catalog, Databricks AI/BI (Genie), and Lakeflow workflows. Aligned with Databricks Certified Associate Developer exam.
-- **Private team workshops** — 1-day on-site or virtual workshops on text-to-SQL agents, SQL safety guardrails, and Databricks deployment patterns. Contact [BeCloudReady](https://calendly.com/kchandank/30-mins-meeting) (Databricks Registered Partner).
+- **Private team workshops** — Virtual workshops on AI Agents, Claude Code, MS Copilot, text-to-SQL agents, SQL safety guardrails, and Databricks deployment patterns. Contact [BeCloudReady](https://calendly.com/kchandank/30-mins-meeting) (Databricks Registered Partner).
 
 Community: [TorontoAI](https://toronto-ai.org/) — 10,000+ data and AI practitioners across Toronto, the GTA, and the US East Coast.
 
