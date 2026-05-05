@@ -50,6 +50,53 @@ DATABRICKS_HTTP_PATH = os.environ.get("DATABRICKS_HTTP_PATH", "").strip()
 DATABRICKS_CATALOG   = os.environ.get("DATABRICKS_CATALOG", "").strip()
 DATABRICKS_SCHEMA    = os.environ.get("DATABRICKS_SCHEMA",  "").strip()
 
+
+# ── Multi-scope schema introspection ──────────────────────────────────────────
+# Cross-store joins (e.g. Lakebase OLTP via a foreign catalog + UC Delta gold
+# tables in one query) need the agent to see tables across multiple catalogs in
+# the same prompt. DATABRICKS_SCOPES is a comma-separated list of
+# `<catalog>.<schema>` pairs that get unioned during schema introspection.
+#
+#   DATABRICKS_SCOPES=lakebase_olist.public,db_agent_lakebase.oltp,db_agent_lakebase.olap
+#
+# If unset, the legacy single-scope (DATABRICKS_CATALOG + DATABRICKS_SCHEMA)
+# behavior is preserved.
+
+def _parse_scopes(raw: str) -> list[tuple[str, str]]:
+    out: list[tuple[str, str]] = []
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        parts = chunk.split(".")
+        if len(parts) != 2:
+            raise ValueError(
+                f"DATABRICKS_SCOPES entry must be '<catalog>.<schema>', got '{chunk}'"
+            )
+        out.append((parts[0].strip(), parts[1].strip()))
+    return out
+
+_raw_scopes = os.environ.get("DATABRICKS_SCOPES", "").strip()
+if _raw_scopes:
+    DATABRICKS_SCOPES: list[tuple[str, str]] = _parse_scopes(_raw_scopes)
+elif DATABRICKS_CATALOG and DATABRICKS_SCHEMA:
+    DATABRICKS_SCOPES = [(DATABRICKS_CATALOG, DATABRICKS_SCHEMA)]
+else:
+    DATABRICKS_SCOPES = []
+
+# Per-scope hints injected into the LLM prompt so the model picks the right
+# store ("use Lakebase for live order_status; use the OLAP catalog for lifetime
+# metrics"). JSON object keyed by either "<catalog>" or "<catalog>.<schema>";
+# the more specific key wins.
+import json as _json
+_raw_hints = os.environ.get("DATABRICKS_SCOPE_HINTS", "").strip()
+DATABRICKS_SCOPE_HINTS: dict[str, str] = {}
+if _raw_hints:
+    try:
+        DATABRICKS_SCOPE_HINTS = _json.loads(_raw_hints)
+    except _json.JSONDecodeError as _exc:
+        print(f"[config] DATABRICKS_SCOPE_HINTS is not valid JSON: {_exc}")
+
 # True when running inside a Databricks workspace (App or local dev with DATABRICKS_HOST set)
 IS_DATABRICKS_APP = bool(DATABRICKS_HOST)
 

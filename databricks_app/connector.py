@@ -144,24 +144,30 @@ def _connect():
 
 def get_schema() -> dict[str, list[dict[str, str]]]:
     """
-    Introspect the Databricks schema.
+    Introspect schemas across all configured scopes.
 
     Returns:
-        { "table_name": [{"name": "col", "type": "BIGINT"}, ...], ... }
+        Multi-scope (DATABRICKS_SCOPES set, or DATABRICKS_CATALOG+SCHEMA set):
+            { "<catalog>.<schema>.<table>": [{"name": col, "type": dtype}, ...], ... }
+        Legacy (no scopes set, falls back to hive_metastore):
+            { "<table>": [...] }
 
     Teaching note:
-        Unity Catalog exposes INFORMATION_SCHEMA — a standard SQL view of
-        metadata that's far cleaner than SHOW + DESCRIBE.
-        We try it first; fall back to SHOW TABLES + DESCRIBE for legacy workspaces.
+        Multi-scope keys are fully-qualified names so two catalogs can carry
+        a `customers` table without collisions, and so the LLM has the FQN it
+        needs to qualify joins across stores (the cross-store federation case).
     """
-    catalog = config.DATABRICKS_CATALOG
-    schema  = config.DATABRICKS_SCHEMA or "default"
+    if config.DATABRICKS_SCOPES:
+        return _get_uc_schema(config.DATABRICKS_SCOPES)
+    return _get_hive_schema(config.DATABRICKS_SCHEMA or "default")
 
+
+def _get_uc_schema(scopes: list[tuple[str, str]]) -> dict[str, list[dict[str, str]]]:
+    """Union INFORMATION_SCHEMA.columns across configured (catalog, schema) pairs."""
+    result: dict[str, list[dict[str, str]]] = {}
     with _connect() as conn:
         with conn.cursor() as cur:
-
-            # ── Unity Catalog path ─────────────────────────────────────────
-            if catalog:
+            for catalog, schema in scopes:
                 try:
                     cur.execute(f"""
                         SELECT table_name,
@@ -171,23 +177,29 @@ def get_schema() -> dict[str, list[dict[str, str]]]:
                         WHERE  table_schema = '{schema}'
                         ORDER  BY table_name, ordinal_position
                     """)
-                    rows = cur.fetchall()
-                    if rows:
-                        return _info_schema_to_dict(rows)
-                except Exception:
-                    pass  # fall through to legacy path
+                    for row in cur.fetchall():
+                        table_name, col_name, col_type = row[0], row[1], row[2]
+                        fqn = f"{catalog}.{schema}.{table_name}"
+                        result.setdefault(fqn, []).append(
+                            {"name": col_name, "type": col_type}
+                        )
+                except Exception as exc:
+                    # One bad scope shouldn't sink the others. Surface it; keep going.
+                    print(f"[connector] could not read {catalog}.{schema}: {exc}")
+    return result
 
-            # ── Legacy hive_metastore path ─────────────────────────────────
+
+def _get_hive_schema(schema: str) -> dict[str, list[dict[str, str]]]:
+    """Legacy hive_metastore path. Keys are bare table names."""
+    result: dict[str, list[dict[str, str]]] = {}
+    with _connect() as conn:
+        with conn.cursor() as cur:
             cur.execute(f"SHOW TABLES IN `{schema}`")
-            table_rows = cur.fetchall()
             # Row format: (databaseName, tableName, isTemporary)
-
-            result: dict[str, list[dict[str, str]]] = {}
-            for row in table_rows:
+            for row in cur.fetchall():
                 table_name = row[1] if len(row) >= 2 else row[0]
                 try:
                     cur.execute(f"DESCRIBE TABLE `{schema}`.`{table_name}`")
-                    # Row format: (col_name, data_type, comment)
                     # Lines starting with '#' are partition / metadata headers — skip
                     result[table_name] = [
                         {"name": r[0], "type": r[1]}
@@ -196,15 +208,6 @@ def get_schema() -> dict[str, list[dict[str, str]]]:
                     ]
                 except Exception:
                     result[table_name] = []
-
-            return result
-
-
-def _info_schema_to_dict(rows: list) -> dict[str, list[dict[str, str]]]:
-    result: dict[str, list[dict[str, str]]] = {}
-    for row in rows:
-        table_name, col_name, col_type = row[0], row[1], row[2]
-        result.setdefault(table_name, []).append({"name": col_name, "type": col_type})
     return result
 
 
@@ -248,12 +251,13 @@ def check_connection() -> bool:
 
 def connection_summary() -> dict[str, str]:
     """Return key connection details for display in the UI sidebar."""
-    catalog = config.DATABRICKS_CATALOG or "—"
-    schema  = config.DATABRICKS_SCHEMA  or "—"
-    host    = config.DATABRICKS_HOST    or "not set"
-    return {
-        "host":      host,
-        "catalog":   catalog,
-        "schema":    schema,
-        "warehouse": get_warehouse_display_name(),
+    info: dict[str, str] = {
+        "host":      config.DATABRICKS_HOST or "not set",
     }
+    if len(config.DATABRICKS_SCOPES) > 1:
+        info["scopes"] = ", ".join(f"{c}.{s}" for c, s in config.DATABRICKS_SCOPES)
+    else:
+        info["catalog"] = config.DATABRICKS_CATALOG or "—"
+        info["schema"]  = config.DATABRICKS_SCHEMA  or "—"
+    info["warehouse"] = get_warehouse_display_name()
+    return info
