@@ -43,7 +43,7 @@ See each folder's README for setup and deployment instructions.
 - **Safety layer** — blocks all write/admin SQL before it reaches the database
 - **Explainability** — schema context, generated SQL, and validation all visible
 - **Any OpenAI-compatible LLM** — OpenAI, GitHub Models, Groq, Ollama, LM Studio
-- **Any SQL database** — SQLite by default; PostgreSQL and MySQL via one env var
+- **Any SQL database** — SQLite by default; PostgreSQL, MySQL, Lakebase, Unity Catalog via one env var
 
 ---
 
@@ -71,7 +71,7 @@ The team behind DB Agent teaches production text-to-SQL and Databricks patterns 
 
 - **[Text-to-SQL AI Agent on Databricks — 2-Hour Hands-On Bootcamp](https://www.toronto-ai.org/events/databricks-text-to-sql-ai-agent-may-2026)** — Build and deploy the DB Agent stack live. Open to data and AI engineers.
 - **[Databricks Lakehouse Bootcamp — Build Production Pipelines in One Weekend](https://becloudready.com/programs/databricks-lakehouse-bootcamp)** — 2-day hands-on weekend covering Medallion Architecture (Bronze → Silver → Gold), Delta Lake, Unity Catalog, Databricks AI/BI (Genie), and Lakeflow workflows. Aligned with Databricks Certified Associate Developer exam.
-- **Private team workshops** — 1-day on-site or virtual workshops on text-to-SQL agents, SQL safety guardrails, and Databricks deployment patterns. Contact [BeCloudReady](https://becloudready.com/) (Databricks Registered Partner).
+- **Private team workshops** — 1-day on-site or virtual workshops on text-to-SQL agents, SQL safety guardrails, and Databricks deployment patterns. Contact [BeCloudReady](https://calendly.com/kchandank/30-mins-meeting) (Databricks Registered Partner).
 
 Community: [TorontoAI](https://toronto-ai.org/) — 10,000+ data and AI practitioners across Toronto, the GTA, and the US East Coast.
 
@@ -80,3 +80,5 @@ Community: [TorontoAI](https://toronto-ai.org/) — 10,000+ data and AI practiti
 ## Maintained by
 
 [BeCloudReady](https://becloudready.com/) — Databricks Registered Partner. Organizers of [TorontoAI](https://torontoai.io/).
+
+[Book a discovery call](https://calendly.com/kchandank/30-mins-meeting) for Customized training/consulting engagement 
