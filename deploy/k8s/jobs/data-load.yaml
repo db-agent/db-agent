@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-agent-data-load
+  namespace: db-agent
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: data-load
+          image: docker.io/becloudready/db-agent:latest
+          imagePullPolicy: Always
+          command: [python3, -c]
+          args:
+            - |
+              import os, sys
+              from sqlalchemy import create_engine, text
+
+              url = os.environ.get("DB_URL")
+              if not url:
+                  print("DB_URL not set — skipping data load")
+                  sys.exit(0)
+
+              engine = create_engine(url, connect_args={"connect_timeout": 10})
+              with engine.connect() as conn:
+                  conn.execute(text("SELECT 1"))
+                  print("Database connection successful")
+
+                  conn.execute(text("""
+                      CREATE TABLE IF NOT EXISTS sample_data (
+                          id     SERIAL PRIMARY KEY,
+                          name   TEXT    NOT NULL,
+                          value  NUMERIC,
+                          created_at TIMESTAMP DEFAULT NOW()
+                      )
+                  """))
+
+                  conn.execute(text("""
+                      INSERT INTO sample_data (id, name, value) VALUES
+                          (1, 'Alpha', 100),
+                          (2, 'Beta',  200),
+                          (3, 'Gamma', 300)
+                      ON CONFLICT (id) DO NOTHING
+                  """))
+                  conn.commit()
+                  print("Seed data loaded successfully")
+          envFrom:
+            - secretRef:
+                name: db-agent-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi

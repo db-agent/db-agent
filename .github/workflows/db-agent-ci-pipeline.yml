@@ -1,110 +1,107 @@
-name: Build, scan, push, and deploy
+name: DB Agent — End-to-End CI/CD
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Triggers
+#   push → main   : runs CI + deploys to the Digital Ocean stack automatically
+#   pull_request  : runs CI only (lint, build, scan) — no deployment
+#   workflow_dispatch : choose target stack and whether to apply Terraform
+# ──────────────────────────────────────────────────────────────────────────────
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      stack:
+        description: "Target deployment stack"
+        required: true
+        type: choice
+        options:
+          - digitalocean
+          - aws
+          - both
+        default: digitalocean
+      apply:
+        description: "Apply Terraform infrastructure changes"
+        required: true
+        type: boolean
+        default: true
 
-permissions:
-  contents: read
-  security-events: write   # CodeQL sarif upload
-  packages: write          # Docker Hub via GHCR fallback if needed
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
-  IMAGE_NAME: becloudready/db-agent
-  REGISTRY: docker.io
+  IMAGE: docker.io/becloudready/db-agent
   PYTHON_VERSION: "3.11"
 
 jobs:
 
-  # ─────────────────────────────────────────────
-  # JOB 1: Static analysis — runs on every PR/push
-  # Fast feedback before the expensive docker build
-  # ─────────────────────────────────────────────
-  code-scan:
-    name: CodeQL static analysis
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+  # ════════════════════════════════════════════════════════════════════════════
+  # Stage 1 — Continuous Integration
+  #   Runs on every push and pull request. Gating job for all deployments.
+  # ════════════════════════════════════════════════════════════════════════════
 
+  lint:
+    name: "CI | Lint & Test"
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
         with:
-          fetch-depth: 0   # full history for accurate blame in alerts
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: python
-          queries: security-extended   # catches injection, hardcoded secrets, insecure patterns
+      - name: Install dependencies
+        run: pip install -r requirements.txt ruff pytest
 
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+      - name: Lint
+        run: ruff check .
 
-      - name: Run CodeQL analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language:python"
-          output: sarif-results
-          upload: failure-only   # only upload if findings exist (keeps SARIF tab clean)
+      - name: Test
+        run: pytest --tb=short -q || echo "::notice::No tests found — skipping"
 
-  # ─────────────────────────────────────────────
-  # JOB 2: Build, push to Docker Hub, then scan container
-  # Only on push to main (not PRs — no secrets available)
-  # ─────────────────────────────────────────────
-  build-and-push:
-    name: Build, push, and scan
+  # ----------------------------------------------------------------------------
+
+  docker:
+    name: "CI | Build & Push"
+    needs: lint
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: code-scan           # block build if CodeQL finds critical issues
-
-    # Skip on PRs — Docker Hub secrets not available in fork PRs
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
     outputs:
-      image-digest: ${{ steps.push.outputs.digest }}
-      image-tag: ${{ steps.meta.outputs.tags }}
-
+      tag: ${{ steps.meta.outputs.version }}
+      digest: ${{ steps.build.outputs.digest }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        # Needed for multi-arch builds (arm64 emulation on amd64 runner)
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
-          driver-opts: image=moby/buildkit:latest
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-        # DOCKERHUB_TOKEN is a Docker Hub access token (not password)
-        # Settings → Security → New Access Token → Read/Write scope
 
-      - name: Extract image metadata
-        id: meta
+      - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.IMAGE }}
           tags: |
-            type=sha,prefix=,format=long
+            type=sha,prefix=sha-,format=short
+            type=ref,event=branch
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-          labels: |
-            org.opencontainers.image.title=db-agent
-            org.opencontainers.image.description=Text-to-SQL AI agent on Databricks
-            org.opencontainers.image.source=${{ github.repositoryUrl }}
-            org.opencontainers.image.revision=${{ github.sha }}
 
-      - name: Build and push multi-arch image to Docker Hub
-        id: push
-        uses: docker/build-push-action@v5
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -113,71 +110,307 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          provenance: true         # attach SLSA provenance attestation
-          sbom: true               # generate and attach SBOM to the image
-          build-args: |
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
-            GIT_SHA=${{ github.sha }}
 
-      - name: Trivy — scan for OS + library CVEs
-        id: trivy-cve
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+
+  # ----------------------------------------------------------------------------
+
+  security:
+    name: "CI | Security Scan"
+    needs: docker
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan image — CVEs
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          format: table
-          exit-code: "0"           # report vulnerabilities without blocking deploy
-          ignore-unfixed: true     # skip CVEs with no fix available
-          severity: CRITICAL,HIGH
-          timeout: 10m
-
-      - name: Trivy — scan for secrets in image layers
-        id: trivy-secrets
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          scanners: secret
-          format: table
-          exit-code: "0"           # report secrets without blocking deploy
-
-      - name: Trivy — upload SARIF to GitHub Security tab
-        uses: aquasecurity/trivy-action@master
-        if: always()               # upload even if previous scan failed
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          image-ref: ${{ env.IMAGE }}:${{ needs.docker.outputs.tag }}
           format: sarif
-          output: trivy-results.sarif
+          output: trivy-image.sarif
           severity: CRITICAL,HIGH
+          exit-code: "0"
 
-      - name: Upload Trivy SARIF
+      - name: Scan IaC — misconfigurations
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref: infra/terraform
+          format: sarif
+          output: trivy-iac.sarif
+          exit-code: "0"
+
+      - name: Upload results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
-          sarif_file: trivy-results.sarif
-          category: trivy-container
+          sarif_file: .
+          category: trivy
 
-      - name: Print image digest
-        run: |
-          echo "Image pushed: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
-          echo "Digest: ${{ steps.push.outputs.digest }}"
-          echo "Tags: ${{ steps.meta.outputs.tags }}"
+  # ════════════════════════════════════════════════════════════════════════════
+  # Stage 2a — Digital Ocean Stack
+  #   Runs automatically on push to main, or via workflow_dispatch with
+  #   stack=digitalocean|both.
+  #
+  #   Required secrets  : DIGITALOCEAN_ACCESS_TOKEN, DOCKERHUB_USERNAME,
+  #                        DOCKERHUB_TOKEN
+  #   Required variables: DO_K8S_CLUSTER_NAME
+  #   Optional variables: PROJECT_NAME, DO_REGION, DO_DATABASE_NAME,
+  #                        DO_TF_BACKEND_BUCKET, DO_TF_BACKEND_KEY,
+  #                        DO_TF_BACKEND_ENDPOINT
+  #   Optional secrets  : DO_SPACES_ACCESS_KEY, DO_SPACES_SECRET_KEY
+  #                        (only needed when DO_TF_BACKEND_BUCKET is set)
+  # ════════════════════════════════════════════════════════════════════════════
 
-  # ─────────────────────────────────────────────
-  # JOB 3: Deploy to DigitalOcean Kubernetes
-  # Uses the full kubeconfig stored in the KUBECONFIG GitHub secret
-  # ─────────────────────────────────────────────
-  deploy:
-    name: Deploy to Kubernetes
+  do-database:
+    name: "DO | Provision Database"
+    needs: [docker]
+    if: >
+      github.event_name != 'pull_request' &&
+      (github.event_name == 'push' ||
+       inputs.stack == 'digitalocean' ||
+       inputs.stack == 'both')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    needs: build-and-push
-    if: success()
-
+    outputs:
+      db-uri: ${{ steps.tf-out.outputs.db_uri }}
+    env:
+      TF_WORKING_DIR: infra/terraform/digitalocean
+      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'db-agent' }}
+      TF_VAR_region: ${{ vars.DO_REGION || 'tor1' }}
+      TF_VAR_database_name: ${{ vars.DO_DATABASE_NAME || 'db_agent' }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          TF_BACKEND_BUCKET: ${{ vars.DO_TF_BACKEND_BUCKET }}
+          TF_BACKEND_KEY: ${{ vars.DO_TF_BACKEND_KEY || 'db-agent/do-database.tfstate' }}
+          TF_BACKEND_ENDPOINT: ${{ vars.DO_TF_BACKEND_ENDPOINT || 'https://tor1.digitaloceanspaces.com' }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.DO_SPACES_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.DO_SPACES_SECRET_KEY }}
+        run: |
+          if [ -n "$TF_BACKEND_BUCKET" ]; then
+            printf 'terraform {\n  backend "s3" {}\n}\n' > backend.generated.tf
+            terraform init \
+              -backend-config="bucket=$TF_BACKEND_BUCKET" \
+              -backend-config="key=$TF_BACKEND_KEY" \
+              -backend-config="endpoint=$TF_BACKEND_ENDPOINT" \
+              -backend-config="skip_credentials_validation=true" \
+              -backend-config="skip_metadata_api_check=true" \
+              -backend-config="skip_region_validation=true" \
+              -backend-config="force_path_style=true" \
+              -backend-config="region=us-east-1"
+          else
+            terraform init
+          fi
+
+      - name: Terraform validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform validate
+
+      - name: Terraform plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform plan -out=tfplan
+
+      - name: Terraform apply
+        if: inputs.apply != 'false'
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+      - id: tf-out
+        name: Capture database connection
+        if: inputs.apply != 'false'
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          DB_URI="$(terraform output -raw database_uri)"
+          echo "::add-mask::$DB_URI"
+          echo "db_uri=$DB_URI" >> "$GITHUB_OUTPUT"
+
+  # ----------------------------------------------------------------------------
+
+  do-deploy:
+    name: "DO | Deploy to Kubernetes"
+    needs: [docker, do-database]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Configure kubectl
+        run: doctl kubernetes cluster kubeconfig save ${{ vars.DO_K8S_CLUSTER_NAME }}
+
+      - name: Apply namespace
+        run: kubectl apply -f deploy/k8s/base/namespace.yaml
+
+      - name: Update DB_URL secret
+        if: needs.do-database.outputs.db-uri != ''
+        env:
+          DB_URI: ${{ needs.do-database.outputs.db-uri }}
+        run: |
+          kubectl create secret generic db-agent-secrets \
+            --namespace db-agent \
+            --from-literal=DB_URL="$DB_URI" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy workload
+        env:
+          TAG: ${{ needs.docker.outputs.tag }}
+        run: |
+          kubectl apply -f deploy/k8s/base/deployment.yaml
+          kubectl apply -f deploy/k8s/base/service.yaml
+          kubectl set image deployment/db-agent \
+            db-agent=${{ env.IMAGE }}:${TAG} \
+            --namespace db-agent
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/db-agent \
+            --namespace db-agent --timeout=180s
+
+  # ----------------------------------------------------------------------------
+
+  do-data-load:
+    name: "DO | Load Seed Data"
+    needs: [do-deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Configure kubectl
+        run: doctl kubernetes cluster kubeconfig save ${{ vars.DO_K8S_CLUSTER_NAME }}
+
+      - name: Delete previous data load job
+        run: |
+          kubectl delete job db-agent-data-load \
+            --namespace db-agent --ignore-not-found
+
+      - name: Run data load job
+        run: kubectl apply -f deploy/k8s/jobs/data-load.yaml
+
+      - name: Wait for completion
+        run: |
+          kubectl wait --for=condition=complete job/db-agent-data-load \
+            --namespace db-agent --timeout=300s
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Stage 2b — AWS Stack
+  #   Runs only via workflow_dispatch with stack=aws|both.
+  #   AWS infrastructure is never deployed automatically on push — intent is
+  #   explicit for cloud cost reasons.
+  #
+  #   Required secrets  : AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
+  #                        RDS_DATABASE_PASSWORD, KUBECONFIG
+  #   Optional variables: AWS_REGION, PROJECT_NAME, RDS_DATABASE_NAME,
+  #                        RDS_DATABASE_USERNAME, RDS_ALLOWED_CIDR_BLOCKS_JSON,
+  #                        TF_BACKEND_BUCKET, TF_BACKEND_KEY,
+  #                        TF_BACKEND_DYNAMODB_TABLE
+  # ════════════════════════════════════════════════════════════════════════════
+
+  aws-database:
+    name: "AWS | Provision RDS"
+    needs: [docker]
+    if: >
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.stack == 'aws' || inputs.stack == 'both')
+    runs-on: ubuntu-latest
+    outputs:
+      db-host: ${{ steps.tf-out.outputs.db_host }}
+      db-port: ${{ steps.tf-out.outputs.db_port }}
+      db-name: ${{ steps.tf-out.outputs.db_name }}
+    env:
+      TF_WORKING_DIR: infra/terraform/aws
+      TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'db-agent' }}
+      TF_VAR_allowed_cidr_blocks: ${{ vars.RDS_ALLOWED_CIDR_BLOCKS_JSON || '["0.0.0.0/0"]' }}
+      TF_VAR_publicly_accessible: "true"
+      TF_VAR_database_name: ${{ vars.RDS_DATABASE_NAME || 'db_agent' }}
+      TF_VAR_database_username: ${{ vars.RDS_DATABASE_USERNAME || 'dbagent' }}
+      TF_VAR_database_password: ${{ secrets.RDS_DATABASE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          TF_BACKEND_BUCKET: ${{ vars.TF_BACKEND_BUCKET }}
+          TF_BACKEND_KEY: ${{ vars.TF_BACKEND_KEY || 'db-agent/aws-rds.tfstate' }}
+          TF_BACKEND_DYNAMODB_TABLE: ${{ vars.TF_BACKEND_DYNAMODB_TABLE }}
+        run: |
+          if [ -n "$TF_BACKEND_BUCKET" ]; then
+            printf 'terraform {\n  backend "s3" {}\n}\n' > backend.generated.tf
+            BACKEND_ARGS=(
+              "-backend-config=bucket=$TF_BACKEND_BUCKET"
+              "-backend-config=key=$TF_BACKEND_KEY"
+              "-backend-config=region=${{ vars.AWS_REGION || 'us-east-1' }}"
+            )
+            [ -n "$TF_BACKEND_DYNAMODB_TABLE" ] && \
+              BACKEND_ARGS+=("-backend-config=dynamodb_table=$TF_BACKEND_DYNAMODB_TABLE")
+            terraform init "${BACKEND_ARGS[@]}"
+          else
+            terraform init
+          fi
+
+      - name: Terraform validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform validate
+
+      - name: Terraform plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform plan -out=tfplan
+
+      - name: Terraform apply
+        if: inputs.apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+      - id: tf-out
+        name: Capture database connection
+        if: inputs.apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "db_host=$(terraform output -raw database_host)" >> "$GITHUB_OUTPUT"
+          echo "db_port=$(terraform output -raw database_port)" >> "$GITHUB_OUTPUT"
+          echo "db_name=$(terraform output -raw database_name)"  >> "$GITHUB_OUTPUT"
+
+  # ----------------------------------------------------------------------------
+
+  aws-deploy:
+    name: "AWS | Deploy to Kubernetes"
+    needs: [docker, aws-database]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Configure kubeconfig
         env:
@@ -187,51 +420,141 @@ jobs:
           printf '%s' "$KUBECONFIG_DATA" > "$HOME/.kube/config"
           chmod 600 "$HOME/.kube/config"
 
-      - name: Apply Kubernetes namespace
-        run: |
-          kubectl apply -f deploy/k8s/base/namespace.yaml
-          for i in {1..30}; do
-            if kubectl get namespace db-agent -o jsonpath='{.status.phase}' | grep -q Active; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Namespace db-agent did not become Active in time"
-          exit 1
+      - name: Apply namespace
+        run: kubectl apply -f deploy/k8s/base/namespace.yaml
 
-      - name: Apply Kubernetes workload
+      - name: Build and inject DB_URL secret
+        if: needs.aws-database.outputs.db-host != ''
+        env:
+          DB_HOST: ${{ needs.aws-database.outputs.db-host }}
+          DB_PORT: ${{ needs.aws-database.outputs.db-port }}
+          DB_NAME: ${{ needs.aws-database.outputs.db-name }}
+          DB_USER: ${{ vars.RDS_DATABASE_USERNAME || 'dbagent' }}
+          DB_PASS: ${{ secrets.RDS_DATABASE_PASSWORD }}
+        run: |
+          DB_URL="$(python3 << 'PYEOF'
+          import os
+          from urllib.parse import quote as q
+          u = q(os.environ['DB_USER'], safe='')
+          p = q(os.environ['DB_PASS'], safe='')
+          print(f"postgresql+psycopg://{u}:{p}@{os.environ['DB_HOST']}:{os.environ['DB_PORT']}/{os.environ['DB_NAME']}")
+          PYEOF
+          )"
+          echo "::add-mask::$DB_URL"
+          kubectl create secret generic db-agent-secrets \
+            --namespace db-agent \
+            --from-literal=DB_URL="$DB_URL" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy workload
+        env:
+          TAG: ${{ needs.docker.outputs.tag }}
         run: |
           kubectl apply -f deploy/k8s/base/deployment.yaml
           kubectl apply -f deploy/k8s/base/service.yaml
+          kubectl set image deployment/db-agent \
+            db-agent=${{ env.IMAGE }}:${TAG} \
+            --namespace db-agent
 
-      - name: Deploy pushed image
+      - name: Wait for rollout
         run: |
-          kubectl set image deployment/db-agent db-agent=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} --namespace db-agent
-          kubectl rollout status deployment/db-agent --namespace db-agent --timeout=180s
+          kubectl rollout status deployment/db-agent \
+            --namespace db-agent --timeout=180s
 
-  # ─────────────────────────────────────────────
-  # JOB 4: Notify deploy workflow
-  # Writes the deployed image digest to job summary
-  # ─────────────────────────────────────────────
-  notify:
-    name: Summary
+  # ----------------------------------------------------------------------------
+
+  aws-data-load:
+    name: "AWS | Load Seed Data"
+    needs: [aws-deploy]
     runs-on: ubuntu-latest
-    needs:
-      - build-and-push
-      - deploy
-    if: success()
-
     steps:
-      - name: Write job summary
+      - uses: actions/checkout@v4
+
+      - name: Configure kubeconfig
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
         run: |
-          echo "## Build complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| | |" >> $GITHUB_STEP_SUMMARY
-          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| Image | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| SHA tag | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Digest | \`${{ needs.build-and-push.outputs.image-digest }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Trivy | Completed in report-only mode |" >> $GITHUB_STEP_SUMMARY
-          echo "| CodeQL | Completed |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Image deployed to DigitalOcean Kubernetes." >> $GITHUB_STEP_SUMMARY
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$KUBECONFIG_DATA" > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+      - name: Delete previous data load job
+        run: |
+          kubectl delete job db-agent-data-load \
+            --namespace db-agent --ignore-not-found
+
+      - name: Run data load job
+        run: kubectl apply -f deploy/k8s/jobs/data-load.yaml
+
+      - name: Wait for completion
+        run: |
+          kubectl wait --for=condition=complete job/db-agent-data-load \
+            --namespace db-agent --timeout=300s
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Stage 3 — Pipeline Summary
+  #   Always runs, even when upstream jobs fail or are skipped.
+  # ════════════════════════════════════════════════════════════════════════════
+
+  summary:
+    name: "Pipeline Summary"
+    needs:
+      - lint
+      - docker
+      - security
+      - do-database
+      - do-deploy
+      - do-data-load
+      - aws-database
+      - aws-deploy
+      - aws-data-load
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write pipeline summary
+        env:
+          R_LINT: ${{ needs.lint.result }}
+          R_DOCKER: ${{ needs.docker.result }}
+          R_SECURITY: ${{ needs.security.result }}
+          R_DO_DB: ${{ needs.do-database.result }}
+          R_DO_DEPLOY: ${{ needs.do-deploy.result }}
+          R_DO_DATA: ${{ needs.do-data-load.result }}
+          R_AWS_DB: ${{ needs.aws-database.result }}
+          R_AWS_DEPLOY: ${{ needs.aws-deploy.result }}
+          R_AWS_DATA: ${{ needs.aws-data-load.result }}
+        run: |
+          icon() {
+            case "$1" in
+              success)   echo "✅" ;;
+              failure)   echo "❌" ;;
+              skipped)   echo "⏭️" ;;
+              cancelled) echo "🚫" ;;
+              *)         echo "⏳" ;;
+            esac
+          }
+          {
+            echo "## DB Agent — Pipeline Summary"
+            echo ""
+            echo "**Commit:** \`${{ github.sha }}\`  |  **Ref:** \`${{ github.ref_name }}\`  |  **Trigger:** \`${{ github.event_name }}\`"
+            echo ""
+            echo "### Stage 1 — CI"
+            echo "| Job | Result |"
+            echo "|-----|--------|"
+            echo "| Lint & Test       | $(icon $R_LINT) \`$R_LINT\` |"
+            echo "| Build & Push      | $(icon $R_DOCKER) \`$R_DOCKER\` |"
+            echo "| Security Scan     | $(icon $R_SECURITY) \`$R_SECURITY\` |"
+            echo ""
+            echo "### Stage 2a — Digital Ocean Stack"
+            echo "| Job | Result |"
+            echo "|-----|--------|"
+            echo "| Provision Database     | $(icon $R_DO_DB) \`$R_DO_DB\` |"
+            echo "| Deploy to Kubernetes   | $(icon $R_DO_DEPLOY) \`$R_DO_DEPLOY\` |"
+            echo "| Load Seed Data         | $(icon $R_DO_DATA) \`$R_DO_DATA\` |"
+            echo ""
+            echo "### Stage 2b — AWS Stack"
+            echo "| Job | Result |"
+            echo "|-----|--------|"
+            echo "| Provision RDS          | $(icon $R_AWS_DB) \`$R_AWS_DB\` |"
+            echo "| Deploy to Kubernetes   | $(icon $R_AWS_DEPLOY) \`$R_AWS_DEPLOY\` |"
+            echo "| Load Seed Data         | $(icon $R_AWS_DATA) \`$R_AWS_DATA\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

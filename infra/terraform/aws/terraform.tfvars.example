@@ -1,7 +1,5 @@
 aws_region                 = "us-east-1"
 project_name               = "db-agent"
-vpc_id                     = "vpc-xxxxxxxx"
-subnet_ids                 = ["subnet-xxxxxxxx", "subnet-yyyyyyyy"]
 allowed_cidr_blocks        = ["0.0.0.0/0"]
 publicly_accessible        = true
 database_name              = "db_agent"
