@@ -187,8 +187,22 @@ jobs:
           printf '%s' "$KUBECONFIG_DATA" > "$HOME/.kube/config"
           chmod 600 "$HOME/.kube/config"
 
-      - name: Apply Kubernetes manifests
-        run: kubectl apply -f k8s/
+      - name: Apply Kubernetes namespace
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          for i in {1..30}; do
+            if kubectl get namespace db-agent -o jsonpath='{.status.phase}' | grep -q Active; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Namespace db-agent did not become Active in time"
+          exit 1
+
+      - name: Apply Kubernetes workload
+        run: |
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/service.yaml
 
       - name: Deploy pushed image
         run: |
