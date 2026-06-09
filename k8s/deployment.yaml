@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db-agent
+  namespace: db-agent
+  labels:
+    app: db-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db-agent
+  template:
+    metadata:
+      labels:
+        app: db-agent
+    spec:
+      containers:
+        - name: db-agent
+          image: docker.io/becloudready/db-agent:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8501
+          envFrom:
+            - secretRef:
+                name: db-agent-secrets
+                optional: true
+          readinessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi

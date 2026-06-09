@@ -18,4 +18,4 @@ EXPOSE 8501
 ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
 ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 
-CMD ["streamlit", "run", "app/streamlit_app.py", "--server.port=8501"]
+CMD ["streamlit", "run", "streamlit_app/streamlit_app.py", "--server.port=8501"]
