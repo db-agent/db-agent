@@ -1,6 +1,17 @@
+data "aws_vpc" "default" {
+  default = true
+}
+
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+}
+
 resource "aws_db_subnet_group" "db_agent" {
   name       = "${var.project_name}-db-subnets"
-  subnet_ids = var.subnet_ids
+  subnet_ids = data.aws_subnets.default.ids
 
   tags = {
     Name = "${var.project_name}-db-subnets"
@@ -10,7 +21,7 @@ resource "aws_db_subnet_group" "db_agent" {
 resource "aws_security_group" "db_agent_db" {
   name        = "${var.project_name}-db"
   description = "Allow DB Agent to connect to PostgreSQL"
-  vpc_id      = var.vpc_id
+  vpc_id      = data.aws_vpc.default.id
 
   dynamic "ingress" {
     for_each = toset(var.allowed_cidr_blocks)

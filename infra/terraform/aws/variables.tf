@@ -10,15 +10,6 @@ variable "project_name" {
   default     = "db-agent"
 }
 
-variable "vpc_id" {
-  description = "VPC ID where RDS should be created."
-  type        = string
-}
-
-variable "subnet_ids" {
-  description = "Public subnet IDs for the RDS subnet group."
-  type        = list(string)
-}
 
 variable "allowed_cidr_blocks" {
   description = "CIDR blocks allowed to connect to PostgreSQL."

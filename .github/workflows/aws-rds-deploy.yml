@@ -17,8 +17,6 @@ env:
   AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
   TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
   TF_VAR_project_name: ${{ vars.RDS_PROJECT_NAME || 'db-agent' }}
-  TF_VAR_vpc_id: ${{ vars.AWS_VPC_ID }}
-  TF_VAR_subnet_ids: ${{ vars.AWS_PUBLIC_SUBNET_IDS_JSON }}
   TF_VAR_allowed_cidr_blocks: ${{ vars.RDS_ALLOWED_CIDR_BLOCKS_JSON || '["0.0.0.0/0"]' }}
   TF_VAR_publicly_accessible: "true"
   TF_VAR_database_name: ${{ vars.RDS_DATABASE_NAME || 'db_agent' }}
