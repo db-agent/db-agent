@@ -1,5 +1,6 @@
 streamlit>=1.35.0
 sqlalchemy>=2.0.0
+psycopg[binary]>=3.2.0
 pydantic>=2.0.0
 openai>=1.30.0
 python-dotenv>=1.0.0

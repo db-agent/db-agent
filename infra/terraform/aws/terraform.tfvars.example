@@ -1,0 +1,11 @@
+aws_region                 = "us-east-1"
+project_name               = "db-agent"
+vpc_id                     = "vpc-xxxxxxxx"
+subnet_ids                 = ["subnet-xxxxxxxx", "subnet-yyyyyyyy"]
+allowed_cidr_blocks        = ["0.0.0.0/0"]
+publicly_accessible        = true
+database_name              = "db_agent"
+database_username          = "dbagent"
+database_password          = "replace-with-a-secure-password"
+database_instance_class    = "db.t4g.micro"
+database_allocated_storage = 20

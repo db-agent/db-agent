@@ -130,6 +130,22 @@ databricks.yml.local
 .bundle/
 **/.bundle/
 
+# ── Terraform ────────────────────────────────────────────────────────────────
+.terraform/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+backend.generated.tf
+!*.tfvars.example
+
 # ── Jupyter ───────────────────────────────────────────────────────────────────
 .ipynb_checkpoints/
 **/.ipynb_checkpoints/

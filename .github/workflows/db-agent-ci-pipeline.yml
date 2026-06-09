@@ -189,7 +189,7 @@ jobs:
 
       - name: Apply Kubernetes namespace
         run: |
-          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f deploy/k8s/base/namespace.yaml
           for i in {1..30}; do
             if kubectl get namespace db-agent -o jsonpath='{.status.phase}' | grep -q Active; then
               exit 0
@@ -201,8 +201,8 @@ jobs:
 
       - name: Apply Kubernetes workload
         run: |
-          kubectl apply -f k8s/deployment.yaml
-          kubectl apply -f k8s/service.yaml
+          kubectl apply -f deploy/k8s/base/deployment.yaml
+          kubectl apply -f deploy/k8s/base/service.yaml
 
       - name: Deploy pushed image
         run: |

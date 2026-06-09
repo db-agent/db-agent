@@ -37,6 +37,19 @@ See each folder's README for setup and deployment instructions.
 
 ---
 
+## Repository layout
+
+| Path | Purpose |
+|------|---------|
+| [`streamlit_app/`](./streamlit_app/) | Main Streamlit implementation and teaching reference app |
+| [`fullstack_app/`](./fullstack_app/) | Next.js + FastAPI production-style variant |
+| [`databricks_app/`](./databricks_app/) | Native Databricks App variant |
+| [`deploy/k8s/`](./deploy/k8s/) | Kubernetes manifests used by CI/CD to run DB Agent |
+| [`infra/terraform/`](./infra/terraform/) | Terraform starters for supporting cloud infrastructure |
+| [`modules/`](./modules/) | Learning notebooks that build up the DB Agent concepts |
+
+---
+
 ## Features
 
 - **Text-to-SQL** — natural language to SELECT queries via any LLM

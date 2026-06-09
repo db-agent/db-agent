@@ -1,0 +1,7 @@
+project_name        = "db-agent"
+region              = "tor1"
+database_engine     = "pg"
+database_version    = "16"
+database_size       = "db-s-1vcpu-1gb"
+database_node_count = 1
+database_name       = "db_agent"
