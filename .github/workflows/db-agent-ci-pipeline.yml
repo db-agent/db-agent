@@ -50,11 +50,11 @@ jobs:
           upload: failure-only   # only upload if findings exist (keeps SARIF tab clean)
 
   # ─────────────────────────────────────────────
-  # JOB 2: Build, scan container, push to Docker Hub
+  # JOB 2: Build, push to Docker Hub, then scan container
   # Only on push to main (not PRs — no secrets available)
   # ─────────────────────────────────────────────
   build-and-push:
-    name: Build, scan, and push
+    name: Build, push, and scan
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: code-scan           # block build if CodeQL finds critical issues
@@ -94,7 +94,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=sha,prefix=,format=short
+            type=sha,prefix=,format=long
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
           labels: |
             org.opencontainers.image.title=db-agent
@@ -102,16 +102,19 @@ jobs:
             org.opencontainers.image.source=${{ github.repositoryUrl }}
             org.opencontainers.image.revision=${{ github.sha }}
 
-      - name: Build image (load locally for scanning)
+      - name: Build and push multi-arch image to Docker Hub
+        id: push
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64   # scan local image first (amd64 only for speed)
-          load: true               # load into local Docker daemon for Trivy
+          platforms: linux/amd64,linux/arm64
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          provenance: true         # attach SLSA provenance attestation
+          sbom: true               # generate and attach SBOM to the image
           build-args: |
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             GIT_SHA=${{ github.sha }}
@@ -151,21 +154,6 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
           category: trivy-container
-
-      - name: Push multi-arch image to Docker Hub
-        id: push
-        uses: docker/build-push-action@v5
-        # Only push after both Trivy scans pass
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          provenance: true         # attach SLSA provenance attestation
-          sbom: true               # generate and attach SBOM to the image
 
       - name: Print image digest
         run: |
