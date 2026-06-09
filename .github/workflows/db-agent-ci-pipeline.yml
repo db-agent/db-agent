@@ -12,7 +12,7 @@ permissions:
   packages: write          # Docker Hub via GHCR fallback if needed
 
 env:
-  IMAGE_NAME: chandank/db-agent
+  IMAGE_NAME: becloudready/db-agent
   REGISTRY: docker.io
   PYTHON_VERSION: "3.11"
 
