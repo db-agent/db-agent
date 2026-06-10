@@ -358,11 +358,12 @@ jobs:
         env:
           TAG: ${{ needs.docker.outputs.tag }}
         run: |
-          kubectl apply -f deploy/k8s/base/deployment.yaml
           kubectl apply -f deploy/k8s/base/service.yaml
-          kubectl set image deployment/db-agent \
-            db-agent=${{ env.IMAGE }}:${TAG} \
-            --namespace db-agent
+          # Inject the exact SHA image tag into the manifest before applying
+          # so there is a single clean rollout rather than latest → sha
+          sed "s|docker.io/becloudready/db-agent:latest|${{ env.IMAGE }}:${TAG}|g" \
+            deploy/k8s/base/deployment.yaml | kubectl apply -f -
+          kubectl rollout restart deployment/db-agent --namespace db-agent
 
       - name: Wait for rollout
         run: |
