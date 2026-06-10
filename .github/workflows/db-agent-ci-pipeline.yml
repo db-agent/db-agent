@@ -2,18 +2,10 @@ name: DB Agent — End-to-End CI/CD
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Triggers
-#   push → main   : runs CI + deploys to the Digital Ocean stack automatically
-#   pull_request  : runs CI only (lint, build, scan) — no deployment
-#   workflow_dispatch : choose target stack and whether to apply Terraform
+#   workflow_dispatch only — all runs are manually triggered.
+#   Choose the target stack and whether to apply Terraform.
 # ──────────────────────────────────────────────────────────────────────────────
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
-  pull_request:
-    branches: [main]
   workflow_dispatch:
     inputs:
       stack:
@@ -320,10 +312,7 @@ jobs:
   do-deploy-existing:
     name: "DO | Deploy (existing DB)"
     needs: [docker]
-    if: >
-      github.event_name != 'pull_request' &&
-      (github.event_name == 'push' ||
-       inputs.stack == 'digitalocean-existing')
+    if: inputs.stack == 'digitalocean-existing'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -490,20 +479,95 @@ jobs:
 
   # ----------------------------------------------------------------------------
 
+  aws-eks:
+    name: "AWS | Provision EKS Cluster"
+    needs: [docker]
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.stack == 'aws' || inputs.stack == 'both')
+    runs-on: ubuntu-latest
+    outputs:
+      cluster-name: ${{ steps.tf-out.outputs.cluster_name }}
+    env:
+      TF_WORKING_DIR: infra/terraform/aws-eks
+      TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'db-agent' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          TF_BACKEND_BUCKET: ${{ vars.TF_BACKEND_BUCKET }}
+          TF_BACKEND_KEY: ${{ vars.TF_BACKEND_KEY_EKS || 'db-agent/aws-eks.tfstate' }}
+          TF_BACKEND_DYNAMODB_TABLE: ${{ vars.TF_BACKEND_DYNAMODB_TABLE }}
+        run: |
+          if [ -n "$TF_BACKEND_BUCKET" ]; then
+            printf 'terraform {\n  backend "s3" {}\n}\n' > backend.generated.tf
+            BACKEND_ARGS=(
+              "-backend-config=bucket=$TF_BACKEND_BUCKET"
+              "-backend-config=key=$TF_BACKEND_KEY"
+              "-backend-config=region=${{ vars.AWS_REGION || 'us-east-1' }}"
+            )
+            [ -n "$TF_BACKEND_DYNAMODB_TABLE" ] && \
+              BACKEND_ARGS+=("-backend-config=dynamodb_table=$TF_BACKEND_DYNAMODB_TABLE")
+            terraform init "${BACKEND_ARGS[@]}"
+          else
+            terraform init
+          fi
+
+      - name: Terraform validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform validate
+
+      - name: Terraform plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform plan -out=tfplan
+
+      - name: Terraform apply
+        if: inputs.apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+      - id: tf-out
+        name: Capture cluster name
+        if: inputs.apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "cluster_name=$(terraform output -raw cluster_name)" >> "$GITHUB_OUTPUT"
+
+  # ----------------------------------------------------------------------------
+
   aws-deploy:
     name: "AWS | Deploy to Kubernetes"
-    needs: [docker, aws-database]
+    needs: [docker, aws-database, aws-eks]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
       - name: Configure kubeconfig
         env:
-          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
+          CLUSTER_NAME: ${{ needs.aws-eks.outputs.cluster-name || format('{0}-eks', vars.PROJECT_NAME || 'db-agent') }}
         run: |
-          mkdir -p "$HOME/.kube"
-          printf '%s' "$KUBECONFIG_DATA" > "$HOME/.kube/config"
-          chmod 600 "$HOME/.kube/config"
+          aws eks update-kubeconfig \
+            --name "$CLUSTER_NAME" \
+            --region "${{ vars.AWS_REGION || 'us-east-1' }}"
 
       - name: Apply namespace
         run: kubectl apply -f deploy/k8s/base/namespace.yaml
@@ -535,11 +599,10 @@ jobs:
         env:
           TAG: ${{ needs.docker.outputs.tag }}
         run: |
-          kubectl apply -f deploy/k8s/base/deployment.yaml
           kubectl apply -f deploy/k8s/base/service.yaml
-          kubectl set image deployment/db-agent \
-            db-agent=${{ env.IMAGE }}:${TAG} \
-            --namespace db-agent
+          sed "s|docker.io/becloudready/db-agent:latest|${{ env.IMAGE }}:${TAG}|g" \
+            deploy/k8s/base/deployment.yaml | kubectl apply -f -
+          kubectl rollout restart deployment/db-agent --namespace db-agent
 
       - name: Wait for rollout
         run: |
@@ -550,31 +613,28 @@ jobs:
 
   aws-data-load:
     name: "AWS | Load Seed Data"
-    needs: [aws-deploy]
+    needs: [docker, aws-database, aws-eks, aws-deploy]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure kubeconfig
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Install psycopg
+        run: pip install "psycopg[binary]"
+
+      - name: Load seed data
         env:
-          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
-        run: |
-          mkdir -p "$HOME/.kube"
-          printf '%s' "$KUBECONFIG_DATA" > "$HOME/.kube/config"
-          chmod 600 "$HOME/.kube/config"
-
-      - name: Delete previous data load job
-        run: |
-          kubectl delete job db-agent-data-load \
-            --namespace db-agent --ignore-not-found
-
-      - name: Run data load job
-        run: kubectl apply -f deploy/k8s/jobs/data-load.yaml
-
-      - name: Wait for completion
-        run: |
-          kubectl wait --for=condition=complete job/db-agent-data-load \
-            --namespace db-agent --timeout=300s
+          PG_HOST: ${{ needs.aws-database.outputs.db-host }}
+          PG_PORT: ${{ needs.aws-database.outputs.db-port }}
+          PG_USER: ${{ vars.RDS_DATABASE_USERNAME || 'dbagent' }}
+          PG_PASS: ${{ secrets.RDS_DATABASE_PASSWORD }}
+          PG_DB: ${{ needs.aws-database.outputs.db-name || 'db_agent' }}
+        run: python3 scripts/load_crude_oil.py
 
   # ════════════════════════════════════════════════════════════════════════════
   # Stage 3 — Pipeline Summary
@@ -593,6 +653,7 @@ jobs:
       - do-deploy-existing
       - do-data-load-existing
       - aws-database
+      - aws-eks
       - aws-deploy
       - aws-data-load
     if: always()
@@ -609,6 +670,7 @@ jobs:
           R_DO_EXISTING_DEPLOY: ${{ needs.do-deploy-existing.result }}
           R_DO_EXISTING_DATA: ${{ needs.do-data-load-existing.result }}
           R_AWS_DB: ${{ needs.aws-database.result }}
+          R_AWS_EKS: ${{ needs.aws-eks.result }}
           R_AWS_DEPLOY: ${{ needs.aws-deploy.result }}
           R_AWS_DATA: ${{ needs.aws-data-load.result }}
         run: |
@@ -650,6 +712,7 @@ jobs:
             echo "| Job | Result |"
             echo "|-----|--------|"
             echo "| Provision RDS          | $(icon $R_AWS_DB) \`$R_AWS_DB\` |"
+            echo "| Provision EKS          | $(icon $R_AWS_EKS) \`$R_AWS_EKS\` |"
             echo "| Deploy to Kubernetes   | $(icon $R_AWS_DEPLOY) \`$R_AWS_DEPLOY\` |"
             echo "| Load Seed Data         | $(icon $R_AWS_DATA) \`$R_AWS_DATA\` |"
           } >> "$GITHUB_STEP_SUMMARY"
