@@ -158,9 +158,8 @@ jobs:
   #   Runs automatically on push to main, or via workflow_dispatch with
   #   stack=digitalocean|both.
   #
-  #   Required secrets  : DCO_TOKEN, DOCKERHUB_USERNAME,
-  #                        DOCKERHUB_TOKEN
-  #   Required variables: DO_K8S_CLUSTER_NAME
+  #   Required secrets  : DCO_TOKEN, DOCKERHUB_USERNAME, DOCKERHUB_TOKEN,
+  #                        KUBECONFIG
   #   Optional variables: PROJECT_NAME, DO_REGION, DO_DATABASE_NAME,
   #                        DO_TF_BACKEND_BUCKET, DO_TF_BACKEND_KEY,
   #                        DO_TF_BACKEND_ENDPOINT
@@ -247,13 +246,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DCO_TOKEN }}
-
       - name: Configure kubectl
-        run: doctl kubernetes cluster kubeconfig save ${{ vars.DO_K8S_CLUSTER_NAME }}
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$KUBECONFIG_DATA" > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
 
       - name: Apply namespace
         run: kubectl apply -f deploy/k8s/base/namespace.yaml
@@ -292,13 +291,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install doctl
-        uses: digitalocean/action-doctl@v2
-        with:
-          token: ${{ secrets.DCO_TOKEN }}
-
       - name: Configure kubectl
-        run: doctl kubernetes cluster kubeconfig save ${{ vars.DO_K8S_CLUSTER_NAME }}
+        env:
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          printf '%s' "$KUBECONFIG_DATA" > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
 
       - name: Delete previous data load job
         run: |
