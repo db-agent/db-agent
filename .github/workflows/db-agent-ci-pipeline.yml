@@ -158,7 +158,7 @@ jobs:
   #   Runs automatically on push to main, or via workflow_dispatch with
   #   stack=digitalocean|both.
   #
-  #   Required secrets  : DIGITALOCEAN_ACCESS_TOKEN, DOCKERHUB_USERNAME,
+  #   Required secrets  : DCO_TOKEN, DOCKERHUB_USERNAME,
   #                        DOCKERHUB_TOKEN
   #   Required variables: DO_K8S_CLUSTER_NAME
   #   Optional variables: PROJECT_NAME, DO_REGION, DO_DATABASE_NAME,
@@ -181,7 +181,7 @@ jobs:
       db-uri: ${{ steps.tf-out.outputs.db_uri }}
     env:
       TF_WORKING_DIR: infra/terraform/digitalocean
-      DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      DIGITALOCEAN_TOKEN: ${{ secrets.DCO_TOKEN }}
       TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'db-agent' }}
       TF_VAR_region: ${{ vars.DO_REGION || 'tor1' }}
       TF_VAR_database_name: ${{ vars.DO_DATABASE_NAME || 'db_agent' }}
@@ -250,7 +250,7 @@ jobs:
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
         with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          token: ${{ secrets.DCO_TOKEN }}
 
       - name: Configure kubectl
         run: doctl kubernetes cluster kubeconfig save ${{ vars.DO_K8S_CLUSTER_NAME }}
@@ -295,7 +295,7 @@ jobs:
       - name: Install doctl
         uses: digitalocean/action-doctl@v2
         with:
-          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+          token: ${{ secrets.DCO_TOKEN }}
 
       - name: Configure kubectl
         run: doctl kubernetes cluster kubeconfig save ${{ vars.DO_K8S_CLUSTER_NAME }}
