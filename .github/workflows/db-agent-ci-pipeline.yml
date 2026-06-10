@@ -334,7 +334,7 @@ jobs:
 
       - name: Inject DB_URL secret
         env:
-          PG_HOST: ${{ vars.DCO_PG_HOST }}
+          PG_HOST: ${{ secrets.DCO_PG_HOST }}
           PG_PORT: ${{ vars.DCO_PG_PORT }}
           PG_USER: ${{ vars.DCO_PG_USER }}
           PG_PASS: ${{ secrets.DCO_PG_PASS }}
@@ -383,7 +383,7 @@ jobs:
 
       - name: Load CSV into database
         env:
-          PG_HOST: ${{ vars.DCO_PG_HOST }}
+          PG_HOST: ${{ secrets.DCO_PG_HOST }}
           PG_PORT: ${{ vars.DCO_PG_PORT }}
           PG_USER: ${{ vars.DCO_PG_USER }}
           PG_PASS: ${{ secrets.DCO_PG_PASS }}
