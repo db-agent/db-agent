@@ -120,6 +120,8 @@ samconfig.toml
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 .dockerenv
+docker-compose.override.yml
+.docker/
 
 # ── Databricks ────────────────────────────────────────────────────────────────
 .databricks/
@@ -150,6 +152,42 @@ backend.generated.tf
 .ipynb_checkpoints/
 **/.ipynb_checkpoints/
 
+# ── Kubernetes ────────────────────────────────────────────────────────────────
+# Never commit kubeconfig — it contains cluster credentials
+kubeconfig
+kubeconfig.yaml
+kubeconfig.yml
+*.kubeconfig
+.kube/
+
+# ── Security scan artefacts ────────────────────────────────────────────────────
+# SARIF files are generated at CI time; no need to track them locally
+*.sarif
+
+# ── Editor swap & backup files ────────────────────────────────────────────────
+*.swp
+*.swo
+*.swn
+*~
+.#*
+\#*\#
+
+# ── Python extras ─────────────────────────────────────────────────────────────
+.python-version
+pip-log.txt
+pip-wheel-metadata/
+__pypackages__/
+
+# ── Next.js local env overrides ───────────────────────────────────────────────
+# (top-level .env.* already covers these, but be explicit for clarity)
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
 # ── Misc ──────────────────────────────────────────────────────────────────────
+*.tmp
+*.temp
+*.bak
 .claude/
 claude_desktop_config.json
