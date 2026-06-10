@@ -13,7 +13,6 @@ import csv
 import os
 import sys
 from pathlib import Path
-from urllib.parse import urlparse, unquote
 
 import psycopg
 
