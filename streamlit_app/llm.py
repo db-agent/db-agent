@@ -27,9 +27,8 @@ from __future__ import annotations
 import json
 import re
 
-from openai import OpenAI
-
 from models import LLMConfig, SQLResponse
+from openai import OpenAI
 
 
 def call_llm(system_prompt: str, user_prompt: str, llm_config: LLMConfig) -> str:

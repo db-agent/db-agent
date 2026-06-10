@@ -6,9 +6,10 @@ Safe to call frequently — no LLM involved.
 """
 
 from __future__ import annotations
-from app.db import get_schema, get_row_counts
-from app.models import SchemaResponse, SchemaTable
+
 from app import config
+from app.db import get_row_counts, get_schema
+from app.models import SchemaResponse, SchemaTable
 
 
 def handle(event: dict, context: object) -> dict:

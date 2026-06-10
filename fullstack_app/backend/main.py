@@ -9,18 +9,23 @@ Mangum adapts the ASGI app to the Lambda event/context protocol.
 """
 
 from __future__ import annotations
-from fastapi import FastAPI, Request
+
+from app import config
+from app.db import check_connection, get_row_counts, get_schema
+from app.models import (
+    HealthResponse,
+    LLMConfig,
+    QueryRequest,
+    QueryResponse,
+    SchemaResponse,
+    SchemaTable,
+    ValidationResult,
+)
+from app.pipeline import run_pipeline
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from mangum import Mangum
-
-from app import config
-from app.models import (
-    HealthResponse, SchemaResponse, QueryRequest, QueryResponse,
-    LLMConfig, SchemaTable, ValidationResult,
-)
-from app.db import check_connection, get_schema, get_row_counts, run_query
-from app.pipeline import run_pipeline
 
 app = FastAPI(
     title="DB-Agent API",

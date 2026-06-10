@@ -24,6 +24,7 @@ Teaching note:
 """
 
 import re
+
 from models import ValidationResult
 
 # Anything that mutates state, changes permissions, or shells out is banned.

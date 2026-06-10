@@ -13,13 +13,12 @@ Teaching note:
       • does it populate the right output fields on each branch?
 """
 
-import pytest
 from unittest.mock import patch
-from sqlalchemy import create_engine, text
 
 import db as db_module
+import pytest
 from pipeline import run_pipeline
-
+from sqlalchemy import create_engine, text
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

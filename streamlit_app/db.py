@@ -20,10 +20,9 @@ Teaching note:
 from __future__ import annotations
 
 from typing import Any
-from sqlalchemy import create_engine, text, inspect
 
 import config
-
+from sqlalchemy import create_engine, inspect, text
 
 # ── Engine (singleton) ────────────────────────────────────────────────────────
 # check_same_thread=False is required for SQLite when used from Streamlit:

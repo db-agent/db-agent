@@ -21,9 +21,8 @@ Teaching note:
 
 from pathlib import Path
 
-import streamlit as st
-
 import config
+import streamlit as st
 
 
 @st.cache_resource(show_spinner="Seeding demo database…")

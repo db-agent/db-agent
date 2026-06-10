@@ -8,10 +8,9 @@ Teaching note:
     A fresh in-memory SQLite (sqlite:///:memory:) is created per test.
 """
 
+import db as db_module
 import pytest
 from sqlalchemy import create_engine, text
-
-import db as db_module
 
 
 @pytest.fixture(autouse=True)

@@ -19,7 +19,6 @@ Teaching note:
 
 from db import get_schema
 
-
 SYSTEM_PROMPT = """\
 You are a SQL assistant. Your only job is to generate a single, safe, read-only \
 SELECT (or WITH…SELECT) query against the database below.

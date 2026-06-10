@@ -27,7 +27,6 @@ Teaching notes:
     The connector tries Unity Catalog first; falls back automatically.
 """
 
-import os
 from typing import Any
 
 from databricks import sql as databricks_sql

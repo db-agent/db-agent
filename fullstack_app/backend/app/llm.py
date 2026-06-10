@@ -6,9 +6,12 @@ One client per request keeps Lambda cold starts clean.
 """
 
 from __future__ import annotations
+
 import json
 import re
+
 from openai import OpenAI
+
 from .models import LLMConfig, SQLResponse
 
 

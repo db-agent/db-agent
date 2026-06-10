@@ -26,15 +26,13 @@ from pathlib import Path
 # and Streamlit Community Cloud — all three work without surprises.
 sys.path.insert(0, str(Path(__file__).parent))
 
-import streamlit as st
-import pandas as pd
-
 import config
+import pandas as pd
+import streamlit as st
+from bootstrap import ensure_demo_db_seeded
+from db import check_connection, get_schema
 from models import LLMConfig
 from pipeline import run_pipeline
-from db import get_schema, check_connection
-from bootstrap import ensure_demo_db_seeded
-
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(

@@ -6,6 +6,7 @@ or use it for ALB health checks. Returns DB connectivity status.
 """
 
 from __future__ import annotations
+
 from app.db import check_connection
 from app.models import HealthResponse
 

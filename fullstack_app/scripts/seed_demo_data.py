@@ -16,8 +16,9 @@ The DB_URL defaults to sqlite:///./data/demo.db — relative to wherever
 you run the script, which should match where you run uvicorn.
 """
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
 
 from sqlalchemy import create_engine, text

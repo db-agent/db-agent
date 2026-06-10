@@ -35,11 +35,11 @@ Teaching note:
 from __future__ import annotations
 
 import config
+from db import get_schema, run_query
+from llm import call_llm, parse_sql_response
 from models import LLMConfig, PipelineOutput, SQLResponse, ValidationResult
 from prompts import SYSTEM_PROMPT, build_user_prompt
-from llm import call_llm, parse_sql_response
 from sql_safety import validate_sql
-from db import run_query, get_schema
 
 
 def run_pipeline(question: str, llm_config: LLMConfig | None = None) -> PipelineOutput:

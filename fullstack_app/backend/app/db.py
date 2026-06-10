@@ -6,7 +6,9 @@ PostgreSQL (production), and MySQL — swap only the DB_URL.
 """
 
 from __future__ import annotations
-from sqlalchemy import create_engine, text, inspect
+
+from sqlalchemy import create_engine, inspect, text
+
 from . import config
 
 

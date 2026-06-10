@@ -1,0 +1,19 @@
+# Lint only the deployable app code.
+# Databricks notebooks and the databricks_app use runtime globals (dbutils, spark)
+# that are not standard Python — exclude them from CI linting.
+
+exclude = [
+    "modules/",
+    "databricks_app/",
+    ".venv",
+    "venv",
+]
+
+line-length = 120
+
+[lint]
+select = ["E", "F", "W", "I"]
+
+[lint.per-file-ignores]
+# Jupyter notebooks execute cells sequentially; import-order rules don't apply.
+"*.ipynb" = ["E402"]

@@ -6,9 +6,9 @@ They verify that the pipeline orchestration is correct, not that the LLM
 generates good SQL (that's a prompt engineering concern tested separately).
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
-from app.models import LLMConfig, SQLResponse, ValidationResult
+from unittest.mock import patch
+
+from app.models import LLMConfig, SQLResponse
 from app.pipeline import run_pipeline
 
 MOCK_LLM_CONFIG = LLMConfig(
@@ -28,8 +28,11 @@ VALID_SQL_RESPONSE = SQLResponse(
 )
 
 
+_LLM_RESPONSE = '{"sql": "SELECT name FROM customers LIMIT 10", "explanation": "Returns customer names."}'
+
+
 @patch("app.pipeline.get_schema", return_value=MOCK_SCHEMA)
-@patch("app.pipeline.call_llm", return_value='{"sql": "SELECT name FROM customers LIMIT 10", "explanation": "Returns customer names."}')
+@patch("app.pipeline.call_llm", return_value=_LLM_RESPONSE)
 @patch("app.pipeline.run_query", return_value=(["name"], [{"name": "Alice"}, {"name": "Bob"}]))
 def test_successful_pipeline(mock_run_query, mock_llm, mock_schema):
     result = run_pipeline("Show me all customers", MOCK_LLM_CONFIG)

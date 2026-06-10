@@ -7,9 +7,10 @@ data flow end to end.
 """
 
 from __future__ import annotations
-from typing import Any
-from pydantic import BaseModel, Field
 
+from typing import Any
+
+from pydantic import BaseModel, Field
 
 # ── LLM layer ──────────────────────────────────────────────────────────────
 

@@ -8,7 +8,9 @@ Design principle: fail closed. If validation is uncertain, reject.
 """
 
 from __future__ import annotations
+
 import re
+
 from .models import ValidationResult
 
 # Keywords that should never appear in a read-only query

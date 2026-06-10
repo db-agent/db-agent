@@ -6,6 +6,7 @@ In Lambda, these are set via template.yaml environment variables or AWS SSM/Secr
 """
 
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv()

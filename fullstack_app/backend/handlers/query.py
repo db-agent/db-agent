@@ -6,10 +6,12 @@ the full pipeline output: SQL, validation, results, explanation, timings.
 """
 
 from __future__ import annotations
+
 import json
+
+from app import config
 from app.models import LLMConfig, QueryRequest, QueryResponse
 from app.pipeline import run_pipeline
-from app import config
 
 
 def handle(event: dict, context: object) -> dict:
