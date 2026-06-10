@@ -1,0 +1,199 @@
+name: DB Agent — Destroy Infrastructure
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Manual trigger only. Destroys Terraform-managed infrastructure.
+# Requires typing DESTROY in the confirm field to proceed.
+# ──────────────────────────────────────────────────────────────────────────────
+on:
+  workflow_dispatch:
+    inputs:
+      stack:
+        description: "Infrastructure stack to destroy"
+        required: true
+        type: choice
+        options:
+          - digitalocean
+          - aws
+          - both
+      confirm:
+        description: "Type DESTROY to confirm"
+        required: true
+        type: string
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+
+  # ── Safety gate ─────────────────────────────────────────────────────────────
+
+  guard:
+    name: "Confirm Destroy"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        run: |
+          if [ "${{ inputs.confirm }}" != "DESTROY" ]; then
+            echo "❌ Confirmation failed. You must type DESTROY to proceed."
+            exit 1
+          fi
+          echo "✅ Confirmed. Proceeding with infrastructure teardown."
+
+  # ── Digital Ocean ────────────────────────────────────────────────────────────
+
+  destroy-do:
+    name: "DO | Destroy PostgreSQL"
+    needs: [guard]
+    if: inputs.stack == 'digitalocean' || inputs.stack == 'both'
+    runs-on: ubuntu-latest
+    env:
+      TF_WORKING_DIR: infra/terraform/digitalocean
+      TF_VAR_do_token: ${{ secrets.DCO_TOKEN }}
+      TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'db-agent' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform init
+
+      - name: Terraform destroy
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform destroy -auto-approve
+
+  # ── AWS EKS (destroy before RDS so pods can drain) ───────────────────────────
+
+  destroy-aws-eks:
+    name: "AWS | Destroy EKS Cluster"
+    needs: [guard]
+    if: inputs.stack == 'aws' || inputs.stack == 'both'
+    runs-on: ubuntu-latest
+    env:
+      TF_WORKING_DIR: infra/terraform/aws-eks
+      TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'db-agent' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          TF_BACKEND_BUCKET: ${{ vars.TF_BACKEND_BUCKET }}
+          TF_BACKEND_KEY: ${{ vars.TF_BACKEND_KEY_EKS || 'db-agent/aws-eks.tfstate' }}
+          TF_BACKEND_DYNAMODB_TABLE: ${{ vars.TF_BACKEND_DYNAMODB_TABLE }}
+        run: |
+          if [ -n "$TF_BACKEND_BUCKET" ]; then
+            printf 'terraform {\n  backend "s3" {}\n}\n' > backend.generated.tf
+            BACKEND_ARGS=(
+              "-backend-config=bucket=$TF_BACKEND_BUCKET"
+              "-backend-config=key=$TF_BACKEND_KEY"
+              "-backend-config=region=${{ vars.AWS_REGION || 'us-east-1' }}"
+            )
+            [ -n "$TF_BACKEND_DYNAMODB_TABLE" ] && \
+              BACKEND_ARGS+=("-backend-config=dynamodb_table=$TF_BACKEND_DYNAMODB_TABLE")
+            terraform init "${BACKEND_ARGS[@]}"
+          else
+            terraform init
+          fi
+
+      - name: Terraform destroy
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform destroy -auto-approve
+
+  # ── AWS RDS (after EKS so no dangling connections) ───────────────────────────
+
+  destroy-aws-rds:
+    name: "AWS | Destroy RDS"
+    needs: [destroy-aws-eks]
+    runs-on: ubuntu-latest
+    env:
+      TF_WORKING_DIR: infra/terraform/aws
+      TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'db-agent' }}
+      TF_VAR_database_password: ${{ secrets.RDS_DATABASE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        env:
+          TF_BACKEND_BUCKET: ${{ vars.TF_BACKEND_BUCKET }}
+          TF_BACKEND_KEY: ${{ vars.TF_BACKEND_KEY || 'db-agent/aws-rds.tfstate' }}
+          TF_BACKEND_DYNAMODB_TABLE: ${{ vars.TF_BACKEND_DYNAMODB_TABLE }}
+        run: |
+          if [ -n "$TF_BACKEND_BUCKET" ]; then
+            printf 'terraform {\n  backend "s3" {}\n}\n' > backend.generated.tf
+            BACKEND_ARGS=(
+              "-backend-config=bucket=$TF_BACKEND_BUCKET"
+              "-backend-config=key=$TF_BACKEND_KEY"
+              "-backend-config=region=${{ vars.AWS_REGION || 'us-east-1' }}"
+            )
+            [ -n "$TF_BACKEND_DYNAMODB_TABLE" ] && \
+              BACKEND_ARGS+=("-backend-config=dynamodb_table=$TF_BACKEND_DYNAMODB_TABLE")
+            terraform init "${BACKEND_ARGS[@]}"
+          else
+            terraform init
+          fi
+
+      - name: Terraform destroy
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform destroy -auto-approve
+
+  # ── Summary ──────────────────────────────────────────────────────────────────
+
+  summary:
+    name: "Destroy Summary"
+    needs: [guard, destroy-do, destroy-aws-eks, destroy-aws-rds]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write summary
+        env:
+          R_DO: ${{ needs.destroy-do.result }}
+          R_EKS: ${{ needs.destroy-aws-eks.result }}
+          R_RDS: ${{ needs.destroy-aws-rds.result }}
+        run: |
+          icon() {
+            case "$1" in
+              success)   echo "✅" ;;
+              failure)   echo "❌" ;;
+              skipped)   echo "⏭️" ;;
+              cancelled) echo "🚫" ;;
+              *)         echo "⏳" ;;
+            esac
+          }
+          {
+            echo "## DB Agent — Infrastructure Destroy Summary"
+            echo ""
+            echo "**Stack:** \`${{ inputs.stack }}\`  |  **Triggered by:** \`${{ github.actor }}\`"
+            echo ""
+            echo "| Resource | Result |"
+            echo "|----------|--------|"
+            echo "| DO Managed PostgreSQL | $(icon $R_DO) \`$R_DO\` |"
+            echo "| AWS EKS Cluster       | $(icon $R_EKS) \`$R_EKS\` |"
+            echo "| AWS RDS PostgreSQL    | $(icon $R_RDS) \`$R_RDS\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
