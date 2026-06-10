@@ -285,31 +285,18 @@ jobs:
 
   do-data-load:
     name: "DO | Load Seed Data"
-    needs: [do-deploy]
+    needs: [do-deploy, do-database]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure kubectl
+      - name: Install psycopg
+        run: pip install "psycopg[binary]"
+
+      - name: Load CSV into database
         env:
-          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
-        run: |
-          mkdir -p "$HOME/.kube"
-          printf '%s' "$KUBECONFIG_DATA" > "$HOME/.kube/config"
-          chmod 600 "$HOME/.kube/config"
-
-      - name: Delete previous data load job
-        run: |
-          kubectl delete job db-agent-data-load \
-            --namespace db-agent --ignore-not-found
-
-      - name: Run data load job
-        run: kubectl apply -f deploy/k8s/jobs/data-load.yaml
-
-      - name: Wait for completion
-        run: |
-          kubectl wait --for=condition=complete job/db-agent-data-load \
-            --namespace db-agent --timeout=300s
+          DB_URL: ${{ needs.do-database.outputs.db-uri }}
+        run: python3 scripts/load_crude_oil.py
 
   # ════════════════════════════════════════════════════════════════════════════
   # Stage 2a (fast) — Digital Ocean Stack, existing DB
@@ -391,26 +378,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure kubectl
+      - name: Install psycopg
+        run: pip install "psycopg[binary]"
+
+      - name: Load CSV into database
         env:
-          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG }}
-        run: |
-          mkdir -p "$HOME/.kube"
-          printf '%s' "$KUBECONFIG_DATA" > "$HOME/.kube/config"
-          chmod 600 "$HOME/.kube/config"
-
-      - name: Delete previous data load job
-        run: |
-          kubectl delete job db-agent-data-load \
-            --namespace db-agent --ignore-not-found
-
-      - name: Run data load job
-        run: kubectl apply -f deploy/k8s/jobs/data-load.yaml
-
-      - name: Wait for completion
-        run: |
-          kubectl wait --for=condition=complete job/db-agent-data-load \
-            --namespace db-agent --timeout=300s
+          PG_HOST: ${{ vars.DCO_PG_HOST }}
+          PG_PORT: ${{ vars.DCO_PG_PORT }}
+          PG_USER: ${{ vars.DCO_PG_USER }}
+          PG_PASS: ${{ secrets.DCO_PG_PASS }}
+          PG_DB: ${{ vars.DO_DATABASE_NAME || 'db_agent' }}
+        run: python3 scripts/load_crude_oil.py
 
   # ════════════════════════════════════════════════════════════════════════════
   # Stage 2b — AWS Stack
