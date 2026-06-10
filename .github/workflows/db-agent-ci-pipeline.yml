@@ -172,10 +172,8 @@ jobs:
     name: "DO | Provision Database"
     needs: [docker]
     if: >
-      github.event_name != 'pull_request' &&
-      (github.event_name == 'push' ||
-       inputs.stack == 'digitalocean' ||
-       inputs.stack == 'both')
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.stack == 'digitalocean' || inputs.stack == 'both')
     runs-on: ubuntu-latest
     outputs:
       db-uri: ${{ steps.tf-out.outputs.db_uri }}
@@ -329,8 +327,9 @@ jobs:
     name: "DO | Deploy (existing DB)"
     needs: [docker]
     if: >
-      github.event_name == 'workflow_dispatch' &&
-      inputs.stack == 'digitalocean-existing'
+      github.event_name != 'pull_request' &&
+      (github.event_name == 'push' ||
+       inputs.stack == 'digitalocean-existing')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
