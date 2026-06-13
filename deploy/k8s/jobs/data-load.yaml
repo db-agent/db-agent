@@ -1,59 +1,112 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: db-agent-data-load
+  name: ecommerce-data-load
   namespace: db-agent
+  labels:
+    app: db-agent
+    component: data-loader
 spec:
+  # Auto-delete the Job 10 minutes after it finishes (success or failure).
   ttlSecondsAfterFinished: 600
   backoffLimit: 2
   template:
     spec:
       restartPolicy: Never
+
+      # ── Init container: download CSVs from S3 ──────────────────────────────
+      # The RDS instance has no public endpoint, so data must be loaded from
+      # inside the cluster.  CSVs are staged to S3 once from a developer
+      # laptop (see README below), then pulled here via the node IAM role.
+      initContainers:
+        - name: download-data
+          image: public.ecr.aws/aws-cli/aws-cli:latest
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "Downloading ecommerce CSVs from s3://$DATA_S3_BUCKET/$DATA_S3_PREFIX"
+              mkdir -p /data/ecommerce
+              aws s3 sync "s3://$DATA_S3_BUCKET/$DATA_S3_PREFIX" /data/ecommerce \
+                --exclude "*" \
+                --include "*.csv" \
+                --no-progress
+              echo "Files downloaded:"
+              ls -lh /data/ecommerce/
+          env:
+            - name: DATA_S3_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: db-agent-secrets
+                  key: DATA_S3_BUCKET
+            - name: DATA_S3_PREFIX
+              valueFrom:
+                secretKeyRef:
+                  name: db-agent-secrets
+                  key: DATA_S3_PREFIX
+                  optional: true   # defaults to empty string (bucket root)
+          volumeMounts:
+            - name: data-vol
+              mountPath: /data/ecommerce
+
+      # ── Main container: run the loader ────────────────────────────────────
       containers:
-        - name: data-load
+        - name: data-loader
           image: docker.io/becloudready/db-agent:latest
           imagePullPolicy: Always
-          command: [python3, -c]
-          args:
-            - |
-              import os, sys
-              from sqlalchemy import create_engine, text
-
-              url = os.environ.get("DB_URL")
-              if not url:
-                  print("DB_URL not set — skipping data load")
-                  sys.exit(0)
-
-              engine = create_engine(url, connect_args={"connect_timeout": 10})
-              with engine.connect() as conn:
-                  conn.execute(text("SELECT 1"))
-                  print("Database connection successful")
-
-                  conn.execute(text("""
-                      CREATE TABLE IF NOT EXISTS sample_data (
-                          id     SERIAL PRIMARY KEY,
-                          name   TEXT    NOT NULL,
-                          value  NUMERIC,
-                          created_at TIMESTAMP DEFAULT NOW()
-                      )
-                  """))
-
-                  conn.execute(text("""
-                      INSERT INTO sample_data (id, name, value) VALUES
-                          (1, 'Alpha', 100),
-                          (2, 'Beta',  200),
-                          (3, 'Gamma', 300)
-                      ON CONFLICT (id) DO NOTHING
-                  """))
-                  conn.commit()
-                  print("Seed data loaded successfully")
-          envFrom:
-            - secretRef:
-                name: db-agent-secrets
+          command:
+            - python
+            - /app/data/load_ecommerce.py
+            - --data-dir
+            - /data/ecommerce
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db-agent-secrets
+                  key: DB_URL
+          volumeMounts:
+            - name: data-vol
+              mountPath: /data/ecommerce
           resources:
             requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
               cpu: 200m
-              memory: 256Mi
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+
+      volumes:
+        - name: data-vol
+          emptyDir: {}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Setup steps before running this Job:
+#
+# 1. Upload CSVs to S3 (run once from your laptop):
+#    aws s3 sync /path/to/Ecommerce_data \
+#        s3://YOUR-BUCKET/ecommerce-data/ \
+#        --exclude "*.DS_Store"
+#
+# 2. Grant the EKS node role S3 read access (run once):
+#    NODE_ROLE=$(aws eks describe-nodegroup \
+#        --cluster-name db-agent-eks \
+#        --nodegroup-name db-agent-app-nodes \
+#        --query 'nodegroup.nodeRole' --output text | awk -F/ '{print $NF}')
+#    aws iam attach-role-policy \
+#        --role-name "$NODE_ROLE" \
+#        --policy-arn arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+#
+# 3. Add S3 bucket info to the k8s secret:
+#    kubectl create secret generic db-agent-secrets \
+#        --namespace db-agent \
+#        --from-literal=DB_URL="postgresql://..." \
+#        --from-literal=DATA_S3_BUCKET="YOUR-BUCKET" \
+#        --from-literal=DATA_S3_PREFIX="ecommerce-data/" \
+#        --save-config --dry-run=client -o yaml | kubectl apply -f -
+#
+# 4. Run the Job:
+#    kubectl apply -f deploy/k8s/jobs/data-load.yaml
+#    kubectl logs -n db-agent -l component=data-loader -f
+# ─────────────────────────────────────────────────────────────────────────────

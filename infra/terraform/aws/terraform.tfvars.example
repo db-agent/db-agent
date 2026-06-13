@@ -1,9 +1,11 @@
 aws_region                 = "us-east-1"
+s3_bucket_name             = "db-agent-data-staging-<your-account-id>"   # must be globally unique
 project_name               = "db-agent"
-allowed_cidr_blocks        = ["0.0.0.0/0"]
-publicly_accessible        = true
+environment                = "dev"
 database_name              = "db_agent"
 database_username          = "dbagent"
 database_password          = "replace-with-a-secure-password"
 database_instance_class    = "db.t4g.micro"
 database_allocated_storage = 20
+publicly_accessible        = true
+local_access_cidrs         = ["0.0.0.0/0"]   # restrict to ["YOUR_IP/32"] for tighter control

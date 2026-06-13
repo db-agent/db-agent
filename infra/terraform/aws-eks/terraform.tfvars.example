@@ -1,7 +1,9 @@
 aws_region         = "us-east-1"
 project_name       = "db-agent"
-kubernetes_version = "1.29"
+environment        = "dev"
+kubernetes_version = "1.32"
 node_instance_type = "t3.medium"
+capacity_type      = "ON_DEMAND"
 node_desired_size  = 2
 node_min_size      = 1
-node_max_size      = 3
+node_max_size      = 4
