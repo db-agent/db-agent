@@ -1,7 +1,7 @@
 """
-streamlit_app.py — The web UI. Entry point for all deployments.
+app.py — The web UI. Entry point for all deployments.
 
-    streamlit run streamlit_app/streamlit_app.py
+    streamlit run app.py
 
 Set DATABRICKS_HOST to run against Databricks SQL (Unity Catalog, OAuth).
 Leave it unset to use SQLAlchemy (SQLite / Postgres / MySQL).
@@ -10,9 +10,10 @@ Leave it unset to use SQLAlchemy (SQLite / Postgres / MySQL).
 import sys
 from pathlib import Path
 
-_HERE = Path(__file__).parent
-sys.path.insert(0, str(_HERE.parent))  # project root → enables `from core.xxx import`
-sys.path.insert(0, str(_HERE))         # app dir → enables flat imports (db, config, …)
+# Ensure the repo root is on sys.path so `from core.xxx import` and flat
+# imports (db, config, pipeline, …) both work regardless of how Streamlit
+# launches the script.
+sys.path.insert(0, str(Path(__file__).parent))
 
 import config
 import pandas as pd

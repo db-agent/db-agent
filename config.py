@@ -18,7 +18,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-_REPO_ROOT = Path(__file__).parent.parent
+_REPO_ROOT = Path(__file__).parent
 
 # .env is for local dev only; real env vars (Databricks Apps, Docker) always win.
 load_dotenv(_REPO_ROOT / ".env", override=False)

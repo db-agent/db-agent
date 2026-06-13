@@ -6,7 +6,7 @@
 #
 # Docs: https://docs.databricks.com/dev-tools/databricks-apps/index.html
 
-command: ["streamlit", "run", "streamlit_app/streamlit_app.py"]
+command: ["streamlit", "run", "app.py"]
 
 env:
   - name: "DATABRICKS_CATALOG"
