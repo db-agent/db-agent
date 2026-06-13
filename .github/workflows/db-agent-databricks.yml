@@ -1,0 +1,193 @@
+name: DB Agent — Databricks Apps Deploy
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Manual trigger only. Deploys the unified app.py entry point to Databricks
+# Apps via the Databricks CLI. No Docker build — Databricks Apps runs Python
+# source directly.
+#
+# Required secrets (GitHub → Settings → Secrets):
+#   DATABRICKS_HOST   — workspace URL, e.g. adb-xxxx.azuredatabricks.net
+#   DATABRICKS_TOKEN  — personal access token or service-principal secret
+#   DATABRICKS_HTTP_PATH — SQL Warehouse path (optional; auto-discovers if blank)
+#
+# Required variables (GitHub → Settings → Variables):
+#   DATABRICKS_CATALOG   — Unity Catalog catalog to query
+#   DATABRICKS_SCHEMA    — Unity Catalog schema to query
+#   LLM_BASE_URL         — OpenAI-compatible LLM endpoint
+#   LLM_MODEL            — model name
+#   DATABRICKS_SECRET_SCOPE — Databricks secret scope holding the LLM API key
+#   DATABRICKS_SECRET_KEY   — key within that scope
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: "Databricks App name"
+        required: false
+        default: "db-agent"
+
+concurrency:
+  group: databricks-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Stage 1 — CI gate
+  #   Lint + test must pass before any code reaches the workspace.
+  # ════════════════════════════════════════════════════════════════════════════
+
+  lint:
+    name: "CI | Lint & Test"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt ruff pytest
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Test
+        run: pytest --tb=short -q
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Stage 2 — Databricks Apps deploy
+  # ════════════════════════════════════════════════════════════════════════════
+
+  deploy:
+    name: "Databricks | Deploy App"
+    needs: lint
+    runs-on: ubuntu-latest
+    env:
+      DATABRICKS_HOST:  ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Databricks CLI
+        uses: databricks/setup-cli@main
+
+      - name: Verify CLI auth
+        run: databricks workspace list / --output json > /dev/null
+
+      # Build app.yaml from CI vars/secrets so the deployed config reflects the
+      # current environment — avoids committing workspace-specific values.
+      - name: Generate app.yaml
+        env:
+          DATABRICKS_CATALOG:      ${{ vars.DATABRICKS_CATALOG      || 'samples' }}
+          DATABRICKS_SCHEMA:       ${{ vars.DATABRICKS_SCHEMA        || 'default' }}
+          DATABRICKS_HTTP_PATH:    ${{ secrets.DATABRICKS_HTTP_PATH  || ''        }}
+          LLM_BASE_URL:            ${{ vars.LLM_BASE_URL             || ''        }}
+          LLM_MODEL:               ${{ vars.LLM_MODEL                || ''        }}
+          DATABRICKS_SECRET_SCOPE: ${{ vars.DATABRICKS_SECRET_SCOPE  || 'db-agent'     }}
+          DATABRICKS_SECRET_KEY:   ${{ vars.DATABRICKS_SECRET_KEY    || 'github-token' }}
+        run: |
+          python3 - << 'PYEOF'
+          import os
+
+          pairs = [
+              ("DATABRICKS_CATALOG",      os.environ.get("DATABRICKS_CATALOG",      "")),
+              ("DATABRICKS_SCHEMA",       os.environ.get("DATABRICKS_SCHEMA",       "")),
+              ("DATABRICKS_HTTP_PATH",    os.environ.get("DATABRICKS_HTTP_PATH",    "")),
+              ("LLM_BASE_URL",            os.environ.get("LLM_BASE_URL",            "")),
+              ("LLM_MODEL",               os.environ.get("LLM_MODEL",               "")),
+              ("DATABRICKS_SECRET_SCOPE", os.environ.get("DATABRICKS_SECRET_SCOPE", "")),
+              ("DATABRICKS_SECRET_KEY",   os.environ.get("DATABRICKS_SECRET_KEY",   "")),
+          ]
+
+          env_lines = "\n".join(
+              f'  - name: "{k}"\n    value: "{v}"'
+              for k, v in pairs if v
+          )
+
+          content = f'command: ["streamlit", "run", "app.py"]\n\nenv:\n{env_lines}\n'
+
+          with open("app.yaml", "w") as f:
+              f.write(content)
+
+          print("Generated app.yaml:")
+          print(content)
+          PYEOF
+
+      - name: Create app if it does not exist
+        env:
+          APP_NAME: ${{ inputs.app_name }}
+        run: |
+          if databricks apps get "$APP_NAME" --output json &>/dev/null; then
+            echo "App '$APP_NAME' already exists — skipping create"
+          else
+            databricks apps create "$APP_NAME" \
+              --description "Natural-language SQL agent (db-agent)"
+          fi
+
+      - name: Deploy to Databricks Apps
+        env:
+          APP_NAME: ${{ inputs.app_name }}
+        run: |
+          databricks apps deploy "$APP_NAME" --source-code-path .
+
+      - name: Get app URL
+        if: success()
+        env:
+          APP_NAME: ${{ inputs.app_name }}
+        run: |
+          URL=$(databricks apps get "$APP_NAME" --output json \
+            | python3 -c "import sys, json; print(json.load(sys.stdin).get('url', '(not yet assigned)'))")
+          echo "App URL: $URL"
+          {
+            echo "### Databricks App deployed ✅"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **App**    | \`$APP_NAME\` |"
+            echo "| **URL**    | $URL |"
+            echo "| **Commit** | \`${{ github.sha }}\` |"
+            echo "| **Ref**    | \`${{ github.ref_name }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Stage 3 — Summary
+  # ════════════════════════════════════════════════════════════════════════════
+
+  summary:
+    name: "Pipeline Summary"
+    needs: [lint, deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write pipeline summary
+        env:
+          R_LINT:   ${{ needs.lint.result }}
+          R_DEPLOY: ${{ needs.deploy.result }}
+        run: |
+          icon() {
+            case "$1" in
+              success)   echo "✅" ;;
+              failure)   echo "❌" ;;
+              skipped)   echo "⏭️" ;;
+              cancelled) echo "🚫" ;;
+              *)         echo "⏳" ;;
+            esac
+          }
+          {
+            echo "## DB Agent — Databricks Deploy"
+            echo ""
+            echo "**App:** \`${{ inputs.app_name }}\`  |  **Commit:** \`${{ github.sha }}\`  |  **Ref:** \`${{ github.ref_name }}\`"
+            echo ""
+            echo "| Job | Result |"
+            echo "|-----|--------|"
+            echo "| Lint & Test | $(icon $R_LINT) \`$R_LINT\` |"
+            echo "| Deploy App  | $(icon $R_DEPLOY) \`$R_DEPLOY\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

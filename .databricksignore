@@ -1,0 +1,24 @@
+# Files excluded from databricks apps deploy --source-code-path .
+# The app only needs app.py, core/, db/, config.py, prompts.py,
+# pipeline.py, bootstrap.py, requirements.txt, and app.yaml.
+
+.git/
+.github/
+.claude/
+infra/
+deploy/
+modules/
+assets/
+data/
+tests/
+__pycache__/
+*.pyc
+.env
+.env.*
+*.tfvars
+*.tfstate
+*.tfstate.*
+.terraform/
+Dockerfile
+runtime.txt
+ruff.toml
