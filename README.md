@@ -72,8 +72,6 @@ New to AI agents? Work through the modules in order — each one builds on the l
 | [04 — Agentic Loop](./modules/04_agentic_loop/) | Retry, reflect, recover from errors | Agent with max-steps guard and error recovery |
 | [05 — MCP Server](./modules/05_mcp_server/) | Expose tools via a standard protocol | MCP server connectable to Claude Desktop |
 
-The `streamlit_app/` is the **finished product** these modules build toward.
-See [CONCEPTS.md](./CONCEPTS.md) for a plain-English glossary of every term.
 
 ---
 
