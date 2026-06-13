@@ -1,25 +1,27 @@
 # DB Agent · Streamlit App
 
 A natural-language SQL agent that runs anywhere Python runs — local laptop,
-Docker, or **Streamlit Community Cloud** with zero infrastructure.
+Docker, Kubernetes, Streamlit Community Cloud, or **Databricks Apps**.
 
-This is the generic, batteries-included version of DB Agent. For the
-Databricks-native variant (Unity Catalog, OAuth service principals, Model
-Serving) see [`../databricks_app/`](../databricks_app/).
+Set `DATABRICKS_HOST` to connect to Databricks SQL (Unity Catalog, OAuth).
+Leave it unset for generic SQLAlchemy mode (SQLite / Postgres / MySQL).
 
 ---
 
 ## Architecture
 
 ```
-streamlit_app.py     Streamlit UI — sidebar, schema browser, result panels
+streamlit_app.py     Streamlit UI — adapts sidebar and header to active backend
   │
   ├── pipeline.py    Thin wrapper — binds db + prompts to core/pipeline.py
-  │     ├── prompts.py          Builds schema-aware system + user prompts
-  │     └── db.py               SQLAlchemy connection, schema reflection, exec
+  │     ├── prompts.py          System prompt + schema builder (backend-aware)
+  │     └── db/                 Database backend package
+  │           ├── __init__.py         Auto-selects backend from DATABRICKS_HOST
+  │           ├── sqlalchemy_backend.py   SQLite / Postgres / MySQL via SQLAlchemy
+  │           └── databricks_backend.py   Databricks SQL + Unity Catalog + OAuth
   │
-  ├── config.py      st.secrets → env → .env → defaults resolution
-  ├── bootstrap.py   Auto-seeds the demo SQLite DB on first boot
+  ├── config.py      Unified env config — st.secrets / env / .env / defaults
+  ├── bootstrap.py   Auto-seeds the demo SQLite DB on first boot (SQLite only)
   │
   └── core/          Shared logic (lives at the project root)
         ├── pipeline.py    Orchestrates the end-to-end flow (start reading here)
@@ -33,7 +35,7 @@ so the UI can render a friendly message instead of a stack trace.
 
 ---
 
-## Local dev
+## Local dev (generic SQLite mode)
 
 ```bash
 # From the repo root
@@ -46,30 +48,37 @@ cp .env.example .env
 streamlit run streamlit_app/streamlit_app.py
 ```
 
-The demo SQLite database is created automatically the first time the app
-boots — see `bootstrap.py`.
+The demo SQLite database is created automatically on first boot (`bootstrap.py`).
+
+---
+
+## Local dev (Databricks mode)
+
+```bash
+pip install -r requirements.txt   # includes databricks-sql-connector + databricks-sdk
+
+# .env
+DATABRICKS_HOST=adb-xxxx.azuredatabricks.net
+DATABRICKS_TOKEN=dapi...
+DATABRICKS_CATALOG=main
+DATABRICKS_SCHEMA=default
+# Optional — leave blank to auto-discover SQL Warehouse
+DATABRICKS_HTTP_PATH=
+
+streamlit run streamlit_app/streamlit_app.py
+```
+
+The sidebar shows a Databricks connection banner and warehouse info.
+The SQL safety layer adds `OPTIMIZE / VACUUM / ZORDER / COPY` to the blocklist.
 
 ---
 
 ## Deploy to Streamlit Community Cloud
 
-1. **Push this repo to GitHub** (Community Cloud reads from a GitHub repo).
-
-2. **Sign in** at [share.streamlit.io](https://share.streamlit.io) and click
-   **New app**.
-
-3. Fill in the deploy form:
-
-   | Field | Value |
-   |---|---|
-   | Repository | `<your-org>/db-agent` |
-   | Branch | `main` |
-   | **Main file path** | `streamlit_app/streamlit_app.py` |
-   | Python version | 3.11 (matches `runtime.txt`) |
-
-4. Open **Advanced settings → Secrets** and paste the LLM credentials.
-   Use [`.streamlit/secrets.toml.example`](../.streamlit/secrets.toml.example)
-   as a template:
+1. Push this repo to GitHub.
+2. Sign in at [share.streamlit.io](https://share.streamlit.io) → **New app**.
+3. Set **Main file path** to `streamlit_app/streamlit_app.py`.
+4. Open **Advanced settings → Secrets** and paste LLM credentials:
 
    ```toml
    LLM_BASE_URL = "https://api.openai.com/v1"
@@ -77,22 +86,40 @@ boots — see `bootstrap.py`.
    LLM_MODEL    = "gpt-4o-mini"
    ```
 
-5. Click **Deploy**. First boot takes ~60 seconds — the auto-seeder writes
-   the demo SQLite DB to the container's ephemeral filesystem.
+---
 
-That's it. To use a different LLM provider or a hosted Postgres later, just
-edit the secrets — no code change, no redeploy.
+## Deploy to Databricks Apps
+
+Edit [`../app.yaml`](../app.yaml) with your workspace values, then:
+
+```bash
+# Deploy the full repo root (core/ package must be included)
+databricks apps create db-agent --description "Natural-language SQL agent"
+databricks apps deploy db-agent --source-code-path .
+```
+
+Grant the app's service principal `CAN_USE` on the warehouse and `SELECT`
+on the catalog/schema. See the Databricks grant SQL in the troubleshooting
+section below.
 
 ---
 
-## How it handles Cloud's quirks
+## Backend switching
 
-| Quirk | How this app handles it |
+| Env var | Effect |
 |---|---|
-| Filesystem is ephemeral on every cold start | `bootstrap.ensure_demo_db_seeded()` re-creates the SQLite demo DB on first boot, cached with `@st.cache_resource` |
-| Secrets aren't exposed as env vars | `config._secret()` reads `st.secrets` first, then `os.environ`, then `.env`, then defaults |
-| Only the entry script's directory is on `sys.path` | The entry script adds both its own directory (for flat imports like `import db`) and the project root (for `from core.xxx import`) to `sys.path` so the same code runs under pytest, `python -m streamlit run`, and Cloud |
-| No persistent storage for user data | History is kept in `st.session_state` and lives only as long as the browser tab |
+| `DATABRICKS_HOST` unset | SQLAlchemy backend — set `DB_URL` to any SQLAlchemy-compatible URL |
+| `DATABRICKS_HOST` set | Databricks backend — set catalog/schema/warehouse as needed |
+
+```toml
+# Generic Postgres
+DB_URL = "postgresql+psycopg2://user:password@host:5432/mydb"
+
+# Databricks
+DATABRICKS_HOST   = "adb-xxxx.azuredatabricks.net"
+DATABRICKS_CATALOG = "main"
+DATABRICKS_SCHEMA  = "default"
+```
 
 ---
 
@@ -102,25 +129,5 @@ edit the secrets — no code change, no redeploy.
 pytest tests/ -v
 ```
 
-Tests live in [`../tests/`](../tests/) and never touch the demo database —
-they monkeypatch `db._engine` with an in-memory SQLite engine, and stub
-`call_llm()` so no API calls happen. See [`tests/conftest.py`](../tests/conftest.py)
-for the `sys.path` bridge.
-
----
-
-## Switching databases
-
-Set `DB_URL` in secrets / `.env` to anything SQLAlchemy understands:
-
-```toml
-# Postgres
-DB_URL = "postgresql+psycopg2://user:password@host:5432/mydb"
-
-# MySQL
-DB_URL = "mysql+pymysql://user:password@host:3306/mydb"
-```
-
-Add the matching driver to `requirements.txt` (`psycopg2-binary` or
-`PyMySQL`). The auto-seeder is a no-op for non-SQLite URLs — your existing
-schema is left alone.
+Tests monkeypatch `db.sqlalchemy_backend._engine` with an in-memory SQLite
+engine and stub `core.pipeline.call_llm` — no external connections made.

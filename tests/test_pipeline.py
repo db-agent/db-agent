@@ -16,6 +16,7 @@ Teaching note:
 from unittest.mock import patch
 
 import db as db_module
+import db.sqlalchemy_backend as _sa_backend
 import pytest
 from pipeline import run_pipeline
 from sqlalchemy import create_engine, text
@@ -40,7 +41,7 @@ def in_memory_db(monkeypatch):
             (2, 'Gadget', 19.99)
         """))
         conn.commit()
-    monkeypatch.setattr(db_module, "_engine", engine)
+    monkeypatch.setattr(_sa_backend, "_engine", engine)
 
 
 def make_llm_response(sql: str, explanation: str = "A test query.") -> str:

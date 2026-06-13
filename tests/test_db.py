@@ -4,11 +4,12 @@ test_db.py — Tests for the DB layer using an in-memory SQLite database.
 Run:  pytest tests/test_db.py -v
 
 Teaching note:
-    We monkeypatch db._engine so tests never touch the real demo.db.
-    A fresh in-memory SQLite (sqlite:///:memory:) is created per test.
+    _engine lives in db.sqlalchemy_backend (not in the db package itself).
+    We monkeypatch that module-level variable so tests never touch demo.db.
 """
 
 import db as db_module
+import db.sqlalchemy_backend as _sa_backend
 import pytest
 from sqlalchemy import create_engine, text
 
@@ -33,7 +34,7 @@ def in_memory_db(monkeypatch):
         """))
         conn.commit()
 
-    monkeypatch.setattr(db_module, "_engine", engine)
+    monkeypatch.setattr(_sa_backend, "_engine", engine)
     yield engine
 
 

@@ -1,21 +1,10 @@
 """
-streamlit_app.py — The web UI. Run with:
+streamlit_app.py — The web UI. Entry point for all deployments.
 
     streamlit run streamlit_app/streamlit_app.py
 
-Teaching note:
-    Streamlit re-runs this entire file top-to-bottom on every user
-    interaction. Two patterns make that tractable:
-
-      • st.session_state holds anything that must survive reruns
-        (chat history, sidebar inputs that the user has already filled in)
-
-      • st.cache_resource memoizes one-time setup (DB seeding, expensive
-        client construction) for the lifetime of the container
-
-    The UI is intentionally simple — every panel maps to one pipeline stage
-    so a learner can read this file alongside pipeline.py and see the
-    correspondence: prompt → SQL → validation → results.
+Set DATABRICKS_HOST to run against Databricks SQL (Unity Catalog, OAuth).
+Leave it unset to use SQLAlchemy (SQLite / Postgres / MySQL).
 """
 
 import sys
@@ -28,37 +17,31 @@ sys.path.insert(0, str(_HERE))         # app dir → enables flat imports (db, c
 import config
 import pandas as pd
 import streamlit as st
-from bootstrap import ensure_demo_db_seeded
 from core.models import LLMConfig
-from db import check_connection, get_schema
+from db import IS_DATABRICKS_APP, check_connection, get_schema
 from pipeline import run_pipeline
+
+if IS_DATABRICKS_APP:
+    from db import _connect, connection_summary  # type: ignore[attr-defined]
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="DB Agent",
-    page_icon="🗄️",
+    page_title=config.APP_TITLE,
+    page_icon="🧱" if IS_DATABRICKS_APP else "🗄️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ── CSS polish ────────────────────────────────────────────────────────────────
+# ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-.block-container {
-    max-width: 900px;
-    padding-top: 1.5rem;
-    padding-bottom: 4rem;
-}
+.block-container { max-width: 900px; padding-top: 1.5rem; padding-bottom: 4rem; }
 .badge {
-    display: inline-block;
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    padding: 0.2rem 0.65rem;
-    border-radius: 999px;
-    margin-right: 0.35rem;
-    vertical-align: middle;
+    display: inline-block; font-size: 0.72rem; font-weight: 600;
+    letter-spacing: 0.04em; padding: 0.2rem 0.65rem; border-radius: 999px;
+    margin-right: 0.35rem; vertical-align: middle;
 }
+.badge-databricks { background: #FF3621; color: #fff; }
 .badge-blue  { background: #dbeafe; color: #1e40af; }
 .badge-green { background: #dcfce7; color: #166534; }
 .badge-gray  { background: #f1f5f9; color: #475569; }
@@ -67,126 +50,193 @@ st.markdown("""
     text-transform: uppercase; color: #9ca3af; margin-bottom: 0.35rem;
 }
 .question-text {
-    font-size: 1.05rem; font-weight: 600;
-    margin-bottom: 0.75rem; color: inherit;
+    font-size: 1.05rem; font-weight: 600; margin-bottom: 0.75rem; color: inherit;
 }
 </style>
 """, unsafe_allow_html=True)
 
 
-# ── Bootstrap: seed the demo DB once per container ────────────────────────────
-# On Streamlit Community Cloud the filesystem is ephemeral, so the SQLite
-# file disappears on every cold start. ensure_demo_db_seeded() is cached
-# with @st.cache_resource so the actual seed runs at most once per process.
-db_status = ensure_demo_db_seeded()
+# ── Bootstrap: seed the demo DB (SQLite mode only) ────────────────────────────
+if not IS_DATABRICKS_APP:
+    from bootstrap import ensure_demo_db_seeded
+    db_status = ensure_demo_db_seeded()
+else:
+    db_status = ""
 
 
-# ── Session state: seed defaults from config once ────────────────────────────
-if "llm_base_url" not in st.session_state:
-    st.session_state["llm_base_url"] = config.LLM_BASE_URL
-if "llm_api_key" not in st.session_state:
-    st.session_state["llm_api_key"] = config.LLM_API_KEY
-if "llm_model" not in st.session_state:
-    st.session_state["llm_model"] = config.LLM_MODEL
-if "history" not in st.session_state:
-    st.session_state["history"] = []
+# ── Session state: seed defaults once per session ─────────────────────────────
+for _k, _v in [
+    ("llm_base_url", config.LLM_BASE_URL),
+    ("llm_api_key",  config.LLM_API_KEY),
+    ("llm_model",    config.LLM_MODEL),
+    ("history",      []),
+]:
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("### 🗄️ DB Agent")
-    st.caption("Natural-language SQL · safe & explainable")
-    st.divider()
 
-    # ── LLM settings ──────────────────────────────────────────────────────
-    st.markdown("**LLM Settings**")
-    st.caption("Override at any time — values seeded from secrets / .env.")
-    st.text_input(
-        "API endpoint",
-        placeholder="https://api.openai.com/v1",
-        help="Any OpenAI-compatible base URL — OpenAI, GitHub Models, Groq, Ollama, LM Studio.",
-        key="llm_base_url",
-    )
-    st.text_input(
-        "API key",
-        type="password",
-        placeholder="sk-…  (leave blank for Ollama)",
-        key="llm_api_key",
-    )
-    st.text_input(
-        "Model",
-        placeholder="gpt-4o-mini",
-        key="llm_model",
-    )
-    st.divider()
+    if IS_DATABRICKS_APP:
+        st.markdown("### 🧱 DB Agent · Databricks")
+        st.caption("Natural-language SQL on your Databricks data")
+        st.divider()
 
-    # ── Database connection ──────────────────────────────────────────────
-    st.markdown("**Database**")
-    _db_kind = config.DB_URL.split("://")[0] if "://" in config.DB_URL else "unknown"
-    st.markdown(
-        f"<span style='color:#9ca3af;font-size:0.7rem;text-transform:uppercase'>Driver</span><br>"
-        f"<code style='font-size:0.78rem'>{_db_kind}</code>",
-        unsafe_allow_html=True,
-    )
-    if config.IS_SQLITE:
-        st.caption(f"Bootstrap: `{db_status}`")
+        # ── Databricks connection info ─────────────────────────────────────
+        st.markdown("**Databricks Connection**")
+        _conn_info = connection_summary()
+        for _label, _value in _conn_info.items():
+            st.markdown(
+                f"<div style='margin-bottom:4px'>"
+                f"<span style='color:#9ca3af;font-size:0.7rem;text-transform:uppercase'>{_label}</span><br>"
+                f"<code style='font-size:0.78rem'>{_value}</code>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
 
-    if check_connection():
-        st.success("Database connected", icon="✅")
+        with st.spinner("Checking connection…"):
+            try:
+                with _connect() as _c:
+                    with _c.cursor() as _cur:
+                        _cur.execute("SELECT 1")
+                st.success("SQL Warehouse connected", icon="✅")
+            except Exception as _exc:
+                st.error("Cannot reach SQL Warehouse", icon="❌")
+                st.code(f"{type(_exc).__name__}: {_exc}", language="text")
+
+        import os as _os
+        with st.expander("🔧 Debug: runtime env"):
+            _key_raw = _os.environ.get("LLM_API_KEY", "")
+            st.write({
+                "LLM_BASE_URL":     _os.environ.get("LLM_BASE_URL", ""),
+                "LLM_MODEL":        _os.environ.get("LLM_MODEL", ""),
+                "LLM_API_KEY_len":  len(_key_raw),
+                "LLM_API_KEY_head": _key_raw[:4] if _key_raw else "(empty)",
+                "LLM_API_KEY_tail": _key_raw[-4:] if _key_raw else "(empty)",
+            })
+        st.divider()
+
     else:
-        st.error("Database unreachable", icon="❌")
+        st.markdown("### 🗄️ DB Agent")
+        st.caption("Natural-language SQL · safe & explainable")
+        st.divider()
 
-    st.divider()
+        # ── LLM settings ──────────────────────────────────────────────────
+        st.markdown("**LLM Settings**")
+        st.caption("Override at any time — values seeded from secrets / .env.")
+        st.text_input(
+            "API endpoint",
+            placeholder="https://api.openai.com/v1",
+            help="Any OpenAI-compatible base URL — OpenAI, GitHub Models, Groq, Ollama.",
+            key="llm_base_url",
+        )
+        st.text_input(
+            "API key",
+            type="password",
+            placeholder="sk-…  (leave blank for Ollama)",
+            key="llm_api_key",
+        )
+        st.text_input("Model", placeholder="gpt-4o-mini", key="llm_model")
+        st.divider()
 
-    # ── Schema browser ────────────────────────────────────────────────────
+        # ── Database connection ──────────────────────────────────────────
+        st.markdown("**Database**")
+        _db_kind = config.DB_URL.split("://")[0] if "://" in config.DB_URL else "unknown"
+        st.markdown(
+            f"<span style='color:#9ca3af;font-size:0.7rem;text-transform:uppercase'>Driver</span><br>"
+            f"<code style='font-size:0.78rem'>{_db_kind}</code>",
+            unsafe_allow_html=True,
+        )
+        if config.IS_SQLITE:
+            st.caption(f"Bootstrap: `{db_status}`")
+        if check_connection():
+            st.success("Database connected", icon="✅")
+        else:
+            st.error("Database unreachable", icon="❌")
+        st.divider()
+
+    # ── Schema browser (both modes) ────────────────────────────────────────
     st.markdown("**Schema**")
+    if IS_DATABRICKS_APP:
+        if config.DATABRICKS_CATALOG and config.DATABRICKS_SCHEMA:
+            st.caption(f"`{config.DATABRICKS_CATALOG}`.`{config.DATABRICKS_SCHEMA}`")
+        elif config.DATABRICKS_SCHEMA:
+            st.caption(f"`{config.DATABRICKS_SCHEMA}`")
+
     try:
-        schema = get_schema()
-        if schema:
-            for table, columns in schema.items():
-                with st.expander(f"{table}  ({len(columns)} cols)"):
-                    for col in columns:
+        _schema = get_schema()
+        if _schema:
+            for _table, _columns in _schema.items():
+                with st.expander(f"{_table}  ({len(_columns)} cols)"):
+                    for _col in _columns:
                         st.markdown(
-                            f"`{col['name']}` &nbsp;"
-                            f"<span style='color:#9ca3af;font-size:0.8em'>{col['type']}</span>",
+                            f"`{_col['name']}` &nbsp;"
+                            f"<span style='color:#9ca3af;font-size:0.8em'>{_col['type']}</span>",
                             unsafe_allow_html=True,
                         )
         else:
-            st.caption("No tables found.")
-    except Exception as e:
-        st.error(f"Schema unavailable: {e}")
-    st.divider()
+            st.caption(
+                "No tables found. Check DATABRICKS_CATALOG and DATABRICKS_SCHEMA."
+                if IS_DATABRICKS_APP else "No tables found."
+            )
+    except Exception as _e:
+        st.error(f"Schema unavailable: {_e}")
 
-    # ── Examples ──────────────────────────────────────────────────────────
-    st.markdown("**Try an example**")
-    examples = [
-        "How many customers are there?",
-        "Show the top 5 products by price",
-        "List all orders placed in 2024",
-        "Which customers have placed the most orders?",
-        "Total revenue per product",
-    ]
-    for ex in examples:
-        if st.button(ex, key=f"ex_{ex}", use_container_width=True):
-            st.session_state["pending_question"] = ex
+    if not IS_DATABRICKS_APP:
+        st.divider()
+        st.markdown("**Try an example**")
+        for _ex in [
+            "How many customers are there?",
+            "Show the top 5 products by price",
+            "List all orders placed in 2024",
+            "Which customers have placed the most orders?",
+            "Total revenue per product",
+        ]:
+            if st.button(_ex, key=f"ex_{_ex}", use_container_width=True):
+                st.session_state["pending_question"] = _ex
 
 
 # ── Header ────────────────────────────────────────────────────────────────────
-st.markdown("# DB Agent")
-_model_label = st.session_state.get("llm_model") or config.LLM_MODEL or "LLM"
-_db_label = config.DB_URL.split("://")[0] if "://" in config.DB_URL else config.DB_URL
-st.markdown(
-    "Safe, explainable natural-language SQL &nbsp;·&nbsp; "
-    f"<span class='badge badge-blue'>{_model_label}</span>"
-    f"<span class='badge badge-gray'>{_db_label}</span>",
-    unsafe_allow_html=True,
-)
+if IS_DATABRICKS_APP:
+    st.markdown(
+        "# DB Agent &nbsp;<span style='font-size:1rem;font-weight:400'>· Databricks</span>",
+        unsafe_allow_html=True,
+    )
+    _model_label = st.session_state.get("llm_model") or config.LLM_MODEL or "LLM"
+    _catalog_label = (
+        f"{config.DATABRICKS_CATALOG}.{config.DATABRICKS_SCHEMA}"
+        if config.DATABRICKS_CATALOG else config.DATABRICKS_SCHEMA or "default"
+    )
+    _is_dbrx_llm = "serving-endpoints" in (st.session_state.get("llm_base_url") or "")
+    _llm_badge = "badge-databricks" if _is_dbrx_llm else "badge-blue"
+    st.markdown(
+        f"Natural-language SQL on your Delta tables &nbsp;·&nbsp;"
+        f"<span class='badge {_llm_badge}'>{_model_label}</span>"
+        f"<span class='badge badge-gray'>{_catalog_label}</span>",
+        unsafe_allow_html=True,
+    )
+else:
+    st.markdown("# DB Agent")
+    _model_label = st.session_state.get("llm_model") or config.LLM_MODEL or "LLM"
+    _db_label = config.DB_URL.split("://")[0] if "://" in config.DB_URL else config.DB_URL
+    st.markdown(
+        "Safe, explainable natural-language SQL &nbsp;·&nbsp; "
+        f"<span class='badge badge-blue'>{_model_label}</span>"
+        f"<span class='badge badge-gray'>{_db_label}</span>",
+        unsafe_allow_html=True,
+    )
 st.divider()
 
 
 # ── Question input ────────────────────────────────────────────────────────────
 default_question = st.session_state.pop("pending_question", "")
-question = st.chat_input("Ask a question about your data …")
+_placeholder = (
+    "Ask a question about your Databricks data …"
+    if IS_DATABRICKS_APP else
+    "Ask a question about your data …"
+)
+question = st.chat_input(_placeholder)
 active_question = question or default_question
 
 
@@ -204,30 +254,48 @@ if active_question:
 
 # ── Empty state ───────────────────────────────────────────────────────────────
 if not st.session_state["history"]:
-    st.markdown(
-        "<div style='text-align:center;padding:4rem 0;color:#9ca3af;'>"
-        "<div style='font-size:2.5rem;margin-bottom:0.75rem'>🗄️</div>"
-        "<div style='font-size:1rem;font-weight:600;margin-bottom:0.4rem;color:#6b7280'>No queries yet</div>"
-        "<div style='font-size:0.875rem'>Type a question in the box below, or pick an example from the sidebar.</div>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
+    if IS_DATABRICKS_APP:
+        st.markdown(
+            "<div style='text-align:center;padding:2.5rem 0 1rem;color:#9ca3af;'>"
+            "<div style='font-size:2.5rem;margin-bottom:0.75rem'>🧱</div>"
+            "<div style='font-size:1rem;font-weight:600;margin-bottom:0.4rem;color:#6b7280'>No queries yet</div>"
+            "<div style='font-size:0.875rem'>Ask a question above, or try one of these:</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        _examples = [
+            "How many rows are in each table?",
+            "Show me the 10 most recent records",
+            "What are the distinct values in the first column?",
+            "Summarize the data with counts and averages",
+        ]
+        _cols = st.columns(2)
+        for _i, _ex in enumerate(_examples):
+            if _cols[_i % 2].button(_ex, key=f"dbrx_ex_{_i}", use_container_width=True):
+                st.session_state["pending_question"] = _ex
+                st.rerun()
+    else:
+        st.markdown(
+            "<div style='text-align:center;padding:4rem 0;color:#9ca3af;'>"
+            "<div style='font-size:2.5rem;margin-bottom:0.75rem'>🗄️</div>"
+            "<div style='font-size:1rem;font-weight:600;margin-bottom:0.4rem;color:#6b7280'>No queries yet</div>"
+            "<div style='font-size:0.875rem'>Type a question in the box below, or pick an example from the sidebar.</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
 
 # ── Result history ────────────────────────────────────────────────────────────
 for output in reversed(st.session_state["history"]):
     with st.container(border=True):
 
-        # Question heading
         st.markdown("<div class='section-label'>Question</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='question-text'>{output.question}</div>", unsafe_allow_html=True)
 
-        # Hard error (pipeline-level failure)
         if output.error:
             st.error(f"**Execution error** — {output.error}")
             continue
 
-        # SQL · Explanation · Schema context as tabs
         if output.sql_response:
             tab_sql, tab_explain, tab_schema = st.tabs(
                 ["Generated SQL", "Explanation", "Schema context"]
@@ -239,21 +307,18 @@ for output in reversed(st.session_state["history"]):
             with tab_schema:
                 st.code(output.schema_context, language="text")
 
-        # Validation status
         if output.validation:
             if output.validation.is_safe:
                 st.success(f"Safety check passed — {output.validation.reason}", icon="✅")
             else:
                 st.error(f"Safety check failed — {output.validation.reason}", icon="🚫")
-                continue  # blocked: don't render a (nonexistent) result table
+                continue
 
-        # Results table
         if output.rows is not None:
             st.markdown("<div class='section-label'>Results</div>", unsafe_allow_html=True)
             if not output.rows:
                 st.info("Query executed successfully — no rows returned.")
             else:
-                row_count = len(output.rows)
-                st.caption(f"{row_count} row{'s' if row_count != 1 else ''} returned")
+                st.caption(f"{len(output.rows)} row{'s' if len(output.rows) != 1 else ''} returned")
                 df = pd.DataFrame(output.rows, columns=output.columns)
                 st.dataframe(df, use_container_width=True, hide_index=True)

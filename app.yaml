@@ -1,8 +1,12 @@
-# Databricks Apps manifest
-# Deploy: databricks apps deploy db-agent --source-code-path ./databricks_app
-# Docs:   https://docs.databricks.com/dev-tools/databricks-apps/index.html
+# Databricks Apps manifest — deploys the unified db-agent app.
+#
+# Deploy from the repo root:
+#   databricks apps create db-agent --description "Natural-language SQL agent"
+#   databricks apps deploy db-agent --source-code-path .
+#
+# Docs: https://docs.databricks.com/dev-tools/databricks-apps/index.html
 
-command: ["streamlit", "run", "app.py"]
+command: ["streamlit", "run", "streamlit_app/streamlit_app.py"]
 
 env:
   - name: "DATABRICKS_CATALOG"
@@ -12,7 +16,7 @@ env:
   - name: "DATABRICKS_HTTP_PATH"
     value: "/sql/1.0/warehouses/fd728adfdc38070f"
 
-  # GitHub Models (Grok via GitHub Copilot endpoint)
+  # GitHub Models (override to use Databricks Model Serving or any OpenAI-compatible endpoint)
   - name: "LLM_BASE_URL"
     value: "https://models.github.ai/inference"
   - name: "LLM_MODEL"

@@ -1,14 +1,9 @@
 """
-pipeline.py — Thin wrapper that binds the generic core pipeline to this app's
-database layer and prompts.
+pipeline.py — Thin wrapper that binds the core pipeline to the active backend.
 
-Teaching note:
-    The core orchestration lives in core/pipeline.py. This file only supplies
-    the three things that are specific to the streamlit_app:
-
-        get_schema / run_query  ← SQLAlchemy via db.py
-        SYSTEM_PROMPT           ← generic ANSI SQL prompt
-        build_user_prompt       ← schema injected from db.py
+The active backend (SQLAlchemy or Databricks) is selected automatically from
+the environment via the db package. Databricks mode also adds extra forbidden
+keywords to the SQL safety check.
 """
 
 from __future__ import annotations
@@ -16,8 +11,13 @@ from __future__ import annotations
 import config
 from core.models import LLMConfig, PipelineOutput
 from core.pipeline import run_pipeline as _run
-from db import get_schema, run_query
+from db import IS_DATABRICKS_APP, get_schema, run_query
 from prompts import SYSTEM_PROMPT, build_user_prompt
+
+_EXTRA: frozenset[str] = (
+    frozenset({"OPTIMIZE", "VACUUM", "ZORDER", "COPY"})
+    if IS_DATABRICKS_APP else frozenset()
+)
 
 
 def run_pipeline(question: str, llm_config: LLMConfig | None = None) -> PipelineOutput:
@@ -33,4 +33,5 @@ def run_pipeline(question: str, llm_config: LLMConfig | None = None) -> Pipeline
         run_query=run_query,
         system_prompt=SYSTEM_PROMPT,
         build_user_prompt=build_user_prompt,
+        extra_forbidden=_EXTRA,
     )

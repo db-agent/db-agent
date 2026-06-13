@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Seed the demo database
-RUN python scripts/seed_demo_data.py
+RUN python data/seed_demo_data.py
 
 EXPOSE 8501
 
