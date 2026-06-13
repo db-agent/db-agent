@@ -63,3 +63,4 @@ class PipelineOutput(BaseModel):
     rows: Optional[List[Dict[str, Any]]] = None                # populated after step 5
     columns: Optional[List[str]] = None
     error: Optional[str] = None                                # any unexpected runtime error
+    model_used: Optional[str] = None                           # model that produced the SQL

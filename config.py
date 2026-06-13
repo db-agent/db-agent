@@ -140,5 +140,17 @@ DB_URL: str = _resolve_db_url(
 IS_SQLITE: bool = DB_URL.startswith("sqlite:///")
 
 
+# ── Model failover chain ──────────────────────────────────────────────────────
+# DBAGENT_MODEL_CHAIN: comma-separated model IDs tried left-to-right until one
+# succeeds. All models share LLM_BASE_URL and LLM_API_KEY.
+# Example: "gpt-4o,gpt-4o-mini,gpt-3.5-turbo"
+# Unset → single-model mode ([LLM_MODEL]), no failover, zero behavior change.
+_raw_chain = _secret("DBAGENT_MODEL_CHAIN", "").strip()
+LLM_MODEL_CHAIN: list[str] = (
+    [m.strip() for m in _raw_chain.split(",") if m.strip()]
+    if _raw_chain else [LLM_MODEL]
+)
+
+
 # ── Misc ──────────────────────────────────────────────────────────────────────
 APP_TITLE: str = "DB Agent · Databricks" if IS_DATABRICKS_APP else "DB Agent"

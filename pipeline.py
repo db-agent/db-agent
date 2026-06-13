@@ -34,4 +34,5 @@ def run_pipeline(question: str, llm_config: LLMConfig | None = None) -> Pipeline
         system_prompt=SYSTEM_PROMPT,
         build_user_prompt=build_user_prompt,
         extra_forbidden=_EXTRA,
+        model_chain=config.LLM_MODEL_CHAIN,
     )

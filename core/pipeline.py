@@ -40,8 +40,9 @@ from __future__ import annotations
 
 from typing import Callable
 
-from core.llm import call_llm, parse_sql_response
+from core.llm import parse_sql_response
 from core.models import LLMConfig, PipelineOutput, SQLResponse, ValidationResult
+from core.router import call_llm_with_failover
 from core.sql_safety import validate_sql
 
 
@@ -54,6 +55,7 @@ def run_pipeline(
     system_prompt: str,
     build_user_prompt: Callable[[str], str],
     extra_forbidden: frozenset[str] = frozenset(),
+    model_chain: list[str] = [],
 ) -> PipelineOutput:
     """
     Execute the full natural-language → SQL → results pipeline.
@@ -79,8 +81,12 @@ def run_pipeline(
         # Step 1 — build the prompt
         user_prompt = build_user_prompt(question)
 
-        # Step 2 — call the LLM
-        raw_response = call_llm(system_prompt, user_prompt, llm_config)
+        # Step 2 — call the LLM (with ordered failover when chain has >1 model)
+        chain = model_chain or [llm_config.model]
+        raw_response, model_used = call_llm_with_failover(
+            system_prompt, user_prompt, llm_config, chain
+        )
+        output.model_used = model_used
 
         # Step 3 — parse the JSON contract into a SQLResponse
         sql_response: SQLResponse = parse_sql_response(raw_response)

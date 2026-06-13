@@ -204,7 +204,8 @@ if IS_DATABRICKS_APP:
         "# DB Agent &nbsp;<span style='font-size:1rem;font-weight:400'>· Databricks</span>",
         unsafe_allow_html=True,
     )
-    _model_label = st.session_state.get("llm_model") or config.LLM_MODEL or "LLM"
+    _chain = config.LLM_MODEL_CHAIN
+    _model_label = " → ".join(_chain) if len(_chain) > 1 else (_chain[0] if _chain else config.LLM_MODEL)
     _catalog_label = (
         f"{config.DATABRICKS_CATALOG}.{config.DATABRICKS_SCHEMA}"
         if config.DATABRICKS_CATALOG else config.DATABRICKS_SCHEMA or "default"
@@ -219,7 +220,8 @@ if IS_DATABRICKS_APP:
     )
 else:
     st.markdown("# DB Agent")
-    _model_label = st.session_state.get("llm_model") or config.LLM_MODEL or "LLM"
+    _chain = config.LLM_MODEL_CHAIN
+    _model_label = " → ".join(_chain) if len(_chain) > 1 else (st.session_state.get("llm_model") or config.LLM_MODEL or "LLM")
     _db_label = config.DB_URL.split("://")[0] if "://" in config.DB_URL else config.DB_URL
     st.markdown(
         "Safe, explainable natural-language SQL &nbsp;·&nbsp; "
@@ -314,6 +316,9 @@ for output in reversed(st.session_state["history"]):
             else:
                 st.error(f"Safety check failed — {output.validation.reason}", icon="🚫")
                 continue
+
+        if output.model_used and len(config.LLM_MODEL_CHAIN) > 1:
+            st.caption(f"answered by `{output.model_used}`")
 
         if output.rows is not None:
             st.markdown("<div class='section-label'>Results</div>", unsafe_allow_html=True)
