@@ -4,7 +4,7 @@ test_sql_safety.py — Unit tests for the SQL validation layer.
 Run:  pytest tests/test_sql_safety.py -v
 """
 
-from sql_safety import validate_sql
+from core.sql_safety import validate_sql
 
 # ── Safe queries ──────────────────────────────────────────────────────────────
 

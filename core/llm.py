@@ -5,12 +5,13 @@ Teaching note:
     We depend on the OpenAI *protocol*, not the OpenAI *product*. Any service
     that speaks the same JSON-over-HTTP format works without code changes:
 
-        OpenAI            https://api.openai.com/v1
-        GitHub Models     https://models.github.ai/inference
-        Groq              https://api.groq.com/openai/v1
+        OpenAI                    https://api.openai.com/v1
+        GitHub Models             https://models.github.ai/inference
+        Groq                      https://api.groq.com/openai/v1
+        Databricks Model Serving  https://{workspace}/serving-endpoints
+        Ollama (local)            http://localhost:11434/v1
+        LM Studio (local)         http://localhost:1234/v1
         Together / Anyscale / Fireworks / OpenRouter / DeepInfra …
-        Ollama   (local)  http://localhost:11434/v1
-        LM Studio (local) http://localhost:1234/v1
 
     Two functions, intentionally split so they can be tested independently:
 
@@ -27,8 +28,9 @@ from __future__ import annotations
 import json
 import re
 
-from models import LLMConfig, SQLResponse
 from openai import OpenAI
+
+from core.models import LLMConfig, SQLResponse
 
 
 def call_llm(system_prompt: str, user_prompt: str, llm_config: LLMConfig) -> str:
@@ -43,7 +45,7 @@ def call_llm(system_prompt: str, user_prompt: str, llm_config: LLMConfig) -> str
     """
     client = OpenAI(
         base_url=llm_config.base_url,
-        api_key=llm_config.api_key or "no-key",   # local models accept any non-empty string
+        api_key=llm_config.api_key or "no-key",  # local models accept any non-empty string
     )
     response = client.chat.completions.create(
         model=llm_config.model,
@@ -51,7 +53,7 @@ def call_llm(system_prompt: str, user_prompt: str, llm_config: LLMConfig) -> str
             {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_prompt},
         ],
-        temperature=0,   # deterministic output — important for a SQL agent
+        temperature=0,  # deterministic output — important for a SQL agent
     )
     return response.choices[0].message.content or ""
 
@@ -68,10 +70,8 @@ def parse_sql_response(raw: str) -> SQLResponse:
     Raises:
         ValueError if no JSON object can be found anywhere in the response.
     """
-    # Strip any markdown code fences
     text = re.sub(r"```(?:json)?\s*", "", raw).strip().rstrip("`").strip()
 
-    # Stage 1 + 2: maybe the whole thing is now valid JSON
     try:
         data = json.loads(text)
         return SQLResponse(
@@ -81,7 +81,6 @@ def parse_sql_response(raw: str) -> SQLResponse:
     except json.JSONDecodeError:
         pass
 
-    # Stage 3: find the first complete {...} block inside surrounding prose
     match = re.search(r"\{[^{}]*\}", text, re.DOTALL)
     if not match:
         raise ValueError(f"No JSON object found in LLM response:\n{raw}")

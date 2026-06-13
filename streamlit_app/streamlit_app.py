@@ -21,17 +21,16 @@ Teaching note:
 import sys
 from pathlib import Path
 
-# Streamlit adds the entrypoint's directory to sys.path; we add it explicitly
-# too so the module is import-safe under pytest, `python -m streamlit run`,
-# and Streamlit Community Cloud — all three work without surprises.
-sys.path.insert(0, str(Path(__file__).parent))
+_HERE = Path(__file__).parent
+sys.path.insert(0, str(_HERE.parent))  # project root → enables `from core.xxx import`
+sys.path.insert(0, str(_HERE))         # app dir → enables flat imports (db, config, …)
 
 import config
 import pandas as pd
 import streamlit as st
 from bootstrap import ensure_demo_db_seeded
+from core.models import LLMConfig
 from db import check_connection, get_schema
-from models import LLMConfig
 from pipeline import run_pipeline
 
 # ── Page config ───────────────────────────────────────────────────────────────

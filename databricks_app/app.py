@@ -16,13 +16,19 @@ Teaching note:
       • LLM source badge (Databricks Model Serving vs. external)
 """
 
-import streamlit as st
-import pandas as pd
+import sys
+from pathlib import Path
+
+_HERE = Path(__file__).parent
+sys.path.insert(0, str(_HERE.parent))  # project root → enables `from core.xxx import`
+sys.path.insert(0, str(_HERE))         # app dir → enables flat imports (connector, config, …)
 
 import config
-from models import LLMConfig
+import pandas as pd
+import streamlit as st
+from connector import _connect, connection_summary, get_schema
+from core.models import LLMConfig
 from pipeline import run_pipeline
-from connector import get_schema, connection_summary, _connect
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(

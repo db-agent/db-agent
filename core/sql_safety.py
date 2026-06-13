@@ -19,26 +19,38 @@ Teaching note:
         3. Must start with SELECT or WITH.
         4. Must not contain any write / admin keywords.
 
-    We return a ValidationResult instead of raising — the UI shows the reason
-    string verbatim, so a learner can see exactly which rule rejected the query.
+    Pass extra_forbidden to extend the base set for platform-specific
+    maintenance commands (e.g. Databricks: OPTIMIZE, VACUUM, ZORDER, COPY).
 """
+
+from __future__ import annotations
 
 import re
 
-from models import ValidationResult
+from core.models import ValidationResult
 
-# Anything that mutates state, changes permissions, or shells out is banned.
+# Base set — anything that mutates state, changes permissions, or shells out.
 # Word-boundary regex below means a column literally named "updates" won't trip.
-_FORBIDDEN = {
+_BASE_FORBIDDEN: frozenset[str] = frozenset({
     "DROP", "DELETE", "UPDATE", "INSERT", "ALTER",
     "TRUNCATE", "CREATE", "REPLACE", "MERGE", "EXEC",
     "EXECUTE", "GRANT", "REVOKE", "ATTACH", "DETACH",
-}
+})
 
 
-def validate_sql(sql: str) -> ValidationResult:
-    """Return a ValidationResult describing whether the SQL is safe to run."""
+def validate_sql(
+    sql: str,
+    extra_forbidden: frozenset[str] = frozenset(),
+) -> ValidationResult:
+    """
+    Return a ValidationResult describing whether the SQL is safe to run.
 
+    Args:
+        sql             — the SQL string to validate
+        extra_forbidden — additional keywords to block on top of the base set
+                          (use for platform-specific write/maintenance commands)
+    """
+    forbidden = _BASE_FORBIDDEN | extra_forbidden
     stripped = sql.strip()
 
     # ── Rule 1: not empty ────────────────────────────────────────────────────
@@ -63,9 +75,9 @@ def validate_sql(sql: str) -> ValidationResult:
             reason=f"Query must start with SELECT or WITH, got '{first_word}'.",
         )
 
-    # ── Rule 4: no forbidden keywords anywhere ──────────────────────────────
+    # ── Rule 4: no forbidden keywords anywhere ───────────────────────────────
     upper_sql = cleaned.upper()
-    for keyword in _FORBIDDEN:
+    for keyword in forbidden:
         if re.search(rf"\b{keyword}\b", upper_sql):
             return ValidationResult(
                 is_safe=False,
