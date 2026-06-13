@@ -17,21 +17,21 @@
 
 ## What is DB Agent?
 
-DB Agent is a minimal, teachable **natural-language-to-SQL system**. A user asks a question in plain English; DB Agent retrieves relevant schema context, prompts an LLM to generate a SQL query, validates the query against a SELECT-only safety layer, executes it against the target database, and returns the results with every intermediate step visible. It ships with three reference deployments — a Streamlit prototype, a Next.js + FastAPI full-stack app, and a native Databricks App with Unity Catalog integration — so teams can pick the pattern that matches their environment.
+DB Agent is a minimal, teachable **natural-language-to-SQL system**. A user asks a question in plain English; DB Agent retrieves relevant schema context, prompts an LLM to generate a SQL query, validates the query against a SELECT-only safety layer, executes it against the target database, and returns the results with every intermediate step visible. It ships with two reference deployments — a generic Streamlit app and a native Databricks App with Unity Catalog integration — so teams can pick the pattern that matches their environment.
 
 ---
 
-## Three deployment variants
+## Two deployment variants
 
-This repo contains three independent, fully working versions of DB Agent — same agentic pipeline, different deployment targets.
+This repo contains two independent, fully working versions of DB Agent — same agentic pipeline, different deployment targets.
 
-| | [Streamlit App](./streamlit_app/) | [Full-Stack App](./fullstack_app/) | [Databricks App](./databricks_app/) |
-|---|---|---|---|
-| **Stack** | Python + Streamlit | Next.js + FastAPI | Python + Streamlit (native Databricks App) |
-| **Best for** | Rapid prototyping, data teams | Production full-stack demos | Enterprise Databricks deployments |
-| **Auth** | `.env` + API keys | `.env` / AWS Secrets Manager | Databricks OAuth service principal |
-| **SQL target** | SQLite / Postgres / MySQL | SQLite / Postgres / MySQL | Unity Catalog Delta tables |
-| **Deploy on** | Snowflake, Databricks, Docker | AWS (Lambda + API Gateway) | `databricks apps deploy` |
+| | [Streamlit App](./streamlit_app/) | [Databricks App](./databricks_app/) |
+|---|---|---|
+| **Stack** | Python + Streamlit | Python + Streamlit (native Databricks App) |
+| **Best for** | Rapid prototyping, data teams, K8s demos | Enterprise Databricks deployments |
+| **Auth** | `.env` + API keys | Databricks OAuth service principal |
+| **SQL target** | SQLite / Postgres / MySQL | Unity Catalog Delta tables |
+| **Deploy on** | Docker, K8s (DO / AWS EKS) | `databricks apps deploy` |
 
 See each folder's README for setup and deployment instructions.
 
@@ -41,11 +41,11 @@ See each folder's README for setup and deployment instructions.
 
 | Path | Purpose |
 |------|---------|
-| [`streamlit_app/`](./streamlit_app/) | Main Streamlit implementation and teaching reference app |
-| [`fullstack_app/`](./fullstack_app/) | Next.js + FastAPI production-style variant |
-| [`databricks_app/`](./databricks_app/) | Native Databricks App variant |
+| [`core/`](./core/) | Shared pipeline logic: models, LLM client, SQL safety, orchestration |
+| [`streamlit_app/`](./streamlit_app/) | Generic Streamlit app — SQLAlchemy, runs on Docker / K8s |
+| [`databricks_app/`](./databricks_app/) | Native Databricks App — Unity Catalog, OAuth service principal |
 | [`deploy/k8s/`](./deploy/k8s/) | Kubernetes manifests used by CI/CD to run DB Agent |
-| [`infra/terraform/`](./infra/terraform/) | Terraform starters for supporting cloud infrastructure |
+| [`infra/terraform/`](./infra/terraform/) | Terraform for DO managed PostgreSQL, AWS RDS, and EKS |
 | [`modules/`](./modules/) | Learning notebooks that build up the DB Agent concepts |
 
 ---

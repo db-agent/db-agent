@@ -295,7 +295,7 @@ jobs:
       - name: Load CSV into database
         env:
           DB_URL: ${{ needs.do-database.outputs.db-uri }}
-        run: python3 scripts/load_crude_oil.py
+        run: python3 data/load_crude_oil.py
 
   # ════════════════════════════════════════════════════════════════════════════
   # Stage 2a (fast) — Digital Ocean Stack, existing DB
@@ -385,7 +385,7 @@ jobs:
           PG_USER: ${{ secrets.DCO_PG_USER }}
           PG_PASS: ${{ secrets.DCO_PG_PASS }}
           PG_DB: ${{ secrets.DCO_PG_DB || 'defaultdb' }}
-        run: python3 scripts/load_crude_oil.py
+        run: python3 data/load_crude_oil.py
 
   # ════════════════════════════════════════════════════════════════════════════
   # Stage 2b — AWS Stack
@@ -634,7 +634,7 @@ jobs:
           PG_USER: ${{ vars.RDS_DATABASE_USERNAME || 'dbagent' }}
           PG_PASS: ${{ secrets.RDS_DATABASE_PASSWORD }}
           PG_DB: ${{ needs.aws-database.outputs.db-name || 'db_agent' }}
-        run: python3 scripts/load_crude_oil.py
+        run: python3 data/load_crude_oil.py
 
   # ════════════════════════════════════════════════════════════════════════════
   # Stage 3 — Pipeline Summary

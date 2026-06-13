@@ -2,7 +2,7 @@
 seed_demo_data.py — Populate the demo SQLite database.
 
 Run from the project root:
-    python scripts/seed_demo_data.py
+    python data/seed_demo_data.py
 
 Creates three tables:
     customers   — who bought things
@@ -14,7 +14,7 @@ import os
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent.parent / "data" / "demo.db"
+DB_PATH = Path(__file__).parent / "demo.db"
 
 
 def seed():

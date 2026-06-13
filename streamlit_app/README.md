@@ -14,15 +14,18 @@ Serving) see [`../databricks_app/`](../databricks_app/).
 ```
 streamlit_app.py     Streamlit UI — sidebar, schema browser, result panels
   │
-  ├── pipeline.py    Orchestrates the end-to-end flow (start reading here)
-  │     ├── prompts.py     Builds schema-aware system + user prompts
-  │     ├── llm.py         Calls any OpenAI-compatible LLM endpoint
-  │     ├── sql_safety.py  Whitelists SELECT-only SQL before execution
-  │     └── db.py          SQLAlchemy connection, schema reflection, exec
+  ├── pipeline.py    Thin wrapper — binds db + prompts to core/pipeline.py
+  │     ├── prompts.py          Builds schema-aware system + user prompts
+  │     └── db.py               SQLAlchemy connection, schema reflection, exec
   │
   ├── config.py      st.secrets → env → .env → defaults resolution
   ├── bootstrap.py   Auto-seeds the demo SQLite DB on first boot
-  └── models.py      Pydantic contracts (LLMConfig, SQLResponse, …)
+  │
+  └── core/          Shared logic (lives at the project root)
+        ├── pipeline.py    Orchestrates the end-to-end flow (start reading here)
+        ├── llm.py         Calls any OpenAI-compatible LLM endpoint
+        ├── sql_safety.py  Whitelists SELECT-only SQL before execution
+        └── models.py      Pydantic contracts (LLMConfig, SQLResponse, …)
 ```
 
 The pipeline never raises — every failure populates `PipelineOutput.error`
@@ -88,7 +91,7 @@ edit the secrets — no code change, no redeploy.
 |---|---|
 | Filesystem is ephemeral on every cold start | `bootstrap.ensure_demo_db_seeded()` re-creates the SQLite demo DB on first boot, cached with `@st.cache_resource` |
 | Secrets aren't exposed as env vars | `config._secret()` reads `st.secrets` first, then `os.environ`, then `.env`, then defaults |
-| Only the entry script's directory is on `sys.path` | All modules use flat imports (`import db`, `from models import …`); the entry script adds its own directory to `sys.path` explicitly so the same code runs under pytest, `python -m streamlit run`, and Cloud |
+| Only the entry script's directory is on `sys.path` | The entry script adds both its own directory (for flat imports like `import db`) and the project root (for `from core.xxx import`) to `sys.path` so the same code runs under pytest, `python -m streamlit run`, and Cloud |
 | No persistent storage for user data | History is kept in `st.session_state` and lives only as long as the browser tab |
 
 ---

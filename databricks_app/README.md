@@ -29,14 +29,17 @@ Catalog, and Secret Scopes.
 ```
 app.py              Streamlit UI — sidebar, schema browser, result panels
   │
-  ├── pipeline.py   Orchestrates the end-to-end flow
-  │     ├── prompts.py      Builds schema-aware system + user prompts
-  │     ├── llm.py          Calls the LLM via any OpenAI-compatible endpoint
-  │     ├── sql_safety.py   Whitelists SELECT-only SQL before it ever runs
-  │     └── connector.py    Databricks SQL driver — auth, schema, query
+  ├── pipeline.py   Thin wrapper — binds connector + prompts to core/pipeline.py
+  │     ├── prompts.py          Builds schema-aware system + user prompts
+  │     └── connector.py        Databricks SQL driver — auth, schema, query
   │
   ├── config.py     Env-var config, Databricks-aware defaults, secret fetch
-  └── models.py     Pydantic contracts (LLMConfig, SQLResponse, PipelineOutput)
+  │
+  └── core/         Shared logic (lives at the project root)
+        ├── pipeline.py    Orchestrates the end-to-end flow (start reading here)
+        ├── llm.py         Calls the LLM via any OpenAI-compatible endpoint
+        ├── sql_safety.py  Whitelists SELECT-only SQL (+ Databricks extras)
+        └── models.py      Pydantic contracts (LLMConfig, SQLResponse, PipelineOutput)
 ```
 
 The pipeline never raises — errors are captured into `PipelineOutput.error` so
@@ -241,7 +244,7 @@ Every generated query is validated before execution:
 - No Databricks-specific write ops: `OPTIMIZE`, `VACUUM`, `ZORDER`, `COPY INTO`
 - Result set capped at 100 rows in `connector.run_query()`
 
-See [`sql_safety.py`](./sql_safety.py).
+See [`core/sql_safety.py`](../core/sql_safety.py).
 
 ---
 
@@ -256,7 +259,7 @@ Almost always one of:
    minimal: `["streamlit", "run", "app.py"]`.
 2. **You deployed from the wrong path.** `--source-code-path` must point at the
    directory that contains `app.yaml`, not the repo root. If the repo has
-   multiple app folders (`streamlit_app/`, `databricks_app/`, `fullstack_app/`),
+   multiple app folders (`streamlit_app/`, `databricks_app/`),
    Databricks cannot guess which one.
 
 ### "Cannot reach SQL Warehouse"
@@ -325,7 +328,7 @@ databricks secrets put-acl db-agent <app-sp-application-id> READ
 
 | Concept | Module | Where it lives here |
 |---|---|---|
-| LLM call with structured output | 02 | [`llm.py:call_llm`](./llm.py), [`models.py:SQLResponse`](./models.py) |
+| LLM call with structured output | 02 | [`core/llm.py:call_llm`](../core/llm.py), [`core/models.py:SQLResponse`](../core/models.py) |
 | Prompt assembly with schema context | 02 | [`prompts.py`](./prompts.py) |
 | Tool / function around real data | 03 | [`connector.py:get_schema`](./connector.py), [`connector.py:run_query`](./connector.py) |
 | Orchestration loop | 04 | [`pipeline.py:run_pipeline`](./pipeline.py) |

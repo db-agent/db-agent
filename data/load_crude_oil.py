@@ -6,7 +6,7 @@ Accepts connection via either:
   PG_HOST / PG_PORT / PG_USER / PG_PASS / PG_DB          (existing-DB track)
 
 Run from the project root:
-    python scripts/load_crude_oil.py
+    python data/load_crude_oil.py
 """
 
 import csv
@@ -16,7 +16,7 @@ from pathlib import Path
 
 import psycopg
 
-CSV_PATH = Path(__file__).parent.parent / "data" / "Crude_Oil_historical_data.csv"
+CSV_PATH = Path(__file__).parent / "Crude_Oil_historical_data.csv"
 
 CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS crude_oil_prices (

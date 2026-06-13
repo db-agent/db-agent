@@ -9,7 +9,7 @@ Teaching note:
     This module checks for that case and seeds the DB by re-using the same
     script that local developers run by hand:
 
-        python scripts/seed_demo_data.py
+        python data/seed_demo_data.py
 
     Wrapping it in @st.cache_resource means the seeder runs at most once per
     container lifetime, even though Streamlit re-executes the script on every
@@ -54,7 +54,7 @@ def ensure_demo_db_seeded() -> str:
         # Imported lazily so this module stays importable even if the script
         # is missing (e.g. someone trimmed the repo for a minimal deploy).
         import sys
-        scripts_dir = Path(__file__).parent.parent / "scripts"
+        scripts_dir = Path(__file__).parent.parent / "data"
         sys.path.insert(0, str(scripts_dir))
         import seed_demo_data  # type: ignore[import-not-found]
         seed_demo_data.seed()
