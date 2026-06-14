@@ -8,10 +8,11 @@ Teaching note:
     We monkeypatch that module-level variable so tests never touch demo.db.
 """
 
-import db as db_module
-import db.sqlalchemy_backend as _sa_backend
 import pytest
 from sqlalchemy import create_engine, text
+
+import db as db_module
+import db.sqlalchemy_backend as _sa_backend
 
 
 @pytest.fixture(autouse=True)

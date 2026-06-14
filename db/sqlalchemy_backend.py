@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from typing import Any
 
-import config
 from sqlalchemy import create_engine, inspect, text
+
+import config
 
 # check_same_thread=False is required for SQLite when used from Streamlit:
 # Streamlit reruns happen on different threads, and SQLite by default refuses

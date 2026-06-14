@@ -10,8 +10,9 @@ No-op for non-SQLite databases — never mutates a production Postgres/MySQL DB.
 
 from pathlib import Path
 
-import config
 import streamlit as st
+
+import config
 
 
 @st.cache_resource(show_spinner="Seeding demo database…")

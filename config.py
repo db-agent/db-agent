@@ -115,6 +115,7 @@ if not LLM_API_KEY and IS_DATABRICKS_APP:
     _key   = os.environ.get("DATABRICKS_SECRET_KEY",   "github-token")
     try:
         import base64
+
         from databricks.sdk import WorkspaceClient
         _resp = WorkspaceClient().secrets.get_secret(scope=_scope, key=_key)
         LLM_API_KEY = base64.b64decode(_resp.value).decode().strip()

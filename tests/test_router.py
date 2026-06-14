@@ -28,7 +28,7 @@ def test_single_model_returns_response(cfg):
 
 
 def test_empty_chain_falls_back_to_config_model(cfg):
-    with patch("core.router.call_llm", return_value="ok") as mock:
+    with patch("core.router.call_llm", return_value="ok"):
         raw, model = call_llm_with_failover("sys", "user", cfg, [])
     assert model == cfg.model
     assert raw == "ok"

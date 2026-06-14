@@ -15,11 +15,11 @@ Teaching note:
 
 from unittest.mock import patch
 
-import db as db_module
-import db.sqlalchemy_backend as _sa_backend
 import pytest
-from pipeline import run_pipeline
 from sqlalchemy import create_engine, text
+
+import db.sqlalchemy_backend as _sa_backend
+from pipeline import run_pipeline
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

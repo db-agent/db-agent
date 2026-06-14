@@ -16,12 +16,12 @@ IS_DATABRICKS_APP: bool = bool(os.environ.get("DATABRICKS_HOST", "").strip())
 if IS_DATABRICKS_APP:
     try:
         from .databricks_backend import (  # noqa: F401
-            get_schema,
-            run_query,
+            _connect,
             check_connection,
             connection_summary,
-            _connect,
+            get_schema,
             get_warehouse_display_name,
+            run_query,
         )
     except ImportError as exc:
         raise RuntimeError(
@@ -30,7 +30,7 @@ if IS_DATABRICKS_APP:
             f"{exc}"
         ) from exc
 else:
-    from .sqlalchemy_backend import get_schema, run_query, check_connection  # noqa: F401
+    from .sqlalchemy_backend import check_connection, get_schema, run_query  # noqa: F401
 
     def connection_summary() -> dict:
         return {}

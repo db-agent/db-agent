@@ -15,9 +15,10 @@ from pathlib import Path
 # launches the script.
 sys.path.insert(0, str(Path(__file__).parent))
 
-import config
 import pandas as pd
 import streamlit as st
+
+import config
 from core.models import LLMConfig
 from db import IS_DATABRICKS_APP, check_connection, get_schema
 from pipeline import run_pipeline
@@ -221,7 +222,8 @@ if IS_DATABRICKS_APP:
 else:
     st.markdown("# DB Agent")
     _chain = config.LLM_MODEL_CHAIN
-    _model_label = " → ".join(_chain) if len(_chain) > 1 else (st.session_state.get("llm_model") or config.LLM_MODEL or "LLM")
+    _fallback = st.session_state.get("llm_model") or config.LLM_MODEL or "LLM"
+    _model_label = " → ".join(_chain) if len(_chain) > 1 else _fallback
     _db_label = config.DB_URL.split("://")[0] if "://" in config.DB_URL else config.DB_URL
     st.markdown(
         "Safe, explainable natural-language SQL &nbsp;·&nbsp; "
@@ -282,7 +284,9 @@ if not st.session_state["history"]:
             "<div style='text-align:center;padding:4rem 0;color:#9ca3af;'>"
             "<div style='font-size:2.5rem;margin-bottom:0.75rem'>🗄️</div>"
             "<div style='font-size:1rem;font-weight:600;margin-bottom:0.4rem;color:#6b7280'>No queries yet</div>"
-            "<div style='font-size:0.875rem'>Type a question in the box below, or pick an example from the sidebar.</div>"
+            "<div style='font-size:0.875rem'>"
+            "Type a question in the box below, or pick an example from the sidebar."
+            "</div>"
             "</div>",
             unsafe_allow_html=True,
         )
