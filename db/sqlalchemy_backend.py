@@ -13,12 +13,22 @@ from sqlalchemy import create_engine, inspect, text
 
 import config
 
+def _normalize_url(url: str) -> str:
+    # SQLAlchemy maps postgresql:// to psycopg2, but we ship psycopg (v3).
+    # Rewrite bare postgresql:// / postgres:// to the explicit psycopg3 dialect.
+    for prefix in ("postgresql://", "postgres://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
 # check_same_thread=False is required for SQLite when used from Streamlit:
 # Streamlit reruns happen on different threads, and SQLite by default refuses
 # to share a connection across threads.
+_db_url = _normalize_url(config.DB_URL)
 _engine = create_engine(
-    config.DB_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in config.DB_URL else {},
+    _db_url,
+    connect_args={"check_same_thread": False} if "sqlite" in _db_url else {},
 )
 
 
