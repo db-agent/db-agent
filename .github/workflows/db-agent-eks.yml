@@ -1,41 +1,32 @@
 name: DB Agent — EKS Deploy
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Manual trigger only.
+# Manual trigger only. Assumes the EKS cluster already exists.
 #
-# Stage 1 — Terraform: provision (or update) the EKS cluster.
-# Stage 2 — ECR: build and push the Docker image.
-# Stage 3 — K8s: apply manifests and roll out the new image.
+# Stage 1 — Build and push Docker image to ECR.
+# Stage 2 — Apply k8s manifests and roll out the new image.
 #
 # Required secrets (GitHub → Settings → Secrets):
-#   AWS_ACCESS_KEY_ID         — IAM user/role key ID
-#   AWS_SECRET_ACCESS_KEY     — IAM user/role secret
-#   DB_URL                    — SQLAlchemy connection string  (non-Databricks)
-#   LLM_API_KEY               — LLM provider API key
+#   AWS_ACCESS_KEY_ID     — IAM key with ECR + EKS permissions
+#   AWS_SECRET_ACCESS_KEY — Corresponding secret
+#   DB_URL                — postgresql://user:pass@host:5432/db_agent
+#   LLM_API_KEY           — LLM provider API key
 #
 # Required variables (GitHub → Settings → Variables):
-#   AWS_REGION                — e.g. us-east-1  (default: us-east-1)
-#   AWS_ACCOUNT_ID            — 12-digit AWS account ID
-#   ECR_REPOSITORY            — ECR repo name    (default: db-agent)
-#   TF_BACKEND_BUCKET         — S3 bucket for Terraform state  (optional)
-#   TF_BACKEND_KEY_EKS        — S3 key for EKS state           (optional)
-#   TF_BACKEND_DYNAMODB_TABLE — DynamoDB table for state lock  (optional)
-#   LLM_BASE_URL              — OpenAI-compatible LLM endpoint
-#   LLM_MODEL                 — model name
-#   DBAGENT_MODEL_CHAIN       — comma-separated failover chain (optional)
+#   AWS_REGION            — e.g. us-east-1
+#   AWS_ACCOUNT_ID        — 12-digit AWS account ID
+#   EKS_CLUSTER_NAME      — e.g. db-agent-eks
+#   ECR_REPOSITORY        — ECR repo name (default: db-agent)
+#   LLM_BASE_URL          — OpenAI-compatible endpoint
+#   LLM_MODEL             — model name
+#
+# Optional variables:
+#   DBAGENT_MODEL_CHAIN   — comma-separated failover chain
 # ──────────────────────────────────────────────────────────────────────────────
 
 on:
   workflow_dispatch:
     inputs:
-      terraform_action:
-        description: "Terraform action to run"
-        required: true
-        default: "apply"
-        type: choice
-        options:
-          - apply
-          - plan-only
       image_tag:
         description: "Docker image tag (default: git SHA)"
         required: false
@@ -46,90 +37,18 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  PYTHON_VERSION: "3.11"
-  AWS_REGION:     ${{ vars.AWS_REGION || 'us-east-1' }}
-  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY || 'db-agent' }}
-  TF_WORKING_DIR: infra/terraform/aws-eks
+  AWS_REGION:       ${{ vars.AWS_REGION || 'us-east-1' }}
+  ECR_REPOSITORY:   ${{ vars.ECR_REPOSITORY || 'db-agent' }}
+  EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME || 'db-agent-eks' }}
 
 jobs:
 
   # ════════════════════════════════════════════════════════════════════════════
-  # Stage 1 — Terraform (EKS cluster)
-  # ════════════════════════════════════════════════════════════════════════════
-
-  terraform:
-    name: "Terraform | EKS Cluster"
-    runs-on: ubuntu-latest
-    outputs:
-      cluster_name: ${{ steps.outputs.outputs.cluster_name }}
-      configure_kubectl: ${{ steps.outputs.outputs.configure_kubectl }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            ${{ env.AWS_REGION }}
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "~1.9"
-          terraform_wrapper: false
-
-      - name: Terraform init
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        env:
-          TF_BACKEND_BUCKET:         ${{ vars.TF_BACKEND_BUCKET }}
-          TF_BACKEND_KEY:            ${{ vars.TF_BACKEND_KEY_EKS || 'db-agent/aws-eks.tfstate' }}
-          TF_BACKEND_DYNAMODB_TABLE: ${{ vars.TF_BACKEND_DYNAMODB_TABLE }}
-        run: |
-          if [ -n "$TF_BACKEND_BUCKET" ]; then
-            printf 'terraform {\n  backend "s3" {}\n}\n' > backend.generated.tf
-            BACKEND_ARGS=(
-              "-backend-config=bucket=$TF_BACKEND_BUCKET"
-              "-backend-config=key=$TF_BACKEND_KEY"
-              "-backend-config=region=${{ env.AWS_REGION }}"
-            )
-            [ -n "$TF_BACKEND_DYNAMODB_TABLE" ] && \
-              BACKEND_ARGS+=("-backend-config=dynamodb_table=$TF_BACKEND_DYNAMODB_TABLE")
-            terraform init "${BACKEND_ARGS[@]}"
-          else
-            echo "⚠️  No S3 backend configured — using local state."
-            terraform init
-          fi
-
-      - name: Terraform plan
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        env:
-          TF_VAR_aws_region:  ${{ env.AWS_REGION }}
-          TF_VAR_environment: ${{ vars.ENVIRONMENT || 'dev' }}
-        run: terraform plan -out=tfplan
-
-      - name: Terraform apply
-        if: inputs.terraform_action == 'apply'
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform apply -auto-approve tfplan
-
-      - name: Capture Terraform outputs
-        id: outputs
-        if: inputs.terraform_action == 'apply'
-        working-directory: ${{ env.TF_WORKING_DIR }}
-        run: |
-          CLUSTER_NAME=$(terraform output -raw cluster_name)
-          KUBECONFIG_CMD=$(terraform output -raw configure_kubectl)
-          echo "cluster_name=$CLUSTER_NAME"        >> "$GITHUB_OUTPUT"
-          echo "configure_kubectl=$KUBECONFIG_CMD" >> "$GITHUB_OUTPUT"
-
-  # ════════════════════════════════════════════════════════════════════════════
-  # Stage 2 — Build and push to ECR
+  # Stage 1 — Build and push to ECR
   # ════════════════════════════════════════════════════════════════════════════
 
   build:
     name: "ECR | Build & Push"
-    needs: terraform
-    if: inputs.terraform_action == 'apply'
     runs-on: ubuntu-latest
     outputs:
       image_uri: ${{ steps.push.outputs.image_uri }}
@@ -153,45 +72,37 @@ jobs:
           aws ecr create-repository \
             --repository-name "$ECR_REPOSITORY" \
             --image-scanning-configuration scanOnPush=true \
-            --tags Key=Project,Value=db-agent Key=ManagedBy,Value=github-actions
+            --tags Key=Project,Value=db-agent
 
       - name: Determine image tag
         id: tag
         run: |
           TAG="${{ inputs.image_tag }}"
-          if [ -z "$TAG" ]; then
-            TAG="${{ github.sha }}"
-          fi
+          [ -z "$TAG" ] && TAG="${{ github.sha }}"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push Docker image
+      - name: Build and push
         id: push
         env:
-          REGISTRY:    ${{ steps.login-ecr.outputs.registry }}
-          TAG:         ${{ steps.tag.outputs.tag }}
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          TAG:      ${{ steps.tag.outputs.tag }}
         run: |
           IMAGE_URI="$REGISTRY/$ECR_REPOSITORY:$TAG"
-          LATEST_URI="$REGISTRY/$ECR_REPOSITORY:latest"
-
-          docker build -t "$IMAGE_URI" -t "$LATEST_URI" .
+          docker build -t "$IMAGE_URI" -t "$REGISTRY/$ECR_REPOSITORY:latest" .
           docker push "$IMAGE_URI"
-          docker push "$LATEST_URI"
-
+          docker push "$REGISTRY/$ECR_REPOSITORY:latest"
           echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
-          echo "Pushed: $IMAGE_URI"
 
   # ════════════════════════════════════════════════════════════════════════════
-  # Stage 3 — Deploy to EKS
+  # Stage 2 — Deploy to existing EKS cluster
   # ════════════════════════════════════════════════════════════════════════════
 
   deploy:
     name: "K8s | Deploy to EKS"
-    needs: [terraform, build]
-    if: inputs.terraform_action == 'apply'
+    needs: build
     runs-on: ubuntu-latest
     env:
-      CLUSTER_NAME: ${{ needs.terraform.outputs.cluster_name }}
-      IMAGE_URI:    ${{ needs.build.outputs.image_uri }}
+      IMAGE_URI: ${{ needs.build.outputs.image_uri }}
 
     steps:
       - uses: actions/checkout@v4
@@ -203,14 +114,15 @@ jobs:
           aws-region:            ${{ env.AWS_REGION }}
 
       - name: Configure kubectl
-        run: aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME"
+        run: |
+          aws eks update-kubeconfig \
+            --region "$AWS_REGION" \
+            --name "${{ vars.EKS_CLUSTER_NAME }}"
 
       - name: Apply namespace
         run: kubectl apply -f deploy/k8s/base/namespace.yaml
 
-      - name: Create / update db-agent-secrets
-        # Upsert the Kubernetes Secret that the Deployment mounts via envFrom.
-        # The secret holds DB_URL and LLM_API_KEY at minimum.
+      - name: Upsert app secret
         run: |
           kubectl create secret generic db-agent-secrets \
             --namespace db-agent \
@@ -219,16 +131,13 @@ jobs:
             --from-literal=LLM_BASE_URL="${{ vars.LLM_BASE_URL }}" \
             --from-literal=LLM_MODEL="${{ vars.LLM_MODEL }}" \
             --from-literal=DBAGENT_MODEL_CHAIN="${{ vars.DBAGENT_MODEL_CHAIN }}" \
-            --save-config \
-            --dry-run=client -o yaml | kubectl apply -f -
+            --save-config --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Apply service
         run: kubectl apply -f deploy/k8s/base/service.yaml
 
-      - name: Apply deployment with updated image
+      - name: Deploy with updated image
         run: |
-          # Render the deployment manifest with the exact image built in Stage 2,
-          # then apply. Using sed avoids a Kustomize dependency.
           sed "s|image: .*|image: $IMAGE_URI|" deploy/k8s/base/deployment.yaml \
             | kubectl apply -f -
 
@@ -238,75 +147,26 @@ jobs:
             --namespace db-agent \
             --timeout=300s
 
-      - name: Get LoadBalancer URL
-        id: lb
+      - name: Get app URL
+        id: url
         run: |
-          # The Classic/NLB LoadBalancer may take 30–90 s to provision.
           for i in $(seq 1 12); do
-            HOSTNAME=$(kubectl get svc db-agent \
-              --namespace db-agent \
+            ENDPOINT=$(kubectl get svc db-agent -n db-agent \
               -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
-            IP=$(kubectl get svc db-agent \
-              --namespace db-agent \
-              -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
-            ENDPOINT="${HOSTNAME:-$IP}"
-            if [ -n "$ENDPOINT" ]; then
-              echo "endpoint=$ENDPOINT" >> "$GITHUB_OUTPUT"
-              break
-            fi
+            [ -n "$ENDPOINT" ] && break
             echo "Waiting for LoadBalancer... ($i/12)"
             sleep 10
           done
           echo "endpoint=${ENDPOINT:-(pending)}" >> "$GITHUB_OUTPUT"
 
-      - name: Write step summary
-        env:
-          ENDPOINT: ${{ steps.lb.outputs.endpoint }}
+      - name: Step summary
         run: |
           {
             echo "### DB Agent deployed to EKS ✅"
-            echo ""
             echo "| | |"
             echo "|---|---|"
-            echo "| **Cluster**  | \`$CLUSTER_NAME\` |"
-            echo "| **Image**    | \`$IMAGE_URI\` |"
-            echo "| **Endpoint** | http://$ENDPOINT |"
-            echo "| **Commit**   | \`${{ github.sha }}\` |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  # ════════════════════════════════════════════════════════════════════════════
-  # Stage 4 — Summary
-  # ════════════════════════════════════════════════════════════════════════════
-
-  summary:
-    name: "Pipeline Summary"
-    needs: [terraform, build, deploy]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Write pipeline summary
-        env:
-          R_TF:     ${{ needs.terraform.result }}
-          R_BUILD:  ${{ needs.build.result }}
-          R_DEPLOY: ${{ needs.deploy.result }}
-        run: |
-          icon() {
-            case "$1" in
-              success)   echo "✅" ;;
-              failure)   echo "❌" ;;
-              skipped)   echo "⏭️" ;;
-              cancelled) echo "🚫" ;;
-              *)         echo "⏳" ;;
-            esac
-          }
-          {
-            echo "## DB Agent — EKS Deploy"
-            echo ""
-            echo "**Action:** \`${{ inputs.terraform_action }}\`  |  **Commit:** \`${{ github.sha }}\`  |  **Ref:** \`${{ github.ref_name }}\`"
-            echo ""
-            echo "| Job | Result |"
-            echo "|-----|--------|"
-            echo "| Terraform (EKS) | $(icon $R_TF) \`$R_TF\` |"
-            echo "| Build & Push    | $(icon $R_BUILD) \`$R_BUILD\` |"
-            echo "| K8s Deploy      | $(icon $R_DEPLOY) \`$R_DEPLOY\` |"
+            echo "| **Cluster** | \`${{ vars.EKS_CLUSTER_NAME }}\` |"
+            echo "| **Image**   | \`$IMAGE_URI\` |"
+            echo "| **URL**     | http://${{ steps.url.outputs.endpoint }} |"
+            echo "| **Commit**  | \`${{ github.sha }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
