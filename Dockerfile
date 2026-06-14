@@ -9,9 +9,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source
 COPY . .
 
-# Seed the demo database
-RUN python data/seed_demo_data.py
-
 EXPOSE 8501
 
 # Streamlit config: disable telemetry, bind to 0.0.0.0

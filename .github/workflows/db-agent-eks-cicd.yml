@@ -199,14 +199,25 @@ jobs:
         run: kubectl apply -f deploy/k8s/base/namespace.yaml
 
       - name: Upsert app secret
+        env:
+          DB_URL:               ${{ secrets.DB_URL }}
+          LLM_API_KEY:          ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL:         ${{ vars.LLM_BASE_URL }}
+          LLM_MODEL:            ${{ vars.LLM_MODEL }}
+          DBAGENT_MODEL_CHAIN:  ${{ vars.DBAGENT_MODEL_CHAIN }}
         run: |
+          # Build --from-literal args only for non-empty values so a missing
+          # GitHub variable never overwrites a value already in the secret.
+          ARGS=()
+          [ -n "$DB_URL" ]              && ARGS+=(--from-literal=DB_URL="$DB_URL")
+          [ -n "$LLM_API_KEY" ]         && ARGS+=(--from-literal=LLM_API_KEY="$LLM_API_KEY")
+          [ -n "$LLM_BASE_URL" ]        && ARGS+=(--from-literal=LLM_BASE_URL="$LLM_BASE_URL")
+          [ -n "$LLM_MODEL" ]           && ARGS+=(--from-literal=LLM_MODEL="$LLM_MODEL")
+          [ -n "$DBAGENT_MODEL_CHAIN" ] && ARGS+=(--from-literal=DBAGENT_MODEL_CHAIN="$DBAGENT_MODEL_CHAIN")
+
           kubectl create secret generic db-agent-secrets \
             --namespace db-agent \
-            --from-literal=DB_URL="${{ secrets.DB_URL }}" \
-            --from-literal=LLM_API_KEY="${{ secrets.LLM_API_KEY }}" \
-            --from-literal=LLM_BASE_URL="${{ vars.LLM_BASE_URL }}" \
-            --from-literal=LLM_MODEL="${{ vars.LLM_MODEL }}" \
-            --from-literal=DBAGENT_MODEL_CHAIN="${{ vars.DBAGENT_MODEL_CHAIN }}" \
+            "${ARGS[@]}" \
             --save-config --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Apply service
