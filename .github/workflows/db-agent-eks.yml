@@ -1,108 +1,54 @@
 name: DB Agent — EKS Deploy
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Manual trigger only. Assumes the EKS cluster already exists.
-#
-# Stage 1 — Build and push Docker image to ECR.
-# Stage 2 — Apply k8s manifests and roll out the new image.
+# Manual trigger only. Deploys the Docker Hub image to an existing EKS cluster.
 #
 # Required secrets (GitHub → Settings → Secrets):
-#   AWS_ACCESS_KEY_ID     — IAM key with ECR + EKS permissions
+#   AWS_ACCESS_KEY_ID     — IAM key with EKS permissions
 #   AWS_SECRET_ACCESS_KEY — Corresponding secret
 #   DB_URL                — postgresql://user:pass@host:5432/db_agent
 #   LLM_API_KEY           — LLM provider API key
 #
 # Required variables (GitHub → Settings → Variables):
 #   AWS_REGION            — e.g. us-east-1
-#   AWS_ACCOUNT_ID        — 12-digit AWS account ID
 #   EKS_CLUSTER_NAME      — e.g. db-agent-eks
-#   ECR_REPOSITORY        — ECR repo name (default: db-agent)
 #   LLM_BASE_URL          — OpenAI-compatible endpoint
 #   LLM_MODEL             — model name
 #
 # Optional variables:
+#   DOCKER_IMAGE          — Docker Hub image (default: becloudready/db-agent:latest)
 #   DBAGENT_MODEL_CHAIN   — comma-separated failover chain
 # ──────────────────────────────────────────────────────────────────────────────
 
 on:
   workflow_dispatch:
     inputs:
-      image_tag:
-        description: "Docker image tag (default: git SHA)"
+      aws_region:
+        description: "AWS region"
         required: false
-        default: ""
+        default: "us-east-1"
+      eks_cluster_name:
+        description: "EKS cluster name"
+        required: false
+        default: "db-agent-eks"
+      image_tag:
+        description: "Docker Hub image tag to deploy"
+        required: false
+        default: "latest"
 
 concurrency:
   group: eks-deploy-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  AWS_REGION:       ${{ vars.AWS_REGION || 'us-east-1' }}
-  ECR_REPOSITORY:   ${{ vars.ECR_REPOSITORY || 'db-agent' }}
-  EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME || 'db-agent-eks' }}
-
 jobs:
-
-  # ════════════════════════════════════════════════════════════════════════════
-  # Stage 1 — Build and push to ECR
-  # ════════════════════════════════════════════════════════════════════════════
-
-  build:
-    name: "ECR | Build & Push"
-    runs-on: ubuntu-latest
-    outputs:
-      image_uri: ${{ steps.push.outputs.image_uri }}
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            ${{ env.AWS_REGION }}
-
-      - name: Login to ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Ensure ECR repository exists
-        run: |
-          aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" 2>/dev/null || \
-          aws ecr create-repository \
-            --repository-name "$ECR_REPOSITORY" \
-            --image-scanning-configuration scanOnPush=true \
-            --tags Key=Project,Value=db-agent
-
-      - name: Determine image tag
-        id: tag
-        run: |
-          TAG="${{ inputs.image_tag }}"
-          [ -z "$TAG" ] && TAG="${{ github.sha }}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push
-        id: push
-        env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          TAG:      ${{ steps.tag.outputs.tag }}
-        run: |
-          IMAGE_URI="$REGISTRY/$ECR_REPOSITORY:$TAG"
-          docker build -t "$IMAGE_URI" -t "$REGISTRY/$ECR_REPOSITORY:latest" .
-          docker push "$IMAGE_URI"
-          docker push "$REGISTRY/$ECR_REPOSITORY:latest"
-          echo "image_uri=$IMAGE_URI" >> "$GITHUB_OUTPUT"
-
-  # ════════════════════════════════════════════════════════════════════════════
-  # Stage 2 — Deploy to existing EKS cluster
-  # ════════════════════════════════════════════════════════════════════════════
 
   deploy:
     name: "K8s | Deploy to EKS"
-    needs: build
     runs-on: ubuntu-latest
     env:
-      IMAGE_URI: ${{ needs.build.outputs.image_uri }}
+      AWS_REGION:       ${{ inputs.aws_region }}
+      EKS_CLUSTER_NAME: ${{ inputs.eks_cluster_name }}
+      IMAGE:            becloudready/db-agent:${{ inputs.image_tag }}
 
     steps:
       - uses: actions/checkout@v4
@@ -115,9 +61,7 @@ jobs:
 
       - name: Configure kubectl
         run: |
-          aws eks update-kubeconfig \
-            --region "$AWS_REGION" \
-            --name "${{ vars.EKS_CLUSTER_NAME }}"
+          aws eks update-kubeconfig --region "$AWS_REGION" --name "$EKS_CLUSTER_NAME"
 
       - name: Apply namespace
         run: kubectl apply -f deploy/k8s/base/namespace.yaml
@@ -136,9 +80,9 @@ jobs:
       - name: Apply service
         run: kubectl apply -f deploy/k8s/base/service.yaml
 
-      - name: Deploy with updated image
+      - name: Deploy
         run: |
-          sed "s|image: .*|image: $IMAGE_URI|" deploy/k8s/base/deployment.yaml \
+          sed "s|image: .*|image: $IMAGE|" deploy/k8s/base/deployment.yaml \
             | kubectl apply -f -
 
       - name: Wait for rollout
@@ -162,11 +106,11 @@ jobs:
       - name: Step summary
         run: |
           {
-            echo "### DB Agent deployed to EKS ✅"
+            echo "### DB Agent deployed ✅"
             echo "| | |"
             echo "|---|---|"
-            echo "| **Cluster** | \`${{ vars.EKS_CLUSTER_NAME }}\` |"
-            echo "| **Image**   | \`$IMAGE_URI\` |"
+            echo "| **Cluster** | \`$EKS_CLUSTER_NAME\` |"
+            echo "| **Image**   | \`$IMAGE\` |"
             echo "| **URL**     | http://${{ steps.url.outputs.endpoint }} |"
             echo "| **Commit**  | \`${{ github.sha }}\` |"
           } >> "$GITHUB_STEP_SUMMARY"
