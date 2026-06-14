@@ -13,6 +13,7 @@ from sqlalchemy import create_engine, inspect, text
 
 import config
 
+
 def _normalize_url(url: str) -> str:
     # SQLAlchemy maps postgresql:// to psycopg2, but we ship psycopg (v3).
     # Rewrite bare postgresql:// / postgres:// to the explicit psycopg3 dialect.
