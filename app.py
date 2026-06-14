@@ -27,9 +27,11 @@ if IS_DATABRICKS_APP:
     from db import _connect, connection_summary  # type: ignore[attr-defined]
 
 # ── Page config ───────────────────────────────────────────────────────────────
+_LOGO = Path(__file__).parent / "assets" / "logo.png"
+
 st.set_page_config(
     page_title=config.APP_TITLE,
-    page_icon="🧱" if IS_DATABRICKS_APP else "🗄️",
+    page_icon=str(_LOGO) if _LOGO.exists() else ("🧱" if IS_DATABRICKS_APP else "🗄️"),
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -77,8 +79,11 @@ for _k, _v in [
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
 
+    if _LOGO.exists():
+        st.image(str(_LOGO), width=120)
+
     if IS_DATABRICKS_APP:
-        st.markdown("### 🧱 DB Agent · Databricks")
+        st.markdown("### DB Agent · Databricks")
         st.caption("Natural-language SQL on your Databricks data")
         st.divider()
 
@@ -107,7 +112,7 @@ with st.sidebar:
         st.divider()
 
     else:
-        st.markdown("### 🗄️ DB Agent")
+        st.markdown("### DB Agent")
         st.caption("Natural-language SQL · safe & explainable")
         st.divider()
 
