@@ -21,19 +21,16 @@ DB Agent is a minimal, teachable **natural-language-to-SQL system**. A user asks
 
 ---
 
-## Two deployment variants
+## Deployment modes
 
-This repo contains two independent, fully working versions of DB Agent — same agentic pipeline, different deployment targets.
+A single `app.py` entry point serves both targets — the backend is selected automatically at startup based on the `DATABRICKS_HOST` environment variable.
 
-| | [Streamlit App](./streamlit_app/) | [Databricks App](./databricks_app/) |
+| | Standard | Databricks App |
 |---|---|---|
-| **Stack** | Python + Streamlit | Python + Streamlit (native Databricks App) |
-| **Best for** | Rapid prototyping, data teams, K8s demos | Enterprise Databricks deployments |
-| **Auth** | `.env` + API keys | Databricks OAuth service principal |
-| **SQL target** | SQLite / Postgres / MySQL | Unity Catalog Delta tables |
-| **Deploy on** | Docker, K8s (DO / AWS EKS) | `databricks apps deploy` |
-
-See each folder's README for setup and deployment instructions.
+| **Trigger** | `DATABRICKS_HOST` not set | `DATABRICKS_HOST` set |
+| **SQL target** | SQLite / PostgreSQL / MySQL | Unity Catalog Delta tables |
+| **Auth** | `.env` / K8s secret | Databricks OAuth service principal |
+| **Deploy on** | Docker · AWS EKS | `databricks apps deploy` |
 
 ---
 
