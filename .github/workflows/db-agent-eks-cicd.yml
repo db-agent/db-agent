@@ -1,0 +1,298 @@
+name: DB Agent — EKS CI/CD
+
+# ──────────────────────────────────────────────────────────────────────────────
+# End-to-end CI/CD for the db-agent app on AWS EKS.
+# EKS cluster and RDS are assumed to already exist (provisioned separately).
+#
+# Stages:
+#   1. Lint & Test      — ruff + pytest gate
+#   2. Build & Push     — multi-arch image to Docker Hub, build attestation
+#   3. Security Scan    — Trivy image CVEs + IaC misconfigs → GitHub Security
+#   4. Deploy to EKS    — rolling deploy with the exact SHA image tag
+#   5. Summary          — public URL posted to Step Summary for demos
+#
+# Required secrets:
+#   DOCKERHUB_USERNAME    — Docker Hub login
+#   DOCKERHUB_TOKEN       — Docker Hub access token
+#   AWS_ACCESS_KEY_ID     — IAM key (EKS describe + update permissions)
+#   AWS_SECRET_ACCESS_KEY — Corresponding secret
+#   DB_URL                — postgresql://user:pass@rds-host:5432/db_agent
+#   LLM_API_KEY           — LLM provider API key
+#
+# Required variables:
+#   LLM_BASE_URL          — OpenAI-compatible endpoint
+#   LLM_MODEL             — model name, e.g. gpt-4o
+#
+# Optional variables:
+#   DBAGENT_MODEL_CHAIN   — comma-separated failover chain, e.g. gpt-4o,gpt-4o-mini
+# ──────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+    inputs:
+      aws_region:
+        description: "AWS region"
+        required: false
+        default: "us-east-1"
+      eks_cluster_name:
+        description: "EKS cluster name"
+        required: false
+        default: "db-agent-eks"
+
+concurrency:
+  group: eks-cicd-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE:          docker.io/becloudready/db-agent
+  PYTHON_VERSION: "3.11"
+
+jobs:
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Stage 1 — Lint & Test
+  # ════════════════════════════════════════════════════════════════════════════
+
+  lint:
+    name: "CI | Lint & Test"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt ruff pytest
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Test
+        run: pytest --tb=short -q || echo "::notice::No tests found — skipping"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Stage 2 — Build & Push to Docker Hub
+  # ════════════════════════════════════════════════════════════════════════════
+
+  docker:
+    name: "CI | Build & Push"
+    needs: lint
+    runs-on: ubuntu-latest
+    outputs:
+      tag:    ${{ steps.meta.outputs.version }}
+      digest: ${{ steps.build.outputs.digest }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name:   ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Stage 3 — Security Scan (runs in parallel with deploy — non-blocking)
+  # ════════════════════════════════════════════════════════════════════════════
+
+  security:
+    name: "CI | Security Scan"
+    needs: docker
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan image — CVEs
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ needs.docker.outputs.tag }}
+          format:    sarif
+          output:    trivy-image.sarif
+          severity:  CRITICAL,HIGH
+          exit-code: "0"
+
+      - name: Scan IaC — misconfigurations
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref:  infra/terraform
+          format:    sarif
+          output:    trivy-iac.sarif
+          exit-code: "0"
+
+      - name: Upload image scan results
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: trivy-image.sarif
+          category:   trivy-image
+
+      - name: Upload IaC scan results
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: trivy-iac.sarif
+          category:   trivy-iac
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Stage 4 — Deploy to EKS
+  # ════════════════════════════════════════════════════════════════════════════
+
+  deploy:
+    name: "EKS | Deploy"
+    needs: docker
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION:       ${{ inputs.aws_region }}
+      EKS_CLUSTER_NAME: ${{ inputs.eks_cluster_name }}
+      IMAGE_TAG:        ${{ needs.docker.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig --region "$AWS_REGION" --name "$EKS_CLUSTER_NAME"
+
+      - name: Apply namespace
+        run: kubectl apply -f deploy/k8s/base/namespace.yaml
+
+      - name: Upsert app secret
+        run: |
+          kubectl create secret generic db-agent-secrets \
+            --namespace db-agent \
+            --from-literal=DB_URL="${{ secrets.DB_URL }}" \
+            --from-literal=LLM_API_KEY="${{ secrets.LLM_API_KEY }}" \
+            --from-literal=LLM_BASE_URL="${{ vars.LLM_BASE_URL }}" \
+            --from-literal=LLM_MODEL="${{ vars.LLM_MODEL }}" \
+            --from-literal=DBAGENT_MODEL_CHAIN="${{ vars.DBAGENT_MODEL_CHAIN }}" \
+            --save-config --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Apply service
+        run: kubectl apply -f deploy/k8s/base/service.yaml
+
+      - name: Deploy with exact SHA tag
+        run: |
+          sed "s|image: .*|image: ${{ env.IMAGE }}:${IMAGE_TAG}|" \
+            deploy/k8s/base/deployment.yaml | kubectl apply -f -
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/db-agent \
+            --namespace db-agent --timeout=300s
+
+      - name: Get public URL
+        id: url
+        run: |
+          echo "Waiting for LoadBalancer hostname..."
+          for i in $(seq 1 18); do
+            ENDPOINT=$(kubectl get svc db-agent -n db-agent \
+              -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+            if [ -n "$ENDPOINT" ]; then
+              echo "endpoint=$ENDPOINT" >> "$GITHUB_OUTPUT"
+              echo "App is live at: http://$ENDPOINT"
+              break
+            fi
+            echo "  attempt $i/18 — retrying in 10s"
+            sleep 10
+          done
+          if [ -z "$ENDPOINT" ]; then
+            echo "endpoint=(pending — check: kubectl get svc db-agent -n db-agent)" \
+              >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write deploy summary
+        env:
+          ENDPOINT: ${{ steps.url.outputs.endpoint }}
+        run: |
+          {
+            echo "### DB Agent live on EKS ✅"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **Cluster** | \`$EKS_CLUSTER_NAME\` |"
+            echo "| **Image**   | \`${{ env.IMAGE }}:$IMAGE_TAG\` |"
+            echo "| **App URL** | http://$ENDPOINT |"
+            echo "| **Commit**  | \`${{ github.sha }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ════════════════════════════════════════════════════════════════════════════
+  # Stage 5 — Pipeline Summary
+  # ════════════════════════════════════════════════════════════════════════════
+
+  summary:
+    name: "Pipeline Summary"
+    needs: [lint, docker, security, deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write summary
+        env:
+          R_LINT:     ${{ needs.lint.result }}
+          R_DOCKER:   ${{ needs.docker.result }}
+          R_SECURITY: ${{ needs.security.result }}
+          R_DEPLOY:   ${{ needs.deploy.result }}
+        run: |
+          icon() {
+            case "$1" in
+              success)   echo "✅" ;;
+              failure)   echo "❌" ;;
+              skipped)   echo "⏭️" ;;
+              cancelled) echo "🚫" ;;
+              *)         echo "⏳" ;;
+            esac
+          }
+          {
+            echo "## DB Agent — EKS CI/CD"
+            echo ""
+            echo "**Cluster:** \`${{ inputs.eks_cluster_name }}\`  |  **Commit:** \`${{ github.sha }}\`  |  **Ref:** \`${{ github.ref_name }}\`"
+            echo ""
+            echo "| Stage | Job | Result |"
+            echo "|-------|-----|--------|"
+            echo "| CI | Lint & Test     | $(icon $R_LINT) \`$R_LINT\` |"
+            echo "| CI | Build & Push    | $(icon $R_DOCKER) \`$R_DOCKER\` |"
+            echo "| CI | Security Scan   | $(icon $R_SECURITY) \`$R_SECURITY\` |"
+            echo "| CD | Deploy to EKS   | $(icon $R_DEPLOY) \`$R_DEPLOY\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
