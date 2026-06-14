@@ -34,19 +34,6 @@ A single `app.py` entry point serves both targets — the backend is selected au
 
 ---
 
-## Repository layout
-
-| Path | Purpose |
-|------|---------|
-| [`core/`](./core/) | Shared pipeline logic: models, LLM client, SQL safety, orchestration |
-| [`streamlit_app/`](./streamlit_app/) | Generic Streamlit app — SQLAlchemy, runs on Docker / K8s |
-| [`databricks_app/`](./databricks_app/) | Native Databricks App — Unity Catalog, OAuth service principal |
-| [`deploy/k8s/`](./deploy/k8s/) | Kubernetes manifests used by CI/CD to run DB Agent |
-| [`infra/terraform/`](./infra/terraform/) | Terraform for DO managed PostgreSQL, AWS RDS, and EKS |
-| [`modules/`](./modules/) | Learning notebooks that build up the DB Agent concepts |
-
----
-
 ## Features
 
 - **Text-to-SQL** — natural language to SELECT queries via any LLM
