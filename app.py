@@ -68,10 +68,7 @@ else:
 
 # ── Session state: seed defaults once per session ─────────────────────────────
 for _k, _v in [
-    ("llm_base_url", config.LLM_BASE_URL),
-    ("llm_api_key",  config.LLM_API_KEY),
-    ("llm_model",    config.LLM_MODEL),
-    ("history",      []),
+    ("history", []),
 ]:
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -107,16 +104,6 @@ with st.sidebar:
                 st.error("Cannot reach SQL Warehouse", icon="❌")
                 st.code(f"{type(_exc).__name__}: {_exc}", language="text")
 
-        import os as _os
-        with st.expander("🔧 Debug: runtime env"):
-            _key_raw = _os.environ.get("LLM_API_KEY", "")
-            st.write({
-                "LLM_BASE_URL":     _os.environ.get("LLM_BASE_URL", ""),
-                "LLM_MODEL":        _os.environ.get("LLM_MODEL", ""),
-                "LLM_API_KEY_len":  len(_key_raw),
-                "LLM_API_KEY_head": _key_raw[:4] if _key_raw else "(empty)",
-                "LLM_API_KEY_tail": _key_raw[-4:] if _key_raw else "(empty)",
-            })
         st.divider()
 
     else:
@@ -124,22 +111,19 @@ with st.sidebar:
         st.caption("Natural-language SQL · safe & explainable")
         st.divider()
 
-        # ── LLM settings ──────────────────────────────────────────────────
-        st.markdown("**LLM Settings**")
-        st.caption("Override at any time — values seeded from secrets / .env.")
-        st.text_input(
-            "API endpoint",
-            placeholder="https://api.openai.com/v1",
-            help="Any OpenAI-compatible base URL — OpenAI, GitHub Models, Groq, Ollama.",
-            key="llm_base_url",
-        )
-        st.text_input(
-            "API key",
-            type="password",
-            placeholder="sk-…  (leave blank for Ollama)",
-            key="llm_api_key",
-        )
-        st.text_input("Model", placeholder="gpt-4o-mini", key="llm_model")
+        # ── LLM info (read-only) ───────────────────────────────────────────
+        st.markdown("**LLM**")
+        for _label, _value in [
+            ("Endpoint", config.LLM_BASE_URL or "default"),
+            ("Model",    config.LLM_MODEL    or "—"),
+        ]:
+            st.markdown(
+                f"<div style='margin-bottom:4px'>"
+                f"<span style='color:#9ca3af;font-size:0.7rem;text-transform:uppercase'>{_label}</span><br>"
+                f"<code style='font-size:0.78rem'>{_value}</code>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
         st.divider()
 
         # ── Database connection ──────────────────────────────────────────
@@ -248,9 +232,9 @@ active_question = question or default_question
 # ── Run pipeline ──────────────────────────────────────────────────────────────
 if active_question:
     llm_config = LLMConfig(
-        base_url=st.session_state.get("llm_base_url", config.LLM_BASE_URL),
-        api_key =st.session_state.get("llm_api_key",  config.LLM_API_KEY),
-        model   =st.session_state.get("llm_model",    config.LLM_MODEL),
+        base_url=config.LLM_BASE_URL,
+        api_key =config.LLM_API_KEY,
+        model   =config.LLM_MODEL,
     )
     with st.spinner("Generating SQL …"):
         output = run_pipeline(active_question, llm_config=llm_config)
