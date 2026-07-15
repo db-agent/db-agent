@@ -82,7 +82,7 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     outputs:
-      tag:    ${{ steps.meta.outputs.version }}
+      tag:    ${{ steps.sha.outputs.tag }}
       digest: ${{ steps.build.outputs.digest }}
     permissions:
       contents: read
@@ -90,6 +90,9 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@v4
+
+      - id: sha
+        run: echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/login-action@v3
         with:
@@ -190,6 +193,28 @@ jobs:
           aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Grant cluster access
+        run: |
+          CALLER_ARN=$(aws sts get-caller-identity --query Arn --output text)
+          CURRENT_MODE=$(aws eks describe-cluster \
+            --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" \
+            --query 'cluster.accessConfig.authenticationMode' --output text)
+          if [ "$CURRENT_MODE" = "CONFIG_MAP" ]; then
+            echo "Enabling API auth mode (one-time)..."
+            aws eks update-cluster-config \
+              --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" \
+              --access-config authenticationMode=API_AND_CONFIG_MAP
+            aws eks wait cluster-active --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+          fi
+          aws eks create-access-entry \
+            --cluster-name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" \
+            --principal-arn "$CALLER_ARN" 2>/dev/null || true
+          aws eks associate-access-policy \
+            --cluster-name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" \
+            --principal-arn "$CALLER_ARN" \
+            --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy \
+            --access-scope '{"type":"cluster"}' 2>/dev/null || true
 
       - name: Configure kubectl
         run: |
