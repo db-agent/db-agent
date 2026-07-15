@@ -197,24 +197,37 @@ jobs:
       - name: Grant cluster access
         run: |
           CALLER_ARN=$(aws sts get-caller-identity --query Arn --output text)
+          echo "CI identity: $CALLER_ARN"
+
           CURRENT_MODE=$(aws eks describe-cluster \
             --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" \
             --query 'cluster.accessConfig.authenticationMode' --output text)
+          echo "Cluster auth mode: $CURRENT_MODE"
+
           if [ "$CURRENT_MODE" = "CONFIG_MAP" ]; then
-            echo "Enabling API auth mode (one-time)..."
+            echo "Switching to API_AND_CONFIG_MAP (one-time, ~2 min)..."
             aws eks update-cluster-config \
               --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" \
               --access-config authenticationMode=API_AND_CONFIG_MAP
             aws eks wait cluster-active --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+            echo "Auth mode updated."
           fi
+
+          echo "Creating access entry..."
           aws eks create-access-entry \
             --cluster-name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" \
-            --principal-arn "$CALLER_ARN" 2>/dev/null || true
+            --principal-arn "$CALLER_ARN" \
+            || echo "Access entry already exists — skipping"
+
+          echo "Associating cluster-admin policy..."
           aws eks associate-access-policy \
             --cluster-name "$EKS_CLUSTER_NAME" --region "$AWS_REGION" \
             --principal-arn "$CALLER_ARN" \
             --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy \
-            --access-scope '{"type":"cluster"}' 2>/dev/null || true
+            --access-scope '{"type":"cluster"}'
+
+          echo "Waiting 10 s for access propagation..."
+          sleep 10
 
       - name: Configure kubectl
         run: |
