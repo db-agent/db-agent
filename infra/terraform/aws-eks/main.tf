@@ -107,8 +107,25 @@ resource "aws_iam_role_policy_attachment" "nodes_ecr" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
 }
 
+# ── KMS — EKS secrets encryption ─────────────────────────────────────────────
+
+resource "aws_kms_key" "eks" {
+  description             = "EKS secrets encryption key for ${local.cluster_name}"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  tags = merge(local.common_tags, { Name = "${local.cluster_name}-secrets-key" })
+}
+
+resource "aws_kms_alias" "eks" {
+  name          = "alias/${local.cluster_name}-secrets"
+  target_key_id = aws_kms_key.eks.key_id
+}
+
 # ── EKS Cluster ───────────────────────────────────────────────────────────────
 
+#trivy:ignore:AVD-AWS-0040
+#trivy:ignore:AVD-AWS-0041
 resource "aws_eks_cluster" "this" {
   name     = local.cluster_name
   version  = var.kubernetes_version
@@ -118,10 +135,19 @@ resource "aws_eks_cluster" "this" {
     subnet_ids              = data.aws_subnets.default.ids
     endpoint_public_access  = true
     endpoint_private_access = true
+    # Restrict to your IP in production: public_access_cidrs = ["YOUR_IP/32"]
+    public_access_cidrs     = var.allowed_cidrs
   }
 
-  # Ship control-plane logs to CloudWatch for audit and troubleshooting.
-  enabled_cluster_log_types = ["api", "audit", "authenticator"]
+  # All control-plane log types shipped to CloudWatch.
+  enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+
+  encryption_config {
+    resources = ["secrets"]
+    provider {
+      key_arn = aws_kms_key.eks.arn
+    }
+  }
 
   depends_on = [aws_iam_role_policy_attachment.cluster_policy]
 

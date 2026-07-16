@@ -61,3 +61,9 @@ variable "node_max_size" {
   type        = number
   default     = 4
 }
+
+variable "allowed_cidrs" {
+  description = "CIDRs allowed to reach the EKS public API endpoint. Restrict to your IP in production (e.g. [\"YOUR_IP/32\"])."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}

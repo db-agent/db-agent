@@ -2,6 +2,11 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Upgrade OS packages (picks up available Debian security patches)
+# then pin pip and wheel to versions with known CVEs resolved
+RUN apt-get update && apt-get upgrade -y && apt-get clean && rm -rf /var/lib/apt/lists/*
+RUN pip install --upgrade "pip>=26.1.2" wheel
+
 # Install dependencies first (layer caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

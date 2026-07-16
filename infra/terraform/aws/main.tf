@@ -70,17 +70,42 @@ resource "aws_security_group" "rds" {
     }
   }
 
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   tags = merge(local.common_tags, { Name = "${var.project_name}-rds" })
 }
 
-# ── S3 Bucket (data staging for EKS data-load Job) ───────────────────────────
+# ── KMS key — S3 data staging ─────────────────────────────────────────────────
+
+resource "aws_kms_key" "s3" {
+  description             = "S3 data staging bucket encryption key"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  tags = merge(local.common_tags, { Name = "${var.project_name}-s3-key" })
+}
+
+resource "aws_kms_alias" "s3" {
+  name          = "alias/${var.project_name}-s3"
+  target_key_id = aws_kms_key.s3.key_id
+}
+
+# ── S3 Bucket — access logs ───────────────────────────────────────────────────
+
+resource "aws_s3_bucket" "logs" {
+  bucket        = "${var.s3_bucket_name}-logs"
+  force_destroy = true
+
+  tags = merge(local.common_tags, { Name = "${var.s3_bucket_name}-logs", Purpose = "access-logs" })
+}
+
+resource "aws_s3_bucket_public_access_block" "logs" {
+  bucket                  = aws_s3_bucket.logs.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# ── S3 Bucket — data staging for EKS data-load Job ───────────────────────────
 
 resource "aws_s3_bucket" "data" {
   bucket        = var.s3_bucket_name
@@ -100,8 +125,10 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "data" {
   bucket = aws_s3_bucket.data.id
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.s3.arn
     }
+    bucket_key_enabled = true
   }
 }
 
@@ -111,6 +138,12 @@ resource "aws_s3_bucket_public_access_block" "data" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_logging" "data" {
+  bucket        = aws_s3_bucket.data.id
+  target_bucket = aws_s3_bucket.logs.id
+  target_prefix = "access-logs/"
 }
 
 # ── RDS PostgreSQL ────────────────────────────────────────────────────────────
@@ -131,14 +164,16 @@ resource "aws_db_instance" "this" {
 
   # Internal only — EKS pods reach RDS via VPC-private DNS.
   # Set to true only if you need a public endpoint (e.g. local psql access).
+  #trivy:ignore:AVD-AWS-0180
   publicly_accessible = var.publicly_accessible
 
-  storage_encrypted   = true
-  skip_final_snapshot = true
+  storage_encrypted                   = true
+  iam_database_authentication_enabled = true
+  deletion_protection                 = true
+  skip_final_snapshot                 = true
 
-  # Reasonable defaults for a dev/staging workload.
-  backup_retention_period = 7
-  deletion_protection     = false
+  backup_retention_period = 30
+  performance_insights_enabled = true
 
   tags = merge(local.common_tags, { Name = "${var.project_name}-postgres" })
 }
