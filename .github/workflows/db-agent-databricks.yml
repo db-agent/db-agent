@@ -132,11 +132,20 @@ jobs:
               --description "Natural-language SQL agent (db-agent)"
           fi
 
+      - name: Sync source code to workspace
+        env:
+          APP_NAME: ${{ inputs.app_name }}
+        run: |
+          WORKSPACE_PATH="/Workspace/apps/${APP_NAME}"
+          databricks workspace mkdirs "$WORKSPACE_PATH"
+          databricks workspace import-dir . "$WORKSPACE_PATH" --overwrite
+          echo "WORKSPACE_PATH=$WORKSPACE_PATH" >> "$GITHUB_ENV"
+
       - name: Deploy to Databricks Apps
         env:
           APP_NAME: ${{ inputs.app_name }}
         run: |
-          databricks apps deploy "$APP_NAME" --source-code-path .
+          databricks apps deploy "$APP_NAME" --source-code-path "$WORKSPACE_PATH"
 
       - name: Get app URL
         if: success()
