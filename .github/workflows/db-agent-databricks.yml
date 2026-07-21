@@ -141,6 +141,27 @@ jobs:
           databricks workspace import-dir . "$WORKSPACE_PATH" --overwrite
           echo "WORKSPACE_PATH=$WORKSPACE_PATH" >> "$GITHUB_ENV"
 
+      - name: Start app if not running
+        env:
+          APP_NAME: ${{ inputs.app_name }}
+        run: |
+          STATE=$(databricks apps get "$APP_NAME" --output json \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('compute_status',{}).get('state','UNKNOWN'))")
+          echo "Current app state: $STATE"
+          if [ "$STATE" != "RUNNING" ]; then
+            echo "Starting app..."
+            databricks apps start "$APP_NAME"
+            echo "Waiting for RUNNING state..."
+            for i in $(seq 1 24); do
+              STATE=$(databricks apps get "$APP_NAME" --output json \
+                | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('compute_status',{}).get('state','UNKNOWN'))")
+              echo "  attempt $i/24 — state: $STATE"
+              [ "$STATE" = "RUNNING" ] && break
+              sleep 10
+            done
+          fi
+          [ "$STATE" = "RUNNING" ] || { echo "App failed to reach RUNNING state"; exit 1; }
+
       - name: Deploy to Databricks Apps
         env:
           APP_NAME: ${{ inputs.app_name }}
