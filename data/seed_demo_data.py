@@ -28,7 +28,7 @@ _USE_POSTGRES = DB_URL and not DB_URL.startswith("sqlite")
 
 def _get_connection():
     if _USE_POSTGRES:
-        from sqlalchemy import create_engine, text
+        from sqlalchemy import create_engine
         engine = create_engine(DB_URL)
         return engine.connect(), "postgres"
     os.makedirs(DB_PATH.parent, exist_ok=True)
@@ -155,7 +155,12 @@ def seed():
                     [dict(a=r[0],b=r[1],c=r[2],d=r[3],e=r[4]) for r in customers])
         cur.execute(text("INSERT INTO products (id,name,category,price) VALUES (:a,:b,:c,:d)"),
                     [dict(a=r[0],b=r[1],c=r[2],d=r[3]) for r in products])
-        cur.execute(text("INSERT INTO orders (id,customer_id,product_id,quantity,ordered_at,status) VALUES (:a,:b,:c,:d,:e,:f)"),
+        _order_sql = (
+            "INSERT INTO orders "
+            "(id,customer_id,product_id,quantity,ordered_at,status) "
+            "VALUES (:a,:b,:c,:d,:e,:f)"
+        )
+        cur.execute(text(_order_sql),
                     [dict(a=r[0],b=r[1],c=r[2],d=r[3],e=r[4],f=r[5]) for r in orders])
         conn.commit()
         conn.close()

@@ -26,12 +26,11 @@ import re
 import sys
 from pathlib import Path
 
+import pandas as pd
 from dotenv import load_dotenv
+from sqlalchemy import create_engine, text
 
 load_dotenv(Path(__file__).parent.parent / ".env")
-
-import pandas as pd
-from sqlalchemy import create_engine, text
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
