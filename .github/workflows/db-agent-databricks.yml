@@ -148,19 +148,19 @@ jobs:
           STATE=$(databricks apps get "$APP_NAME" --output json \
             | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('compute_status',{}).get('state','UNKNOWN'))")
           echo "Current app state: $STATE"
-          if [ "$STATE" != "RUNNING" ]; then
+          if [ "$STATE" != "ACTIVE" ]; then
             echo "Starting app..."
             databricks apps start "$APP_NAME"
-            echo "Waiting for RUNNING state..."
+            echo "Waiting for ACTIVE state..."
             for i in $(seq 1 24); do
               STATE=$(databricks apps get "$APP_NAME" --output json \
                 | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('compute_status',{}).get('state','UNKNOWN'))")
               echo "  attempt $i/24 — state: $STATE"
-              [ "$STATE" = "RUNNING" ] && break
+              [ "$STATE" = "ACTIVE" ] && break
               sleep 10
             done
           fi
-          [ "$STATE" = "RUNNING" ] || { echo "App failed to reach RUNNING state"; exit 1; }
+          [ "$STATE" = "ACTIVE" ] || { echo "App failed to reach ACTIVE state"; exit 1; }
 
       - name: Deploy to Databricks Apps
         env:
