@@ -44,6 +44,29 @@ A single `app.py` entry point serves both targets — the backend is selected au
 
 ---
 
+## Local setup
+
+```bash
+git clone https://github.com/db-agent/db-agent.git && cd db-agent
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # defaults to SQLite + OpenAI-compatible LLM
+streamlit run app.py
+```
+
+**Quick start with a local LLM (Ollama, no API key needed):**
+
+```bash
+ollama pull qwen2.5-coder:7b   # or any model you prefer
+./run_local.sh
+```
+
+`run_local.sh` points the app at the bundled SQLite demo DB and a local Ollama
+endpoint without touching `.env`. See `.env.example` for Postgres/MySQL,
+Groq, and cross-platform memory (`MEMORY_*`) options.
+
+---
+
 ## Learning modules
 
 New to AI agents? Work through the modules in order — each one builds on the last:
