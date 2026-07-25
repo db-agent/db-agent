@@ -19,6 +19,7 @@ import pandas as pd
 import streamlit as st
 
 import config
+from core.memory import fetch_relevant_memories
 from core.models import LLMConfig
 from db import IS_DATABRICKS_APP, check_connection, get_schema
 from pipeline import run_pipeline
@@ -213,6 +214,40 @@ with st.sidebar:
             )
     except Exception as _e:
         st.error(f"Schema unavailable: {_e}")
+        _schema = {}
+
+    # ── Suggested from other agents (cross-platform memory) ─────────────────
+    if config.MEMORY_ENABLED:
+        st.divider()
+        st.markdown("**Suggested from other agents**")
+        st.caption(f"Context shared via `{config.MEMORY_BACKEND}` memory · this agent: `{config.DBAGENT_ID}`")
+
+        @st.cache_data(ttl=60, show_spinner=False)
+        def _cached_memories(table_names: tuple[str, ...], agent_id: str):
+            llm_config = LLMConfig(
+                base_url=config.LLM_BASE_URL, api_key=config.LLM_API_KEY, model=config.LLM_MODEL,
+            )
+            query_text = (
+                "Recent activity relevant to tables: " + ", ".join(table_names)
+                if table_names else "recent activity"
+            )
+            return fetch_relevant_memories(query_text, llm_config, config, top_k=3)
+
+        _memories = _cached_memories(tuple(sorted(_schema.keys())), config.DBAGENT_ID)
+        if not _memories:
+            st.caption("No cross-agent context yet.")
+        else:
+            for _mem in _memories:
+                with st.container(border=True):
+                    st.caption(f"from `{_mem.source_agent}` ({_mem.source_db_kind})")
+                    st.markdown(
+                        f"<span style='font-size:0.85rem'>{_mem.insight_summary}</span>",
+                        unsafe_allow_html=True,
+                    )
+                    for _i, _followup in enumerate(_mem.suggested_followups):
+                        if st.button(_followup, key=f"mem_{_mem.record_id}_{_i}", use_container_width=True):
+                            st.session_state["pending_question"] = _followup
+                            st.rerun()
 
     if not IS_DATABRICKS_APP:
         st.divider()

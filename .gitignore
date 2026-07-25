@@ -60,6 +60,7 @@ coverage.xml
 *.sqlite
 *.sqlite3
 *.db-shm
+data/memory_store.jsonl
 *.db-wal
 # keep the data/ placeholder committed
 !**/data/.gitkeep

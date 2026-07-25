@@ -8,7 +8,10 @@ keywords to the SQL safety check.
 
 from __future__ import annotations
 
+import threading
+
 import config
+from core.memory import write_memory
 from core.models import LLMConfig, PipelineOutput
 from core.pipeline import run_pipeline as _run
 from db import IS_DATABRICKS_APP, get_schema, run_query
@@ -26,7 +29,7 @@ def run_pipeline(question: str, llm_config: LLMConfig | None = None) -> Pipeline
         api_key=config.LLM_API_KEY,
         model=config.LLM_MODEL,
     )
-    return _run(
+    output = _run(
         question,
         active_config,
         get_schema=get_schema,
@@ -36,3 +39,14 @@ def run_pipeline(question: str, llm_config: LLMConfig | None = None) -> Pipeline
         extra_forbidden=_EXTRA,
         model_chain=config.LLM_MODEL_CHAIN,
     )
+
+    if config.MEMORY_ENABLED:
+        # Fire-and-forget: memory is cross-platform context, not a critical
+        # path — never block the UI on a second LLM call + store write.
+        threading.Thread(
+            target=write_memory,
+            args=(output, active_config, config),
+            daemon=True,
+        ).start()
+
+    return output

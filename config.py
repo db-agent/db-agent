@@ -153,5 +153,37 @@ LLM_MODEL_CHAIN: list[str] = (
 )
 
 
+# ── Cross-platform contextual memory ────────────────────────────────────────
+# Lets separate DB Agent instances (e.g. an OLTP agent on SQL Server and an
+# OLAP agent on Snowflake/Databricks, running in different security/subnet
+# islands with no path between them) share redacted, LLM-summarized insight
+# through a common store instead of a live connection to each other.
+#
+# DBAGENT_ID must be unique per running instance — it's how a record is
+# tagged on write and excluded on read (an agent never "suggests" its own
+# memories back to itself).
+DBAGENT_ID: str = _secret("DBAGENT_ID", "databricks" if IS_DATABRICKS_APP else "local")
+
+MEMORY_ENABLED: bool = _secret("MEMORY_ENABLED", "true").lower() in ("1", "true", "yes")
+# "local"     — JSONL file on disk, numpy cosine similarity. No cloud setup;
+#               this is the default so the feature works out of the box.
+# "s3vectors" — Amazon S3 Vectors (preview) via boto3. Requires
+#               MEMORY_S3_BUCKET / MEMORY_ORG_ID / MEMORY_S3_REGION and a
+#               pre-provisioned vector bucket + index.
+MEMORY_BACKEND: str = _secret("MEMORY_BACKEND", "local")
+MEMORY_S3_BUCKET: str = _secret("MEMORY_S3_BUCKET", "")
+MEMORY_S3_REGION: str = _secret("MEMORY_S3_REGION", "us-east-1")
+MEMORY_ORG_ID: str = _secret("MEMORY_ORG_ID", "demo-org")  # vector index name
+MEMORY_TTL_SECONDS: int = int(_secret("MEMORY_TTL_SECONDS", str(7 * 24 * 3600)))  # 7 days
+MEMORY_DB_KIND: str = _secret(
+    "MEMORY_DB_KIND",
+    "databricks" if IS_DATABRICKS_APP else (DB_URL.split("://")[0] if "://" in DB_URL else "unknown"),
+)
+
+# Embedding model — must be served by the same LLM_BASE_URL endpoint.
+# OpenAI-compatible default; override for Ollama (e.g. "nomic-embed-text").
+EMBEDDING_MODEL: str = _secret("EMBEDDING_MODEL", "text-embedding-3-small")
+
+
 # ── Misc ──────────────────────────────────────────────────────────────────────
 APP_TITLE: str = "DB Agent · Databricks" if IS_DATABRICKS_APP else "DB Agent"

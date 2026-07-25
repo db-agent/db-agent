@@ -6,6 +6,11 @@ pydantic>=2.0.0
 openai>=1.30.0
 python-dotenv>=1.0.0
 pandas>=2.0.0
+numpy>=1.26.0
+
+# Cross-platform contextual memory — boto3 only required when
+# MEMORY_BACKEND=s3vectors (local backend has no AWS dependency)
+boto3>=1.42.0
 
 # Databricks backend — only used when DATABRICKS_HOST is set
 databricks-sql-connector>=3.4.0
