@@ -296,7 +296,9 @@ app.post("/api/ask", async (req, res) => {
 
     // Fire-and-forget: memory is cross-platform context, not a critical path
     // — never block the response on a second LLM call + store write.
-    writeMemory(llm, output, MEMORY);
+    void writeMemory(llm, output, MEMORY).catch((err) => {
+      console.warn(`[memory] write failed: ${err?.message || err}`);
+    });
   } catch (exc) {
     res.status(500).json({ error: String(exc.message || exc) });
   }
