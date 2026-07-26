@@ -97,7 +97,6 @@ Row count returned: ${rowCount}
     sourceDbKind: dbKind,
     createdAt: new Date().toISOString(),
     ttlEpoch: Math.floor(now + ttlSeconds),
-    question: output.question,
     entities: data.entities || [],
     insightSummary: data.insight_summary || "",
     suggestedFollowups: data.suggested_followups || [],

@@ -42,7 +42,6 @@ export interface MemoryRecord {
   sourceDbKind: string;
   createdAt: string;
   ttlEpoch: number;
-  question: string;
   entities: string[];
   insightSummary: string;
   suggestedFollowups: string[];
