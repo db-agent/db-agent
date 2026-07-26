@@ -27,8 +27,8 @@ function App() {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchConfig().then(setConfig);
-    fetchSchema().then(setSchema);
+    fetchConfig().then(setConfig).catch(() => setConfig(null));
+    fetchSchema().then(setSchema).catch(() => setSchema(null));
   }, []);
 
   useEffect(() => {
