@@ -20,6 +20,16 @@
 DB Agent is a minimal **natural-language-to-SQL system**. A user asks a question in plain English; DB Agent retrieves relevant schema context, prompts an LLM to generate a SQL query, validates the query against a SELECT-only safety layer, executes it against the target database, and returns the results with every intermediate step visible. It ships with two reference deployments — a generic Streamlit app and a native Databricks App with Unity Catalog integration — so teams can pick the pattern that matches their environment.
 
 ---
+## Features
+
+- **Text-to-SQL** — natural language to SELECT queries via any LLM
+- **Safety layer** — blocks all write/admin SQL before it reaches the database
+- **Explainability** — schema context, generated SQL, and validation all visible
+- **Any OpenAI-compatible LLM** — OpenAI, GitHub Models, Groq, Ollama, LM Studio
+- **Any SQL database** — SQLite by default; PostgreSQL, MySQL, Lakebase, Unity Catalog via one env var
+- **Agentic Memory** — Cross agent memory and context awareness to suggest queries, best usecase OLTP, OLAP
+---
+
 
 ## Deployment modes
 
@@ -51,15 +61,6 @@ An earlier Python/Streamlit implementation is preserved under [`legacy/streamlit
 
 ---
 
-## Features
-
-- **Text-to-SQL** — natural language to SELECT queries via any LLM
-- **Safety layer** — blocks all write/admin SQL before it reaches the database
-- **Explainability** — schema context, generated SQL, and validation all visible
-- **Any OpenAI-compatible LLM** — OpenAI, GitHub Models, Groq, Ollama, LM Studio
-- **Any SQL database** — SQLite by default; PostgreSQL, MySQL, Lakebase, Unity Catalog via one env var
-
----
 
 ## Learning modules
 
