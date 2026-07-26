@@ -55,7 +55,8 @@ function getSchema() {
 
   const schema = {};
   for (const { name: table } of tables) {
-    const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+    const safeTable = `"${String(table).replaceAll('"', '""')}"`;
+    const columns = db.prepare(`PRAGMA table_info(${safeTable})`).all();
     schema[table] = columns.map((c) => ({ name: c.name, type: c.type }));
   }
   return schema;
