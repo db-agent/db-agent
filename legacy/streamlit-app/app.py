@@ -39,22 +39,62 @@ st.set_page_config(
 # ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-.block-container { max-width: 900px; padding-top: 1.5rem; padding-bottom: 4rem; }
+:root {
+    --dba-border: rgba(120, 120, 140, 0.18);
+    --dba-muted:  #8a8fa3;
+    --dba-accent: #6366f1;
+}
+
+/* Layout: centered column, chat grows top->bottom, input pinned at the
+   bottom of the viewport (Streamlit does this natively for chat_input). */
+.block-container {
+    max-width: 820px;
+    padding-top: 2rem;
+    padding-bottom: 7rem;
+}
+
+h1 {
+    font-size: 1.55rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.01em;
+    margin-bottom: 0.15rem !important;
+}
+
+/* Badges */
 .badge {
-    display: inline-block; font-size: 0.72rem; font-weight: 600;
-    letter-spacing: 0.04em; padding: 0.2rem 0.65rem; border-radius: 999px;
+    display: inline-block; font-size: 0.68rem; font-weight: 600;
+    letter-spacing: 0.03em; padding: 0.22rem 0.6rem; border-radius: 999px;
     margin-right: 0.35rem; vertical-align: middle;
 }
 .badge-databricks { background: #FF3621; color: #fff; }
-.badge-blue  { background: #dbeafe; color: #1e40af; }
-.badge-green { background: #dcfce7; color: #166534; }
-.badge-gray  { background: #f1f5f9; color: #475569; }
+.badge-blue  { background: rgba(99, 102, 241, 0.14); color: #6366f1; }
+.badge-green { background: rgba(22, 163, 74, 0.14);  color: #16a34a; }
+.badge-gray  { background: rgba(120, 120, 140, 0.14); color: var(--dba-muted); }
+
 .section-label {
-    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em;
-    text-transform: uppercase; color: #9ca3af; margin-bottom: 0.35rem;
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.09em;
+    text-transform: uppercase; color: var(--dba-muted); margin-bottom: 0.4rem;
 }
-.question-text {
-    font-size: 1.05rem; font-weight: 600; margin-bottom: 0.75rem; color: inherit;
+
+/* Chat bubbles */
+div[data-testid="stChatMessage"] {
+    border: 1px solid var(--dba-border);
+    border-radius: 14px;
+    padding: 0.9rem 1.1rem 0.6rem;
+    margin-bottom: 0.9rem;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+
+/* Sidebar polish */
+section[data-testid="stSidebar"] .stButton button {
+    text-align: left; font-size: 0.82rem; border-radius: 8px;
+}
+section[data-testid="stSidebar"] code { font-size: 0.78rem; }
+
+/* Chat input bar */
+div[data-testid="stChatInput"] {
+    max-width: 820px;
+    margin: 0 auto;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -281,12 +321,14 @@ if not st.session_state["history"]:
         )
 
 
-# ── Result history ────────────────────────────────────────────────────────────
-for output in reversed(st.session_state["history"]):
-    with st.container(border=True):
+# ── Result history (oldest → newest, ChatGPT-style: chat grows downward,
+#    with st.chat_input pinned at the bottom of the viewport) ─────────────────
+for output in st.session_state["history"]:
 
-        st.markdown("<div class='section-label'>Question</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='question-text'>{output.question}</div>", unsafe_allow_html=True)
+    with st.chat_message("user", avatar="🧑"):
+        st.markdown(output.question)
+
+    with st.chat_message("assistant", avatar="🗄️" if not IS_DATABRICKS_APP else "🧱"):
 
         if output.error:
             st.error(f"**Execution error** — {output.error}")

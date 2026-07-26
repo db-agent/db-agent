@@ -23,14 +23,31 @@ DB Agent is a minimal **natural-language-to-SQL system**. A user asks a question
 
 ## Deployment modes
 
-A single `app.py` entry point serves both targets — the backend is selected automatically at startup based on the `DATABRICKS_HOST` environment variable.
+The primary implementation is the Node.js/React app in [`nodejs-app/`](./nodejs-app) — spin it up locally in one command, or deploy it straight to Databricks Apps.
 
-| | Standard | Databricks App |
-|---|---|---|
-| **Trigger** | `DATABRICKS_HOST` not set | `DATABRICKS_HOST` set |
-| **SQL target** | SQLite / PostgreSQL / MySQL | Unity Catalog Delta tables |
-| **Auth** | `.env` / K8s secret | Databricks OAuth service principal |
-| **Deploy on** | Docker · AWS EKS | `databricks apps deploy` |
+**Run it locally** (SQLite + local Ollama, no API key needed):
+
+```bash
+cd nodejs-app
+ollama pull qwen2.5-coder:7b
+./run_local.sh
+```
+
+Open http://localhost:3001. Any OpenAI-compatible endpoint works instead of Ollama — see [`nodejs-app/.env.example`](./nodejs-app/.env.example) for OpenAI, Groq, and Databricks Model Serving.
+
+**Deploy to Databricks Apps:**
+
+```bash
+cd nodejs-app
+databricks apps create db-agent-node --description "DB Agent"
+databricks sync . /Workspace/Users/<you>/db-agent-node \
+  --exclude "node_modules/**" --exclude "web/node_modules/**" --exclude "web/dist/**"
+databricks apps deploy db-agent-node --source-code-path /Workspace/Users/<you>/db-agent-node
+```
+
+Databricks installs dependencies and builds the frontend automatically. See [`nodejs-app/README.md`](./nodejs-app/README.md) for `app.yaml` configuration (LLM endpoint, secrets, embeddings model for the memory feature).
+
+An earlier Python/Streamlit implementation is preserved under [`legacy/streamlit-app/`](./legacy/streamlit-app) for reference — see its README for how to run it.
 
 ---
 

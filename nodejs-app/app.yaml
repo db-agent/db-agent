@@ -1,0 +1,34 @@
+# Databricks Apps manifest — deploys the Node.js prototype as its own app,
+# separate from the root Streamlit app (db-agent).
+#
+# Deploy from this directory:
+#   databricks apps create db-agent-node --description "Node.js/React prototype of DB Agent"
+#   databricks apps deploy db-agent-node --source-code-path .
+#
+# Databricks runs `npm install`, then `npm run build` (builds web/dist via
+# the "build" script in package.json), then this command — no manual build
+# step needed before deploying.
+#
+# Docs: https://docs.databricks.com/dev-tools/databricks-apps/index.html
+
+command: ["npm", "run", "start"]
+
+resources:
+  - name: llm-api-key
+    secret:
+      scope: db-agent
+      key: ai-gateway-token
+      permission: READ
+
+env:
+  # Databricks AI Gateway (Mosaic AI Model Serving) — OpenAI-compatible
+  # endpoint. LLM_BASE_URL excludes the trailing /chat/completions since
+  # the OpenAI SDK (used in server.js) appends that itself.
+  - name: "LLM_BASE_URL"
+    value: "https://dbc-d2076193-9bc7.cloud.databricks.com/ai-gateway/mlflow/v1"
+  - name: "LLM_MODEL"
+    value: "main.default.lama-3"
+  - name: "LLM_API_KEY"
+    valueFrom: "llm-api-key"
+  - name: "EMBEDDING_MODEL"
+    value: "system.ai.qwen3-embedding-0-6b"

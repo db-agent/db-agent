@@ -1,4 +1,7 @@
-name: DB Agent — EKS Deploy
+name: "[LEGACY] DB Agent — EKS Deploy"
+# ──────────────────────────────────────────────────────────────────────────────
+# ARCHIVED: targets the retired Streamlit app, now under legacy/streamlit-app/.
+# The primary app is nodejs-app/. Kept for reference — re-verify before running.
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Manual trigger only. Deploys the Docker Hub image to an existing EKS cluster.
@@ -64,7 +67,7 @@ jobs:
           aws eks update-kubeconfig --region "$AWS_REGION" --name "$EKS_CLUSTER_NAME"
 
       - name: Apply namespace
-        run: kubectl apply -f deploy/k8s/base/namespace.yaml
+        run: kubectl apply -f legacy/streamlit-app/deploy/k8s/base/namespace.yaml
 
       - name: Upsert app secret
         run: |
@@ -78,11 +81,11 @@ jobs:
             --save-config --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Apply service
-        run: kubectl apply -f deploy/k8s/base/service.yaml
+        run: kubectl apply -f legacy/streamlit-app/deploy/k8s/base/service.yaml
 
       - name: Deploy
         run: |
-          sed "s|image: .*|image: $IMAGE|" deploy/k8s/base/deployment.yaml \
+          sed "s|image: .*|image: $IMAGE|" legacy/streamlit-app/deploy/k8s/base/deployment.yaml \
             | kubectl apply -f -
 
       - name: Wait for rollout

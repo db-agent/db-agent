@@ -1,4 +1,7 @@
-name: DB Agent — Databricks Apps Deploy
+name: "[LEGACY] DB Agent — Databricks Apps Deploy"
+# ──────────────────────────────────────────────────────────────────────────────
+# ARCHIVED: targets the retired Streamlit app, now under legacy/streamlit-app/.
+# The primary app is nodejs-app/. Kept for reference — re-verify before running.
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Manual trigger only. Deploys the unified app.py entry point to Databricks
@@ -53,13 +56,13 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt ruff pytest
+        run: pip install -r legacy/streamlit-app/requirements.txt ruff pytest
 
       - name: Lint
-        run: ruff check .
+        run: ruff check legacy/streamlit-app
 
       - name: Test
-        run: pytest --tb=short -q
+        run: pytest legacy/streamlit-app/tests --tb=short -q
 
   # ════════════════════════════════════════════════════════════════════════════
   # Stage 2 — Databricks Apps deploy
@@ -114,10 +117,10 @@ jobs:
 
           content = f'command: ["streamlit", "run", "app.py"]\n\nenv:\n{env_lines}\n'
 
-          with open("app.yaml", "w") as f:
+          with open("legacy/streamlit-app/app.yaml", "w") as f:
               f.write(content)
 
-          print("Generated app.yaml:")
+          print("Generated legacy/streamlit-app/app.yaml:")
           print(content)
           PYEOF
 
@@ -138,7 +141,7 @@ jobs:
         run: |
           WORKSPACE_PATH="/Workspace/apps/${APP_NAME}"
           databricks workspace mkdirs "$WORKSPACE_PATH"
-          databricks workspace import-dir . "$WORKSPACE_PATH" --overwrite
+          databricks workspace import-dir legacy/streamlit-app "$WORKSPACE_PATH" --overwrite
           echo "WORKSPACE_PATH=$WORKSPACE_PATH" >> "$GITHUB_ENV"
 
       - name: Start app if not running

@@ -1,4 +1,7 @@
-name: DB Agent — Destroy Infrastructure
+name: "[LEGACY] DB Agent — Destroy Infrastructure"
+# ──────────────────────────────────────────────────────────────────────────────
+# ARCHIVED: targets the retired Streamlit app, now under legacy/streamlit-app/.
+# The primary app is nodejs-app/. Kept for reference — re-verify before running.
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Manual trigger only. Destroys Terraform-managed infrastructure.
@@ -47,7 +50,7 @@ jobs:
     if: inputs.stack == 'digitalocean' || inputs.stack == 'both'
     runs-on: ubuntu-latest
     env:
-      TF_WORKING_DIR: infra/terraform/digitalocean
+      TF_WORKING_DIR: legacy/streamlit-app/infra/terraform/digitalocean
       TF_VAR_do_token: ${{ secrets.DCO_TOKEN }}
       TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'db-agent' }}
     steps:
@@ -73,7 +76,7 @@ jobs:
     if: inputs.stack == 'aws' || inputs.stack == 'both'
     runs-on: ubuntu-latest
     env:
-      TF_WORKING_DIR: infra/terraform/aws-eks
+      TF_WORKING_DIR: legacy/streamlit-app/infra/terraform/aws-eks
       TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
       TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'db-agent' }}
     steps:
@@ -121,7 +124,7 @@ jobs:
     needs: [destroy-aws-eks]
     runs-on: ubuntu-latest
     env:
-      TF_WORKING_DIR: infra/terraform/aws
+      TF_WORKING_DIR: legacy/streamlit-app/infra/terraform/aws
       TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
       TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'db-agent' }}
       TF_VAR_database_password: ${{ secrets.RDS_DATABASE_PASSWORD }}
