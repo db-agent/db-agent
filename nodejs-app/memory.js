@@ -137,7 +137,13 @@ export class LocalJsonBackend {
 
     const scored = [];
     for (const line of lines) {
-      const row = JSON.parse(line);
+      let row;
+      try {
+        row = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (!row?.record || !row?.vector) continue;
       if (row.record.sourceAgent === excludeAgent) continue;
       if (row.record.ttlEpoch < now) continue;
       scored.push([cosineSimilarity(vector, row.vector), row.record]);
