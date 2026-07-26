@@ -1,4 +1,7 @@
-name: DB Agent — End-to-End CI/CD
+name: "[LEGACY] DB Agent — End-to-End CI/CD"
+# ──────────────────────────────────────────────────────────────────────────────
+# ARCHIVED: targets the retired Streamlit app, now under legacy/streamlit-app/.
+# The primary app is nodejs-app/. Kept for reference — re-verify before running.
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Triggers
@@ -51,13 +54,13 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt ruff pytest
+        run: pip install -r legacy/streamlit-app/requirements.txt ruff pytest
 
       - name: Lint
-        run: ruff check .
+        run: ruff check legacy/streamlit-app
 
       - name: Test
-        run: pytest --tb=short -q || echo "::notice::No tests found — skipping"
+        run: pytest legacy/streamlit-app/tests --tb=short -q || echo "::notice::No tests found — skipping"
 
   # ----------------------------------------------------------------------------
 
@@ -96,7 +99,7 @@ jobs:
       - id: build
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: legacy/streamlit-app
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -134,7 +137,7 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: config
-          scan-ref: infra/terraform
+          scan-ref: legacy/streamlit-app/infra/terraform
           format: sarif
           output: trivy-iac.sarif
           exit-code: "0"
@@ -177,7 +180,7 @@ jobs:
     outputs:
       db-uri: ${{ steps.tf-out.outputs.db_uri }}
     env:
-      TF_WORKING_DIR: infra/terraform/digitalocean
+      TF_WORKING_DIR: legacy/streamlit-app/infra/terraform/digitalocean
       DIGITALOCEAN_TOKEN: ${{ secrets.DCO_TOKEN }}
       TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'db-agent' }}
       TF_VAR_region: ${{ vars.DO_REGION || 'tor1' }}
@@ -253,7 +256,7 @@ jobs:
           chmod 600 "$HOME/.kube/config"
 
       - name: Apply namespace
-        run: kubectl apply -f deploy/k8s/base/namespace.yaml
+        run: kubectl apply -f legacy/streamlit-app/deploy/k8s/base/namespace.yaml
 
       - name: Update DB_URL secret
         if: needs.do-database.outputs.db-uri != ''
@@ -269,8 +272,8 @@ jobs:
         env:
           TAG: ${{ needs.docker.outputs.tag }}
         run: |
-          kubectl apply -f deploy/k8s/base/deployment.yaml
-          kubectl apply -f deploy/k8s/base/service.yaml
+          kubectl apply -f legacy/streamlit-app/deploy/k8s/base/deployment.yaml
+          kubectl apply -f legacy/streamlit-app/deploy/k8s/base/service.yaml
           kubectl set image deployment/db-agent \
             db-agent=${{ env.IMAGE }}:${TAG} \
             --namespace db-agent
@@ -326,7 +329,7 @@ jobs:
           chmod 600 "$HOME/.kube/config"
 
       - name: Apply namespace
-        run: kubectl apply -f deploy/k8s/base/namespace.yaml
+        run: kubectl apply -f legacy/streamlit-app/deploy/k8s/base/namespace.yaml
 
       - name: Inject DB_URL secret
         env:
@@ -354,11 +357,11 @@ jobs:
         env:
           TAG: ${{ needs.docker.outputs.tag }}
         run: |
-          kubectl apply -f deploy/k8s/base/service.yaml
+          kubectl apply -f legacy/streamlit-app/deploy/k8s/base/service.yaml
           # Inject the exact SHA image tag into the manifest before applying
           # so there is a single clean rollout rather than latest → sha
           sed "s|docker.io/becloudready/db-agent:latest|${{ env.IMAGE }}:${TAG}|g" \
-            deploy/k8s/base/deployment.yaml | kubectl apply -f -
+            legacy/streamlit-app/deploy/k8s/base/deployment.yaml | kubectl apply -f -
           kubectl rollout restart deployment/db-agent --namespace db-agent
 
       - name: Wait for rollout
@@ -413,7 +416,7 @@ jobs:
       db-port: ${{ steps.tf-out.outputs.db_port }}
       db-name: ${{ steps.tf-out.outputs.db_name }}
     env:
-      TF_WORKING_DIR: infra/terraform/aws
+      TF_WORKING_DIR: legacy/streamlit-app/infra/terraform/aws
       TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
       TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'db-agent' }}
       TF_VAR_allowed_cidr_blocks: ${{ vars.RDS_ALLOWED_CIDR_BLOCKS_JSON || '["0.0.0.0/0"]' }}
@@ -489,7 +492,7 @@ jobs:
     outputs:
       cluster-name: ${{ steps.tf-out.outputs.cluster_name }}
     env:
-      TF_WORKING_DIR: infra/terraform/aws-eks
+      TF_WORKING_DIR: legacy/streamlit-app/infra/terraform/aws-eks
       TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
       TF_VAR_project_name: ${{ vars.PROJECT_NAME || 'db-agent' }}
     steps:
@@ -570,7 +573,7 @@ jobs:
             --region "${{ vars.AWS_REGION || 'us-east-1' }}"
 
       - name: Apply namespace
-        run: kubectl apply -f deploy/k8s/base/namespace.yaml
+        run: kubectl apply -f legacy/streamlit-app/deploy/k8s/base/namespace.yaml
 
       - name: Build and inject DB_URL secret
         if: needs.aws-database.outputs.db-host != ''
@@ -599,9 +602,9 @@ jobs:
         env:
           TAG: ${{ needs.docker.outputs.tag }}
         run: |
-          kubectl apply -f deploy/k8s/base/service.yaml
+          kubectl apply -f legacy/streamlit-app/deploy/k8s/base/service.yaml
           sed "s|docker.io/becloudready/db-agent:latest|${{ env.IMAGE }}:${TAG}|g" \
-            deploy/k8s/base/deployment.yaml | kubectl apply -f -
+            legacy/streamlit-app/deploy/k8s/base/deployment.yaml | kubectl apply -f -
           kubectl rollout restart deployment/db-agent --namespace db-agent
 
       - name: Wait for rollout

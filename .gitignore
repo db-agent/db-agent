@@ -61,6 +61,8 @@ coverage.xml
 *.sqlite3
 *.db-shm
 *.db-wal
+legacy/streamlit-app/data/memory_store.jsonl
+nodejs-app/data/memory_store.jsonl
 # keep the data/ placeholder committed
 !**/data/.gitkeep
 
