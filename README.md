@@ -59,6 +59,18 @@ Databricks installs dependencies and builds the frontend automatically. See [`no
 
 An earlier Python/Streamlit implementation is preserved under [`legacy/streamlit-app/`](./legacy/streamlit-app) for reference — see its README for how to run it.
 
+**Running multiple instances** (for cross-agent memory — see Agentic Memory above): each running instance is tagged via `DBAGENT_ID`, so you can spin up as many as you like, locally or on Databricks, and they'll share suggestions with each other through a common memory store.
+
+```bash
+# Instance 1 — e.g. an OLTP-facing agent, local Ollama
+DBAGENT_ID=oltp-sqlserver ./run_local.sh
+
+# Instance 2 — e.g. an OLAP-facing agent, same or a different machine
+DBAGENT_ID=olap-databricks PORT=3002 ./run_local.sh
+```
+
+By default each instance stores memory in its own local file, so two local instances only share memory if pointed at the same `MEMORY_STORE_PATH`. To share memory across genuinely separate machines/deployments (e.g. one instance local, one on Databricks Apps), set `MEMORY_BACKEND=s3vectors` on every instance that should share — see [`nodejs-app/README.md`](./nodejs-app/README.md) for the S3 Vectors setup, including the important detail that every sharing instance must use the *same embedding model* (chat/SQL-generation models can still differ freely per instance).
+
 ---
 
 
