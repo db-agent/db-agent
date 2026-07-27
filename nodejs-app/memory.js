@@ -61,7 +61,16 @@ function parseSummaryJson(raw) {
 }
 
 async function embed(llm, text, embeddingModel) {
-  const response = await llm.embeddings.create({ model: embeddingModel, input: text });
+  // The OpenAI SDK defaults to encoding_format: "base64" for embeddings.
+  // At least one OpenAI-compatible endpoint we've tested (Databricks AI
+  // Gateway) mishandles that and silently returns a truncated vector
+  // (1024 floats -> 256) with no error — forcing "float" avoids it and
+  // matches what a bare curl request gets by default.
+  const response = await llm.embeddings.create({
+    model: embeddingModel,
+    input: text,
+    encoding_format: "float",
+  });
   return response.data[0].embedding;
 }
 
@@ -243,17 +252,22 @@ export async function writeMemory(llm, output, cfg) {
       model: cfg.llmModel,
     });
     if (!record) return;
-    const vector = await embed(llm, record.insightSummary, cfg.embeddingModel);
+    // Embeddings go through cfg.embeddingClient, not the chat `llm` — they
+    // don't have to be the same endpoint. What matters is that every agent
+    // sharing this store uses the same embedding model, so the config
+    // (embeddingClient's base URL/key + embeddingModel) is what needs to
+    // match across agents, independent of each agent's own chat model.
+    const vector = await embed(cfg.embeddingClient, record.insightSummary, cfg.embeddingModel);
     await cfg.backend.put(record, vector);
   } catch (exc) {
     console.warn(`[memory] write skipped: ${exc.message || exc}`);
   }
 }
 
-export async function fetchRelevantMemories(llm, queryText, cfg, topK = 3) {
+export async function fetchRelevantMemories(queryText, cfg, topK = 3) {
   if (!cfg.memoryEnabled) return [];
   try {
-    const vector = await embed(llm, queryText, cfg.embeddingModel);
+    const vector = await embed(cfg.embeddingClient, queryText, cfg.embeddingModel);
     return await cfg.backend.query(vector, { excludeAgent: cfg.dbagentId, topK });
   } catch (exc) {
     console.warn(`[memory] fetch skipped: ${exc.message || exc}`);

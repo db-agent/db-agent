@@ -95,5 +95,25 @@ documented-supported) — the deployment shape is the same generic
     (768 matches `nomic-embed-text`; use your embedding model's actual
     output dimension.) AWS credentials resolve via the standard SDK chain
     (env vars, shared config/profile, instance role, etc.).
+
+  **Chat and embeddings are independent endpoints** (`EMBEDDING_BASE_URL`/
+  `EMBEDDING_API_KEY`, default to `LLM_BASE_URL`/`LLM_API_KEY` if unset).
+  This matters specifically for cross-platform memory: every agent sharing
+  a vector store must use the *same embedding model* — not just the same
+  dimension, cosine similarity across two different models' vector spaces
+  is meaningless — but each agent's own chat/SQL-generation model can be
+  anything. E.g. a local agent can run chat entirely on Ollama while
+  routing only its embedding calls to Databricks AI Gateway, to share
+  memory with a Databricks-deployed agent, verified end-to-end:
+  ```bash
+  EMBEDDING_BASE_URL=https://your-workspace.cloud.databricks.com/ai-gateway/mlflow/v1 \
+    EMBEDDING_API_KEY=$DATABRICKS_TOKEN EMBEDDING_MODEL=system.ai.qwen3-embedding-0-6b \
+    MEMORY_BACKEND=s3vectors MEMORY_S3_BUCKET=... MEMORY_ORG_ID=... \
+    ./run_local.sh
+  ```
+  (One caveat found while testing: the OpenAI SDK defaults to
+  `encoding_format: "base64"` for embeddings, which at least the Databricks
+  AI Gateway route mishandled — silently returning a truncated vector with
+  no error. `memory.js` forces `encoding_format: "float"` to avoid it.)
 - No streaming, no auth — this is a UI comparison prototype, not a
   production alternative to the Streamlit app.

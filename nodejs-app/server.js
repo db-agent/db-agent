@@ -30,6 +30,16 @@ const LLM_API_KEY = process.env.LLM_API_KEY || "no-key";
 const LLM_MODEL = process.env.LLM_MODEL || "gpt-4o-mini";
 const MAX_REPAIR_ATTEMPTS = 2;
 
+// The chat model (SQL generation, repair, memory summarization) and the
+// embedding model don't need to be the same endpoint. This matters for
+// cross-platform memory specifically: two agents can use completely
+// different LLM backends for chat, but their EMBEDDING calls must land on
+// the same model, or the shared vector store's cosine similarity is
+// comparing two unrelated vector spaces. Defaults to LLM_BASE_URL/KEY if
+// unset, so single-endpoint setups (the common case) need no extra config.
+const EMBEDDING_BASE_URL = process.env.EMBEDDING_BASE_URL || LLM_BASE_URL;
+const EMBEDDING_API_KEY = process.env.EMBEDDING_API_KEY || LLM_API_KEY;
+
 // ── Cross-platform contextual memory config ─────────────────────────────────
 // MEMORY_BACKEND=local (default, no cloud setup) or s3vectors (requires
 // MEMORY_S3_BUCKET + MEMORY_ORG_ID + a pre-provisioned vector bucket/index —
@@ -45,6 +55,10 @@ const memoryBackend =
         process.env.MEMORY_STORE_PATH || path.join(__dirname, "data", "memory_store.jsonl")
       );
 
+const db = new DatabaseSync(DB_PATH, { readOnly: false });
+const llm = new OpenAI({ baseURL: LLM_BASE_URL, apiKey: LLM_API_KEY });
+const embeddingClient = new OpenAI({ baseURL: EMBEDDING_BASE_URL, apiKey: EMBEDDING_API_KEY });
+
 const MEMORY = {
   memoryEnabled: (process.env.MEMORY_ENABLED ?? "true").toLowerCase() !== "false",
   dbagentId: process.env.DBAGENT_ID || "local",
@@ -53,10 +67,8 @@ const MEMORY = {
   embeddingModel: process.env.EMBEDDING_MODEL || "text-embedding-3-small",
   llmModel: LLM_MODEL,
   backend: memoryBackend,
+  embeddingClient,
 };
-
-const db = new DatabaseSync(DB_PATH, { readOnly: false });
-const llm = new OpenAI({ baseURL: LLM_BASE_URL, apiKey: LLM_API_KEY });
 
 // ── Schema introspection ─────────────────────────────────────────────────────
 
@@ -296,6 +308,8 @@ app.get("/api/config", (req, res) => {
     memoryEnabled: MEMORY.memoryEnabled,
     dbagentId: MEMORY.dbagentId,
     memoryBackend: process.env.MEMORY_BACKEND || "local",
+    embeddingBaseUrl: EMBEDDING_BASE_URL,
+    embeddingModel: MEMORY.embeddingModel,
   });
 });
 
@@ -323,7 +337,7 @@ app.get("/api/memories", async (req, res) => {
     const queryText = tables.length
       ? `Recent activity relevant to tables: ${tables.join(", ")}`
       : "recent activity";
-    const memories = await fetchRelevantMemories(llm, queryText, MEMORY, 3);
+    const memories = await fetchRelevantMemories(queryText, MEMORY, 3);
     res.json(memories);
   } catch (exc) {
     res.status(500).json({ error: String(exc.message || exc) });
