@@ -13,7 +13,7 @@ import OpenAI from "openai";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { LocalJsonBackend, S3VectorsBackend, fetchRelevantMemories, writeMemory } from "./memory.js";
-import { formatKnowledge, loadKnowledge } from "./knowledge.js";
+import { formatKnowledge, loadKnowledge, selectRelevantKnowledge } from "./knowledge.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -120,20 +120,20 @@ Always respond with valid JSON in this exact format:
 
 Do not include any text outside the JSON object.`;
 
-function buildUserPrompt(question, schema, knowledge) {
+function buildUserPrompt(question, schema, knowledgeText) {
   return `Database schema:
 ${formatSchema(schema)}
-${formatKnowledge(knowledge)}
+${knowledgeText}
 
 User question: ${question}
 
 Return only the JSON object described above.`;
 }
 
-function buildRepairPrompt(question, schema, failedSql, error, knowledge) {
+function buildRepairPrompt(question, schema, failedSql, error, knowledgeText) {
   return `Database schema:
 ${formatSchema(schema)}
-${formatKnowledge(knowledge)}
+${knowledgeText}
 
 User question: ${question}
 
@@ -219,7 +219,18 @@ function runQuery(sql) {
 
 async function runPipeline(question) {
   const schema = getSchema();
-  const knowledge = loadKnowledge(KNOWLEDGE_PATH);
+  const rawKnowledge = loadKnowledge(KNOWLEDGE_PATH);
+  // Select relevant entries before formatting, once per request, reused for
+  // both the initial attempt and any repair retries — descriptions/
+  // expressions filtered by keyword match, examples by embedding similarity
+  // once the file has more than a few (see knowledge.js).
+  const selectedKnowledge = await selectRelevantKnowledge(
+    rawKnowledge,
+    question,
+    embeddingClient,
+    MEMORY.embeddingModel
+  );
+  const knowledgeText = formatKnowledge(selectedKnowledge);
   const output = {
     question,
     schemaContext: formatSchema(schema),
@@ -233,7 +244,7 @@ async function runPipeline(question) {
   };
 
   try {
-    const raw = await callLlm(SYSTEM_PROMPT, buildUserPrompt(question, schema, knowledge));
+    const raw = await callLlm(SYSTEM_PROMPT, buildUserPrompt(question, schema, knowledgeText));
     const parsed = parseSqlResponse(raw);
     output.sql = parsed.sql;
     output.explanation = parsed.explanation;
@@ -266,7 +277,7 @@ async function runPipeline(question) {
 
         const repairRaw = await callLlm(
           SYSTEM_PROMPT,
-          buildRepairPrompt(question, schema, currentSql, String(dbErr.message || dbErr), knowledge)
+          buildRepairPrompt(question, schema, currentSql, String(dbErr.message || dbErr), knowledgeText)
         );
         const repaired = parseSqlResponse(repairRaw);
         const repairValidation = validateSql(repaired.sql);
