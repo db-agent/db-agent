@@ -60,7 +60,7 @@ function parseSummaryJson(raw) {
   }
 }
 
-async function embed(llm, text, embeddingModel) {
+export async function embed(llm, text, embeddingModel) {
   // The OpenAI SDK defaults to encoding_format: "base64" for embeddings.
   // At least one OpenAI-compatible endpoint we've tested (Databricks AI
   // Gateway) mishandles that and silently returns a truncated vector
@@ -122,7 +122,7 @@ Row count returned: ${rowCount}
 // Mirrors ../core/memory.py's LocalJsonBackend — no cloud setup required,
 // so this is the default and what makes the feature demoable via run_local.sh.
 
-function cosineSimilarity(a, b) {
+export function cosineSimilarity(a, b) {
   let dot = 0, normA = 0, normB = 0;
   for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i];
