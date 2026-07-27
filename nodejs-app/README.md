@@ -72,14 +72,48 @@ documented-supported) — the deployment shape is the same generic
   a separate runtime, not a shared library.
 - **Cross-platform contextual memory** (`memory.js`, ported from
   `../core/memory.py`): after each answered question, a second LLM call
-  produces a redacted summary (never raw SQL/rows) written to a local JSONL
-  store (`data/memory_store.jsonl`, gitignored). Other `DBAGENT_ID` instances
+  produces a redacted summary (never raw SQL/rows, and — per a code review
+  finding — never the raw question either, since it can contain literal
+  identifiers) and writes it to a shared store. Other `DBAGENT_ID` instances
   pointed at the same store surface it as "Suggested from other agents" in
   the sidebar. Set `DBAGENT_ID` per instance (`run_local.sh` supports
-  `DBAGENT_ID=oltp-sqlserver ./run_local.sh`, same as the Python app). Only
-  the local JSONL backend is ported — the S3 Vectors backend
-  (`core/memory.py`'s `S3VectorsBackend`) is intentionally not, since it's
-  still unverified against real AWS even on the Python side (repo issues
-  #26–#30).
+  `DBAGENT_ID=oltp-sqlserver ./run_local.sh`, same as the Python app).
+  Two backends, selected via `MEMORY_BACKEND`:
+  - `local` (default) — JSONL + cosine similarity, no cloud setup.
+  - `s3vectors` — `@aws-sdk/client-s3vectors`, **verified end-to-end against
+    real AWS** (a provisioned vector bucket + index, write from one agent,
+    retrieve from another, correct self-exclusion and TTL filtering all
+    confirmed working). Requires `MEMORY_S3_BUCKET` + `MEMORY_ORG_ID` (used
+    as the vector index name) and a pre-provisioned bucket/index — dimension
+    must match `EMBEDDING_MODEL`'s output, distance metric `cosine`:
+    ```bash
+    aws s3vectors create-vector-bucket --vector-bucket-name your-bucket
+    aws s3vectors create-index --vector-bucket-name your-bucket \
+      --index-name demo-org --data-type float32 --dimension 768 \
+      --distance-metric cosine
+    ```
+    (768 matches `nomic-embed-text`; use your embedding model's actual
+    output dimension.) AWS credentials resolve via the standard SDK chain
+    (env vars, shared config/profile, instance role, etc.).
+
+  **Chat and embeddings are independent endpoints** (`EMBEDDING_BASE_URL`/
+  `EMBEDDING_API_KEY`, default to `LLM_BASE_URL`/`LLM_API_KEY` if unset).
+  This matters specifically for cross-platform memory: every agent sharing
+  a vector store must use the *same embedding model* — not just the same
+  dimension, cosine similarity across two different models' vector spaces
+  is meaningless — but each agent's own chat/SQL-generation model can be
+  anything. E.g. a local agent can run chat entirely on Ollama while
+  routing only its embedding calls to Databricks AI Gateway, to share
+  memory with a Databricks-deployed agent, verified end-to-end:
+  ```bash
+  EMBEDDING_BASE_URL=https://your-workspace.cloud.databricks.com/ai-gateway/mlflow/v1 \
+    EMBEDDING_API_KEY=$DATABRICKS_TOKEN EMBEDDING_MODEL=system.ai.qwen3-embedding-0-6b \
+    MEMORY_BACKEND=s3vectors MEMORY_S3_BUCKET=... MEMORY_ORG_ID=... \
+    ./run_local.sh
+  ```
+  (One caveat found while testing: the OpenAI SDK defaults to
+  `encoding_format: "base64"` for embeddings, which at least the Databricks
+  AI Gateway route mishandled — silently returning a truncated vector with
+  no error. `memory.js` forces `encoding_format: "float"` to avoid it.)
 - No streaming, no auth — this is a UI comparison prototype, not a
   production alternative to the Streamlit app.

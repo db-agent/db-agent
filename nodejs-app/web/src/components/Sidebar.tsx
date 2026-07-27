@@ -56,7 +56,8 @@ function MemorySuggestions({
     <>
       <FieldLabel>Suggested from other agents</FieldLabel>
       <p className="mb-2 text-[11px] text-muted-foreground">
-        this agent: <code className="rounded bg-muted px-1 py-0.5">{config.dbagentId}</code>
+        via <code className="rounded bg-muted px-1 py-0.5">{config.memoryBackend}</code> memory
+        · this agent: <code className="rounded bg-muted px-1 py-0.5">{config.dbagentId}</code>
       </p>
       {memories === null ? (
         <p className="text-xs text-muted-foreground">Loading…</p>

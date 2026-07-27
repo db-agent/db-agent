@@ -28,6 +28,7 @@ export interface AppConfig {
   dbPath: string;
   memoryEnabled: boolean;
   dbagentId: string;
+  memoryBackend: string;
 }
 
 export interface Turn {
