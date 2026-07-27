@@ -66,6 +66,11 @@ nodejs-app/data/memory_store.jsonl
 # keep the data/ placeholder committed
 !**/data/.gitkeep
 
+# Per-deployment knowledge file is personal/local config, not shared code —
+# same pattern as .env vs .env.example.
+nodejs-app/knowledge.json
+!nodejs-app/knowledge.json.example
+
 # ── Python build & packaging ──────────────────────────────────────────────────
 dist/
 build/
