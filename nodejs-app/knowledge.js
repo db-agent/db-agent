@@ -90,16 +90,15 @@ async function selectRelevantExamples(examples, question, embeddingClient, embed
   try {
     const questionVector = await embed(embeddingClient, question, embeddingModel);
 
-    const scored = await Promise.all(
-      examples.map(async (ex) => {
-        let vector = exampleEmbeddingCache.get(ex.question);
-        if (!vector) {
-          vector = await embed(embeddingClient, ex.question, embeddingModel);
-          exampleEmbeddingCache.set(ex.question, vector);
-        }
-        return { ex, score: cosineSimilarity(questionVector, vector) };
-      })
-    );
+    const scored = [];
+    for (const ex of examples) {
+      let vector = exampleEmbeddingCache.get(ex.question);
+      if (!vector) {
+        vector = await embed(embeddingClient, ex.question, embeddingModel);
+        exampleEmbeddingCache.set(ex.question, vector);
+      }
+      scored.push({ ex, score: cosineSimilarity(questionVector, vector) });
+    }
 
     scored.sort((a, b) => b.score - a.score);
     return scored.slice(0, maxExamples).map((s) => s.ex);
