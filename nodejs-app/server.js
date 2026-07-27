@@ -13,6 +13,7 @@ import OpenAI from "openai";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { LocalJsonBackend, S3VectorsBackend, fetchRelevantMemories, writeMemory } from "./memory.js";
+import { formatKnowledge, loadKnowledge } from "./knowledge.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,6 +30,10 @@ const LLM_BASE_URL = process.env.LLM_BASE_URL || "https://api.openai.com/v1";
 const LLM_API_KEY = process.env.LLM_API_KEY || "no-key";
 const LLM_MODEL = process.env.LLM_MODEL || "gpt-4o-mini";
 const MAX_REPAIR_ATTEMPTS = 2;
+// Optional per-deployment context (descriptions, expressions, example
+// queries, instructions) — see knowledge.js. Absent file = no change to
+// existing behavior.
+const KNOWLEDGE_PATH = process.env.KNOWLEDGE_FILE || path.join(__dirname, "knowledge.json");
 
 // The chat model (SQL generation, repair, memory summarization) and the
 // embedding model don't need to be the same endpoint. This matters for
@@ -115,18 +120,20 @@ Always respond with valid JSON in this exact format:
 
 Do not include any text outside the JSON object.`;
 
-function buildUserPrompt(question, schema) {
+function buildUserPrompt(question, schema, knowledge) {
   return `Database schema:
 ${formatSchema(schema)}
+${formatKnowledge(knowledge)}
 
 User question: ${question}
 
 Return only the JSON object described above.`;
 }
 
-function buildRepairPrompt(question, schema, failedSql, error) {
+function buildRepairPrompt(question, schema, failedSql, error, knowledge) {
   return `Database schema:
 ${formatSchema(schema)}
+${formatKnowledge(knowledge)}
 
 User question: ${question}
 
@@ -212,6 +219,7 @@ function runQuery(sql) {
 
 async function runPipeline(question) {
   const schema = getSchema();
+  const knowledge = loadKnowledge(KNOWLEDGE_PATH);
   const output = {
     question,
     schemaContext: formatSchema(schema),
@@ -225,7 +233,7 @@ async function runPipeline(question) {
   };
 
   try {
-    const raw = await callLlm(SYSTEM_PROMPT, buildUserPrompt(question, schema));
+    const raw = await callLlm(SYSTEM_PROMPT, buildUserPrompt(question, schema, knowledge));
     const parsed = parseSqlResponse(raw);
     output.sql = parsed.sql;
     output.explanation = parsed.explanation;
@@ -258,7 +266,7 @@ async function runPipeline(question) {
 
         const repairRaw = await callLlm(
           SYSTEM_PROMPT,
-          buildRepairPrompt(question, schema, currentSql, String(dbErr.message || dbErr))
+          buildRepairPrompt(question, schema, currentSql, String(dbErr.message || dbErr), knowledge)
         );
         const repaired = parseSqlResponse(repairRaw);
         const repairValidation = validateSql(repaired.sql);
@@ -310,6 +318,7 @@ app.get("/api/config", (req, res) => {
     memoryBackend: process.env.MEMORY_BACKEND || "local",
     embeddingBaseUrl: EMBEDDING_BASE_URL,
     embeddingModel: MEMORY.embeddingModel,
+    knowledgeLoaded: loadKnowledge(KNOWLEDGE_PATH) !== null,
   });
 });
 

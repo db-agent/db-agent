@@ -1,0 +1,18 @@
+{
+  "descriptions": {
+    "orders.status": "one of 'completed', 'pending', 'cancelled' (lowercase, exact match)",
+    "orders.ordered_at": "date the order was placed; synonyms: purchase date, order date"
+  },
+  "expressions": {
+    "revenue": "SUM(quantity * price)"
+  },
+  "examples": [
+    {
+      "question": "Who are our best customers?",
+      "sql": "SELECT c.name, SUM(o.quantity * p.price) AS total_spent FROM orders o JOIN customers c ON o.customer_id = c.id JOIN products p ON o.product_id = p.id GROUP BY c.id ORDER BY total_spent DESC LIMIT 5"
+    }
+  ],
+  "instructions": [
+    "Exclude cancelled orders unless the question explicitly asks for them."
+  ]
+}

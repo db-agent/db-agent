@@ -70,6 +70,23 @@ documented-supported) — the deployment shape is the same generic
   SQL repair-on-failure loop (failed execution → error fed back to the LLM →
   re-validated before retrying) — same behavior, ported by hand since this is
   a separate runtime, not a shared library.
+- **Optional knowledge file** (`knowledge.js`, `knowledge.json`): the schema
+  alone (table/column names + types) doesn't carry business terminology,
+  ambiguous-column meaning, or house rules — this is where those go. Copy
+  `knowledge.json.example` to `knowledge.json` (gitignored, per-deployment,
+  same pattern as `.env`) to add:
+  - **descriptions** — column/table notes and synonyms
+  - **expressions** — reusable metric definitions (e.g. `revenue = SUM(quantity * price)`)
+  - **examples** — question → correct SQL pairs (few-shot; small local models
+    benefit disproportionately from these)
+  - **instructions** — free-text rules applied to every query
+
+  Read fresh on every request, not cached at startup, so edits take effect
+  immediately — this is meant to be iterated on, not configured once.
+  Missing file = zero change to current behavior. Verified: the same
+  ambiguous question ("What is the revenue by category?") includes cancelled
+  orders without a knowledge file and correctly excludes them with one, purely
+  from the injected instruction.
 - **Cross-platform contextual memory** (`memory.js`, ported from
   `../core/memory.py`): after each answered question, a second LLM call
   produces a redacted summary (never raw SQL/rows, and — per a code review
