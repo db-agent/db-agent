@@ -12,7 +12,7 @@ import { DatabaseSync } from "node:sqlite";
 import OpenAI from "openai";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { LocalJsonBackend, fetchRelevantMemories, writeMemory } from "./memory.js";
+import { LocalJsonBackend, S3VectorsBackend, fetchRelevantMemories, writeMemory } from "./memory.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -31,6 +31,20 @@ const LLM_MODEL = process.env.LLM_MODEL || "gpt-4o-mini";
 const MAX_REPAIR_ATTEMPTS = 2;
 
 // ── Cross-platform contextual memory config ─────────────────────────────────
+// MEMORY_BACKEND=local (default, no cloud setup) or s3vectors (requires
+// MEMORY_S3_BUCKET + MEMORY_ORG_ID + a pre-provisioned vector bucket/index —
+// see nodejs-app/README.md).
+const memoryBackend =
+  (process.env.MEMORY_BACKEND || "local").toLowerCase() === "s3vectors"
+    ? new S3VectorsBackend({
+        bucket: process.env.MEMORY_S3_BUCKET || "",
+        index: process.env.MEMORY_ORG_ID || "demo-org",
+        region: process.env.MEMORY_S3_REGION || "us-east-1",
+      })
+    : new LocalJsonBackend(
+        process.env.MEMORY_STORE_PATH || path.join(__dirname, "data", "memory_store.jsonl")
+      );
+
 const MEMORY = {
   memoryEnabled: (process.env.MEMORY_ENABLED ?? "true").toLowerCase() !== "false",
   dbagentId: process.env.DBAGENT_ID || "local",
@@ -38,9 +52,7 @@ const MEMORY = {
   memoryTtlSeconds: Number(process.env.MEMORY_TTL_SECONDS || 7 * 24 * 3600),
   embeddingModel: process.env.EMBEDDING_MODEL || "text-embedding-3-small",
   llmModel: LLM_MODEL,
-  backend: new LocalJsonBackend(
-    process.env.MEMORY_STORE_PATH || path.join(__dirname, "data", "memory_store.jsonl")
-  ),
+  backend: memoryBackend,
 };
 
 const db = new DatabaseSync(DB_PATH, { readOnly: false });
@@ -283,6 +295,7 @@ app.get("/api/config", (req, res) => {
     dbPath: path.basename(DB_PATH),
     memoryEnabled: MEMORY.memoryEnabled,
     dbagentId: MEMORY.dbagentId,
+    memoryBackend: process.env.MEMORY_BACKEND || "local",
   });
 });
 

@@ -72,14 +72,28 @@ documented-supported) — the deployment shape is the same generic
   a separate runtime, not a shared library.
 - **Cross-platform contextual memory** (`memory.js`, ported from
   `../core/memory.py`): after each answered question, a second LLM call
-  produces a redacted summary (never raw SQL/rows) written to a local JSONL
-  store (`data/memory_store.jsonl`, gitignored). Other `DBAGENT_ID` instances
+  produces a redacted summary (never raw SQL/rows, and — per a code review
+  finding — never the raw question either, since it can contain literal
+  identifiers) and writes it to a shared store. Other `DBAGENT_ID` instances
   pointed at the same store surface it as "Suggested from other agents" in
   the sidebar. Set `DBAGENT_ID` per instance (`run_local.sh` supports
-  `DBAGENT_ID=oltp-sqlserver ./run_local.sh`, same as the Python app). Only
-  the local JSONL backend is ported — the S3 Vectors backend
-  (`core/memory.py`'s `S3VectorsBackend`) is intentionally not, since it's
-  still unverified against real AWS even on the Python side (repo issues
-  #26–#30).
+  `DBAGENT_ID=oltp-sqlserver ./run_local.sh`, same as the Python app).
+  Two backends, selected via `MEMORY_BACKEND`:
+  - `local` (default) — JSONL + cosine similarity, no cloud setup.
+  - `s3vectors` — `@aws-sdk/client-s3vectors`, **verified end-to-end against
+    real AWS** (a provisioned vector bucket + index, write from one agent,
+    retrieve from another, correct self-exclusion and TTL filtering all
+    confirmed working). Requires `MEMORY_S3_BUCKET` + `MEMORY_ORG_ID` (used
+    as the vector index name) and a pre-provisioned bucket/index — dimension
+    must match `EMBEDDING_MODEL`'s output, distance metric `cosine`:
+    ```bash
+    aws s3vectors create-vector-bucket --vector-bucket-name your-bucket
+    aws s3vectors create-index --vector-bucket-name your-bucket \
+      --index-name demo-org --data-type float32 --dimension 768 \
+      --distance-metric cosine
+    ```
+    (768 matches `nomic-embed-text`; use your embedding model's actual
+    output dimension.) AWS credentials resolve via the standard SDK chain
+    (env vars, shared config/profile, instance role, etc.).
 - No streaming, no auth — this is a UI comparison prototype, not a
   production alternative to the Streamlit app.

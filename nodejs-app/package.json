@@ -11,6 +11,7 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3vectors": "^3.1095.0",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
     "openai": "^4.67.0"
