@@ -70,6 +70,17 @@ resource "aws_security_group" "rds" {
     }
   }
 
+  # RDS has no need to initiate connections outside the VPC — without an
+  # explicit egress rule, AWS applies an implicit "allow all outbound"
+  # default on the security group, which is what this closes.
+  egress {
+    description = "Restrict egress to within the VPC only"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [data.aws_vpc.default.cidr_block]
+  }
+
   tags = merge(local.common_tags, { Name = "${var.project_name}-rds" })
 }
 
@@ -89,12 +100,49 @@ resource "aws_kms_alias" "s3" {
 }
 
 # ── S3 Bucket — access logs ───────────────────────────────────────────────────
-
+# This bucket is the logging *destination* for the data bucket below — it's
+# the terminal case and intentionally doesn't log to itself.
+#trivy:ignore:AWS-0089
 resource "aws_s3_bucket" "logs" {
   bucket        = "${var.s3_bucket_name}-logs"
   force_destroy = true
 
   tags = merge(local.common_tags, { Name = "${var.s3_bucket_name}-logs", Purpose = "access-logs" })
+}
+
+resource "aws_s3_bucket_versioning" "logs" {
+  bucket = aws_s3_bucket.logs.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# SSE-KMS isn't supported for S3 server access logging destination buckets
+# (AWS-0132's own check description says so) — SSE-S3 below is the correct
+# choice for this bucket specifically, not the KMS CMK used on the data bucket.
+#trivy:ignore:AWS-0132
+resource "aws_s3_bucket_server_side_encryption_configuration" "logs" {
+  bucket = aws_s3_bucket.logs.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+# ── KMS key — RDS ──────────────────────────────────────────────────────────────
+
+resource "aws_kms_key" "rds" {
+  description             = "RDS storage + Performance Insights encryption key"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+
+  tags = merge(local.common_tags, { Name = "${var.project_name}-rds-key" })
+}
+
+resource "aws_kms_alias" "rds" {
+  name          = "alias/${var.project_name}-rds"
+  target_key_id = aws_kms_key.rds.key_id
 }
 
 resource "aws_s3_bucket_public_access_block" "logs" {
@@ -168,12 +216,14 @@ resource "aws_db_instance" "this" {
   publicly_accessible = var.publicly_accessible
 
   storage_encrypted                   = true
+  kms_key_id                          = aws_kms_key.rds.arn
   iam_database_authentication_enabled = true
   deletion_protection                 = true
   skip_final_snapshot                 = true
 
-  backup_retention_period = 30
-  performance_insights_enabled = true
+  backup_retention_period         = 30
+  performance_insights_enabled    = true
+  performance_insights_kms_key_id = aws_kms_key.rds.arn
 
   tags = merge(local.common_tags, { Name = "${var.project_name}-postgres" })
 }
