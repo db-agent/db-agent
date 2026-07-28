@@ -65,7 +65,7 @@ export function Sidebar({
             }`}
           >
             <MessageSquare className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="truncate">{c.title}</span>
+            <span className="min-w-0 truncate">{c.title}</span>
           </button>
         ))}
       </div>
