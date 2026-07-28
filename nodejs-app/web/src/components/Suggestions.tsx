@@ -5,21 +5,10 @@ import { Sparkles } from "lucide-react";
 
 const MEMORY_POLL_MS = 60_000; // mirrors the Python app's st.cache_data(ttl=60)
 
-// Cycled by index so each chip gets a distinct, consistent border color
-// regardless of how many chips are shown. Only the border is colored — the
-// fill stays neutral so the block itself doesn't compete with the chat UI;
-// the color is just a quick visual anchor per-question.
-const CHIP_COLORS = [
-  "border-red-400",
-  "border-orange-400",
-  "border-amber-400",
-  "border-lime-500",
-  "border-emerald-500",
-  "border-cyan-500",
-  "border-blue-500",
-  "border-violet-500",
-  "border-pink-500",
-];
+// A single light, neutral border — minimalist by design. Kept as a
+// "palette" of one so SuggestionChip's colorIndex plumbing still works if
+// this ever needs to vary again.
+const CHIP_COLORS = ["border-border/60"];
 
 function SuggestionChip({
   text,
@@ -41,7 +30,7 @@ function SuggestionChip({
       type="button"
       onClick={onClick}
       title={title}
-      className={`flex items-center gap-1.5 border-2 bg-background text-left text-xs font-medium text-foreground transition-colors hover:bg-muted ${
+      className={`flex items-center gap-1.5 border bg-background text-left text-xs font-medium text-foreground transition-colors hover:bg-muted ${
         panel ? "w-full rounded-lg px-3 py-2" : "rounded-full px-3.5 py-2"
       } ${CHIP_COLORS[colorIndex % CHIP_COLORS.length]}`}
     >
