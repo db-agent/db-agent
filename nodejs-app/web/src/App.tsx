@@ -75,9 +75,13 @@ function App() {
     fetchSchema().then(setSchema).catch(() => setSchema(null));
   }, []);
 
-  useEffect(() => {
+useEffect(() => {
+  try {
     localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations));
-  }, [conversations]);
+  } catch {
+    // Ignore write failures (quota exceeded / disabled storage / etc.)
+  }
+}, [conversations]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
