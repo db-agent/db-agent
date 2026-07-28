@@ -12,7 +12,21 @@ const CONVERSATIONS_KEY = "dbagent.conversations";
 function loadConversations(): Conversation[] {
   try {
     const raw = localStorage.getItem(CONVERSATIONS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed.filter((c): c is Conversation => {
+      if (!c || typeof c !== "object") return false;
+      const obj = c as Record<string, unknown>;
+      return (
+        typeof obj.id === "string" &&
+        typeof obj.title === "string" &&
+        Array.isArray(obj.turns) &&
+        typeof obj.createdAt === "string"
+      );
+    });
   } catch {
     return [];
   }
