@@ -5,17 +5,20 @@ import { Sparkles } from "lucide-react";
 
 const MEMORY_POLL_MS = 60_000; // mirrors the Python app's st.cache_data(ttl=60)
 
-// Cycled by index so each chip gets a distinct, consistent color regardless
-// of how many chips are shown. Built from the BeCloudReady brand colors
-// (--brand-azure / --brand-azure-600 / --brand-orange, defined in
-// index.css) rather than an arbitrary rainbow — this is the palette
-// that's actually visible without hovering anything, unlike the shadcn
-// --accent token which only shows up on hover states.
+// Cycled by index so each chip gets a distinct, consistent border color
+// regardless of how many chips are shown. Only the border is colored — the
+// fill stays neutral so the block itself doesn't compete with the chat UI;
+// the color is just a quick visual anchor per-question.
 const CHIP_COLORS = [
-  "border-[var(--brand-azure)]/30 bg-[var(--brand-azure)]/10 text-[var(--brand-azure-600)] hover:bg-[var(--brand-azure)]/20",
-  "border-[var(--brand-orange)]/30 bg-[var(--brand-orange)]/10 text-[var(--brand-orange)] hover:bg-[var(--brand-orange)]/20",
-  "border-[var(--brand-azure-600)]/30 bg-[var(--brand-azure-600)]/10 text-[var(--brand-azure-600)] hover:bg-[var(--brand-azure-600)]/20",
-  "border-[var(--brand-orange)]/40 bg-[var(--brand-orange)]/15 text-[var(--brand-orange)] hover:bg-[var(--brand-orange)]/25",
+  "border-red-400",
+  "border-orange-400",
+  "border-amber-400",
+  "border-lime-500",
+  "border-emerald-500",
+  "border-cyan-500",
+  "border-blue-500",
+  "border-violet-500",
+  "border-pink-500",
 ];
 
 function SuggestionChip({
@@ -38,7 +41,7 @@ function SuggestionChip({
       type="button"
       onClick={onClick}
       title={title}
-      className={`flex items-center gap-1.5 border text-left text-xs font-medium transition-colors ${
+      className={`flex items-center gap-1.5 border-2 bg-background text-left text-xs font-medium text-foreground transition-colors hover:bg-muted ${
         panel ? "w-full rounded-lg px-3 py-2" : "rounded-full px-3.5 py-2"
       } ${CHIP_COLORS[colorIndex % CHIP_COLORS.length]}`}
     >

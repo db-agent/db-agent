@@ -38,6 +38,13 @@ export interface Turn {
   output: PipelineOutput | null; // null while pending
 }
 
+export interface Conversation {
+  id: string;
+  title: string; // derived from the first question asked
+  turns: Turn[];
+  createdAt: string;
+}
+
 export interface MemoryRecord {
   recordId: string;
   sourceAgent: string;

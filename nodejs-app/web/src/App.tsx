@@ -4,8 +4,23 @@ import { Sidebar } from "@/components/Sidebar";
 import { Suggestions } from "@/components/Suggestions";
 import { Button } from "@/components/ui/button";
 import { ask, fetchConfig, fetchSchema } from "@/lib/api";
-import type { AppConfig, Schema, Turn } from "@/lib/types";
+import type { AppConfig, Conversation, Schema, Turn } from "@/lib/types";
 import { ArrowUp, Lightbulb, X } from "lucide-react";
+
+const CONVERSATIONS_KEY = "dbagent.conversations";
+
+function loadConversations(): Conversation[] {
+  try {
+    const raw = localStorage.getItem(CONVERSATIONS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function titleFromQuestion(q: string): string {
+  return q.length > 48 ? `${q.slice(0, 48)}…` : q;
+}
 
 function EmptyState({
   config,
@@ -31,11 +46,15 @@ function EmptyState({
 function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [schema, setSchema] = useState<Schema | null>(null);
-  const [turns, setTurns] = useState<Turn[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>(loadConversations);
+  const [activeId, setActiveId] = useState<string | null>(() => loadConversations()[0]?.id ?? null);
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
   const [showSuggestionsPanel, setShowSuggestionsPanel] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const activeConversation = conversations.find((c) => c.id === activeId) ?? null;
+  const turns = activeConversation?.turns ?? [];
 
   useEffect(() => {
     fetchConfig().then(setConfig).catch(() => setConfig(null));
@@ -43,22 +62,50 @@ function App() {
   }, []);
 
   useEffect(() => {
+    localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations));
+  }, [conversations]);
+
+  useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [turns]);
+
+  function updateTurns(conversationId: string, updater: (turns: Turn[]) => Turn[]) {
+    setConversations((prev) =>
+      prev.map((c) => (c.id === conversationId ? { ...c, turns: updater(c.turns) } : c))
+    );
+  }
+
+  function handleNewChat() {
+    setActiveId(null);
+    setQuestion("");
+  }
 
   async function handleAsk(q: string) {
     if (!q.trim() || busy) return;
     setBusy(true);
     setQuestion("");
 
+    let conversationId = activeId;
+    if (!conversationId) {
+      conversationId = crypto.randomUUID();
+      const conversation: Conversation = {
+        id: conversationId,
+        title: titleFromQuestion(q),
+        turns: [],
+        createdAt: new Date().toISOString(),
+      };
+      setConversations((prev) => [conversation, ...prev]);
+      setActiveId(conversationId);
+    }
+
     const id = crypto.randomUUID();
-    setTurns((prev) => [...prev, { id, question: q, output: null }]);
+    updateTurns(conversationId, (prev) => [...prev, { id, question: q, output: null }]);
 
     try {
       const output = await ask(q);
-      setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, output } : t)));
+      updateTurns(conversationId, (prev) => prev.map((t) => (t.id === id ? { ...t, output } : t)));
     } catch (exc) {
-      setTurns((prev) =>
+      updateTurns(conversationId, (prev) =>
         prev.map((t) =>
           t.id === id
             ? {
@@ -85,7 +132,14 @@ function App() {
 
   return (
     <div className="flex h-screen bg-background text-foreground">
-      <Sidebar config={config} schema={schema} />
+      <Sidebar
+        config={config}
+        schema={schema}
+        conversations={conversations}
+        activeId={activeId}
+        onSelect={setActiveId}
+        onNewChat={handleNewChat}
+      />
 
       <main className="flex flex-1 flex-col">
         <div className="flex justify-end px-4 pt-3">
