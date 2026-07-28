@@ -10,6 +10,7 @@ import "dotenv/config";
 import express from "express";
 import { DatabaseSync } from "node:sqlite";
 import OpenAI from "openai";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { LocalJsonBackend, S3VectorsBackend, fetchRelevantMemories, writeMemory } from "./memory.js";
@@ -34,6 +35,11 @@ const MAX_REPAIR_ATTEMPTS = 2;
 // queries, instructions) — see knowledge.js. Absent file = no change to
 // existing behavior.
 const KNOWLEDGE_PATH = process.env.KNOWLEDGE_FILE || path.join(__dirname, "knowledge.json");
+// Local-only feedback log — no cross-agent sharing (unlike the memory
+// store), no dashboard. Just a greppable JSONL so wrong answers can be
+// triaged manually; the real payoff comes once a benchmark runner (#40)
+// can turn fixed thumbs-down cases into regression tests.
+const FEEDBACK_PATH = process.env.FEEDBACK_STORE_PATH || path.join(__dirname, "data", "feedback.jsonl");
 
 // The chat model (SQL generation, repair, memory summarization) and the
 // embedding model don't need to be the same endpoint. This matters for
@@ -77,6 +83,69 @@ const MEMORY = {
 
 // ── Schema introspection ─────────────────────────────────────────────────────
 
+// The LLM guesses literal column values ("status = 'Pending'" when the data
+// stores 'pending'), returning zero rows with no error — one of the most
+// common real-world text-to-SQL failures. Sampling distinct values for
+// low-cardinality TEXT columns and showing them in the schema fixes this
+// automatically, no config needed.
+const MAX_DISTINCT_VALUES = 10;
+// Skip columns whose name suggests personal data even if low-cardinality —
+// sampling exists to disambiguate enum-like columns, not to leak literal
+// customer data into every prompt. These patterns are unambiguous on their
+// own regardless of table.
+const PII_ALWAYS_PATTERNS = [
+  "email", "phone", "address", "ssn", "password", "secret", "token", "dob", "birth",
+];
+// "name" alone is ambiguous — customers.name is a person's name (PII),
+// products.name is not. Only treat *_name columns as PII when the table
+// itself looks like it holds people.
+const PERSON_TABLE_PATTERNS = [
+  "customer", "user", "person", "employee", "contact", "client", "patient", "student", "member",
+];
+
+function looksLikePII(table, columnName) {
+  const lowerCol = columnName.toLowerCase();
+  if (PII_ALWAYS_PATTERNS.some((p) => lowerCol.includes(p))) return true;
+  if (lowerCol.includes("name")) {
+    const lowerTable = table.toLowerCase();
+    return PERSON_TABLE_PATTERNS.some((p) => lowerTable.includes(p));
+  }
+  return false;
+}
+
+// Cached for the process lifetime rather than re-sampled every request —
+// the schema itself is read fresh each time (cheap PRAGMA calls), but
+// sampling adds a real query per eligible column, and the underlying data
+// doesn't change from a user's perspective the way a knowledge.json edit
+// would. A server restart clears it.
+const columnValueCache = new Map();
+
+function sampleColumnValues(table, column) {
+  const cacheKey = `${table}.${column}`;
+  if (columnValueCache.has(cacheKey)) return columnValueCache.get(cacheKey);
+
+  let values = null;
+  try {
+    const safeTable = `"${table.replaceAll('"', '""')}"`;
+    const safeColumn = `"${column.replaceAll('"', '""')}"`;
+    const rows = db
+      .prepare(
+        `SELECT DISTINCT ${safeColumn} AS v FROM ${safeTable} WHERE ${safeColumn} IS NOT NULL LIMIT ${MAX_DISTINCT_VALUES + 1}`
+      )
+      .all();
+    // Hitting the +1 limit means the column is higher-cardinality than
+    // "enum-like" — skip it rather than show a truncated, misleading list.
+    if (rows.length > 0 && rows.length <= MAX_DISTINCT_VALUES) {
+      values = rows.map((r) => String(r.v));
+    }
+  } catch {
+    values = null;
+  }
+
+  columnValueCache.set(cacheKey, values);
+  return values;
+}
+
 function getSchema() {
   const tables = db
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
@@ -86,14 +155,30 @@ function getSchema() {
   for (const { name: table } of tables) {
     const safeTable = `"${String(table).replaceAll('"', '""')}"`;
     const columns = db.prepare(`PRAGMA table_info(${safeTable})`).all();
-    schema[table] = columns.map((c) => ({ name: c.name, type: c.type }));
+    schema[table] = columns.map((c) => {
+      const col = { name: c.name, type: c.type };
+      if (String(c.type).toUpperCase().includes("TEXT") && !looksLikePII(table, c.name)) {
+        const values = sampleColumnValues(table, c.name);
+        if (values) col.sampleValues = values;
+      }
+      return col;
+    });
   }
   return schema;
 }
 
 function formatSchema(schema) {
   return Object.entries(schema)
-    .map(([table, cols]) => `  ${table}: ${cols.map((c) => `${c.name} (${c.type})`).join(", ")}`)
+    .map(([table, cols]) =>
+      `  ${table}: ${cols
+        .map((c) => {
+          const base = `${c.name} (${c.type})`;
+          return c.sampleValues
+            ? `${base} [one of: ${c.sampleValues.map((v) => `'${v}'`).join(", ")}]`
+            : base;
+        })
+        .join(", ")}`
+    )
     .join("\n");
 }
 
@@ -158,6 +243,67 @@ async function callLlm(systemPrompt, userPrompt) {
     ],
   });
   return response.choices[0].message.content || "";
+}
+
+// ── Example questions ─────────────────────────────────────────────────────
+// Generated from the actual schema rather than hardcoded — hardcoded
+// examples only make sense for the bundled demo DB; anyone pointing this at
+// a different database would see irrelevant suggestions. Cached per schema
+// signature (not per request) since the schema rarely changes and this is
+// a plain LLM call with no safety-critical output.
+
+let exampleQuestionsCache = null; // { key: string, questions: string[] }
+
+function schemaSignature(schema) {
+  return Object.entries(schema)
+    .map(([table, cols]) => `${table}:${cols.map((c) => c.name).join(",")}`)
+    .join("|");
+}
+
+function heuristicExampleQuestions(schema) {
+  const tables = Object.keys(schema);
+  if (tables.length === 0) return [];
+  return [`How many rows are in ${tables[0]}?`, `Show the first 5 rows of ${tables[0]}`]
+    .concat(tables.slice(1, 4).map((t) => `Show all data in ${t}`))
+    .slice(0, 5);
+}
+
+async function generateExampleQuestions(schema) {
+  const key = schemaSignature(schema);
+  if (exampleQuestionsCache && exampleQuestionsCache.key === key) {
+    return exampleQuestionsCache.questions;
+  }
+
+  const prompt = `Database schema:
+${formatSchema(schema)}
+
+Suggest 5 short, natural-language questions a business analyst might ask about
+this data. Ground every question strictly in the table and column names
+above — never invent a table or column that isn't listed. Prefer a mix of
+simple counts/lookups and at least one question that joins two tables, if
+the schema supports it.
+
+Respond with ONLY a JSON array of 5 strings, no other text.`;
+
+  let questions;
+  try {
+    const raw = await callLlm(
+      "You generate example questions for a natural-language-to-SQL demo, grounded strictly in the schema you're given.",
+      prompt
+    );
+    const text = raw.replace(/```(?:json)?\s*/g, "").trim().replace(/`+$/, "").trim();
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every((q) => typeof q === "string")) {
+      throw new Error("unexpected response shape");
+    }
+    questions = parsed.slice(0, 5);
+  } catch (exc) {
+    console.warn(`[examples] generation failed, using heuristic fallback: ${exc.message || exc}`);
+    questions = heuristicExampleQuestions(schema);
+  }
+
+  exampleQuestionsCache = { key, questions };
+  return questions;
 }
 
 function parseSqlResponse(raw) {
@@ -308,6 +454,15 @@ app.get("/api/schema", (req, res) => {
   }
 });
 
+app.get("/api/example-questions", async (req, res) => {
+  try {
+    const questions = await generateExampleQuestions(getSchema());
+    res.json(questions);
+  } catch (exc) {
+    res.status(500).json({ error: String(exc.message || exc) });
+  }
+});
+
 app.get("/api/config", (req, res) => {
   res.json({
     llmBaseUrl: LLM_BASE_URL,
@@ -348,6 +503,29 @@ app.get("/api/memories", async (req, res) => {
       : "recent activity";
     const memories = await fetchRelevantMemories(queryText, MEMORY, 3);
     res.json(memories);
+  } catch (exc) {
+    res.status(500).json({ error: String(exc.message || exc) });
+  }
+});
+
+app.post("/api/feedback", (req, res) => {
+  const { question, sql, rating, comment } = req.body || {};
+  if (!question || (rating !== "up" && rating !== "down")) {
+    return res.status(400).json({ error: "question and rating ('up' or 'down') are required" });
+  }
+
+  try {
+    fs.mkdirSync(path.dirname(FEEDBACK_PATH), { recursive: true });
+    const entry = {
+      question,
+      sql: sql || null,
+      rating,
+      comment: comment || null,
+      dbagentId: MEMORY.dbagentId,
+      timestamp: new Date().toISOString(),
+    };
+    fs.appendFileSync(FEEDBACK_PATH, JSON.stringify(entry) + "\n");
+    res.json({ ok: true });
   } catch (exc) {
     res.status(500).json({ error: String(exc.message || exc) });
   }

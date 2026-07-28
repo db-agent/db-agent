@@ -29,10 +29,22 @@ export async function fetchMemories(tables: string[]): Promise<MemoryRecord[]> {
   return res.json();
 }
 
-export const EXAMPLE_QUESTIONS = [
-  "How many customers are there?",
-  "Show the top 5 products by price",
-  "List all orders placed in 2024",
-  "Which customers have placed the most orders?",
-  "Total revenue per product",
-];
+export async function sendFeedback(feedback: {
+  question: string;
+  sql: string | null;
+  rating: "up" | "down";
+  comment?: string;
+}): Promise<boolean> {
+  const res = await fetch("/api/feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(feedback),
+  });
+  return res.ok;
+}
+
+export async function fetchExampleQuestions(): Promise<string[]> {
+  const res = await fetch("/api/example-questions");
+  if (!res.ok) return [];
+  return res.json();
+}

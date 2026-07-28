@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -12,8 +14,71 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { sendFeedback } from "@/lib/api";
 import type { Turn } from "@/lib/types";
-import { CheckCircle2, Loader2, Wrench, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, ThumbsDown, ThumbsUp, Wrench, XCircle } from "lucide-react";
+
+function FeedbackButtons({ question, sql }: { question: string; sql: string | null }) {
+  const [rating, setRating] = useState<"up" | "down" | null>(null);
+  const [showComment, setShowComment] = useState(false);
+  const [comment, setComment] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  async function submit(r: "up" | "down", c?: string) {
+    setRating(r);
+    setSubmitted(true);
+    await sendFeedback({ question, sql, rating: r, comment: c });
+  }
+
+  function handleDown() {
+    if (submitted) return;
+    setShowComment(true);
+  }
+
+  if (submitted) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Thanks for the feedback{rating === "down" ? " — noted for review" : ""}.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => submit("up")}
+          title="Good answer"
+          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <ThumbsUp className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={handleDown}
+          title="Bad answer"
+          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <ThumbsDown className="size-3.5" />
+        </button>
+      </div>
+      {showComment && (
+        <div className="flex items-center gap-2">
+          <input
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="What went wrong? (optional)"
+            className="flex-1 rounded-md border bg-background px-2 py-1 text-xs outline-none"
+          />
+          <Button type="button" size="sm" className="h-7 text-xs" onClick={() => submit("down", comment)}>
+            Submit
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function UserBubble({ question }: { question: string }) {
   return (
@@ -147,6 +212,8 @@ export function ChatTurn({ turn }: { turn: Turn }) {
                   <ResultTable columns={output.columns ?? []} rows={output.rows} />
                 </div>
               )}
+
+              <FeedbackButtons question={output.question} sql={output.sql} />
             </div>
           )}
         </CardContent>
