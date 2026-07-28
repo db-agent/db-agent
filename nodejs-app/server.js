@@ -194,6 +194,13 @@ Rules you must follow:
 - Write exactly one statement. No semicolons in the middle.
 - The database is SQLite — use SQLite date/string functions (date('now','-1 month')),
   not MySQL/Postgres equivalents.
+- Some text columns (e.g. person names) have their real values hidden from you for
+  privacy, so you cannot see exact stored strings for them. When the question
+  names a person or gives a partial/likely value for such a column, match it with
+  LIKE '%value%' (case-insensitive substring) instead of exact equality — an exact
+  '=' will silently miss rows whenever the stored value has more to it (e.g. a last
+  name) than what the question mentioned. Only use exact equality when the column's
+  schema entry lists sample values and the question's value matches one of them.
 - If the question cannot be answered from the schema, say so in the explanation
   and set sql to an empty string.
 
