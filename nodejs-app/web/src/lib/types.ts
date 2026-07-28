@@ -1,6 +1,7 @@
 export interface SchemaColumn {
   name: string;
   type: string;
+  sampleValues?: string[];
 }
 
 export type Schema = Record<string, SchemaColumn[]>;

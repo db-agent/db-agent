@@ -1,19 +1,29 @@
 import { useEffect, useRef, useState } from "react";
 import { ChatTurn } from "@/components/ChatTurn";
 import { Sidebar } from "@/components/Sidebar";
+import { Suggestions } from "@/components/Suggestions";
 import { Button } from "@/components/ui/button";
 import { ask, fetchConfig, fetchSchema } from "@/lib/api";
 import type { AppConfig, Schema, Turn } from "@/lib/types";
-import { ArrowUp, Database } from "lucide-react";
+import { ArrowUp, Lightbulb, X } from "lucide-react";
 
-function EmptyState() {
+function EmptyState({
+  config,
+  schema,
+  onAsk,
+}: {
+  config: AppConfig | null;
+  schema: Schema | null;
+  onAsk: (q: string) => void;
+}) {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center text-center text-muted-foreground">
-      <Database className="mb-3 size-10" />
-      <p className="mb-1 font-semibold text-foreground">No queries yet</p>
-      <p className="text-sm">
-        Type a question below, or pick an example from the sidebar.
-      </p>
+    <div className="flex flex-1 flex-col items-center justify-center gap-6 text-center text-muted-foreground">
+      <div>
+        <img src="/logo.png" alt="" className="mx-auto mb-3 size-12 rounded-xl" />
+        <p className="mb-1 font-semibold text-foreground">No queries yet</p>
+        <p className="text-sm">Type a question below, or pick a suggestion.</p>
+      </div>
+      <Suggestions config={config} schema={schema} onAsk={onAsk} />
     </div>
   );
 }
@@ -24,6 +34,7 @@ function App() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showSuggestionsPanel, setShowSuggestionsPanel] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -74,12 +85,23 @@ function App() {
 
   return (
     <div className="flex h-screen bg-background text-foreground">
-      <Sidebar config={config} schema={schema} onAsk={handleAsk} />
+      <Sidebar config={config} schema={schema} />
 
       <main className="flex flex-1 flex-col">
-        <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col overflow-y-auto px-6 pt-8">
+        <div className="flex justify-end px-4 pt-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowSuggestionsPanel((v) => !v)}
+            className="gap-1.5 text-xs text-muted-foreground"
+          >
+            <Lightbulb className="size-3.5 text-[var(--brand-orange)]" />
+            Suggestions
+          </Button>
+        </div>
+        <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col overflow-y-auto px-6 pt-2">
           {turns.length === 0 ? (
-            <EmptyState />
+            <EmptyState config={config} schema={schema} onAsk={handleAsk} />
           ) : (
             <>
               {turns.map((t) => (
@@ -120,6 +142,23 @@ function App() {
           </p>
         </div>
       </main>
+
+      {showSuggestionsPanel && (
+        <aside className="flex h-screen w-72 shrink-0 flex-col overflow-y-auto border-l bg-sidebar px-4 py-5">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold">Suggestions</h2>
+            <button
+              type="button"
+              onClick={() => setShowSuggestionsPanel(false)}
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Close suggestions panel"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          <Suggestions config={config} schema={schema} onAsk={handleAsk} variant="panel" />
+        </aside>
+      )}
     </div>
   );
 }

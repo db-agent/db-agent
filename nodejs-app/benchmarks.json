@@ -1,0 +1,30 @@
+[
+  {
+    "question": "How many customers are there?",
+    "groundTruthSql": "SELECT COUNT(*) FROM customers"
+  },
+  {
+    "question": "How many products are in the Electronics category?",
+    "groundTruthSql": "SELECT COUNT(*) FROM products WHERE category = 'Electronics'"
+  },
+  {
+    "question": "What is the total quantity of Coffee Mug ordered?",
+    "groundTruthSql": "SELECT SUM(o.quantity) FROM orders o JOIN products p ON o.product_id = p.id WHERE p.name = 'Coffee Mug'"
+  },
+  {
+    "question": "What is the total revenue across all orders?",
+    "groundTruthSql": "SELECT ROUND(SUM(o.quantity * p.price), 2) FROM orders o JOIN products p ON o.product_id = p.id"
+  },
+  {
+    "question": "Which orders are still pending?",
+    "groundTruthSql": "SELECT * FROM orders WHERE status = 'pending'"
+  },
+  {
+    "question": "What is the most expensive product?",
+    "groundTruthSql": "SELECT name, price FROM products ORDER BY price DESC LIMIT 1"
+  },
+  {
+    "question": "What are the names of customers from Berlin?",
+    "groundTruthSql": "SELECT name FROM customers WHERE city = 'Berlin'"
+  }
+]

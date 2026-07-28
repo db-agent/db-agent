@@ -63,6 +63,7 @@ coverage.xml
 *.db-wal
 legacy/streamlit-app/data/memory_store.jsonl
 nodejs-app/data/memory_store.jsonl
+nodejs-app/data/feedback.jsonl
 # keep the data/ placeholder committed
 !**/data/.gitkeep
 
