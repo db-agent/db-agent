@@ -4,8 +4,15 @@
 
 ---
 
+> ### 🎙️ Free live webinar series — from the maintainer
+> **Production AI Agents on the Lakehouse: what actually breaks.** Live builds of DB Agent's newest features — redaction-first agent memory, S3 Vectors, knowledge files — no slides, notebook shared with every registrant.
+> **[Register free →](https://becloudready.com/webinar/db-agent?utm_source=github&utm_medium=readme)**
+
+---
+
 [![Demo Video](https://img.shields.io/badge/Visit-Our%20Demo-red)](https://youtu.be/tt0oTIrY260)
 [![Streamlit Live App](https://img.shields.io/badge/Live-App-brightgreen)](https://db-agent.streamlit.app/)
+[![Live Webinar Series](https://img.shields.io/badge/Live-Webinar%20Series-1276c0)](https://becloudready.com/webinar/db-agent?utm_source=github&utm_medium=badge)
 
 ---
 
@@ -74,18 +81,13 @@ By default each instance stores memory in its own local file, so two local insta
 ---
 
 
-## Learning modules
+## Learning the concepts
 
-New to AI agents? Work through the modules in order — each one builds on the last:
-
-| Module | Concept | What you build |
-|--------|---------|---------------|
-| [01 — LLM Basics](./modules/01_llm_basics/) | What is an LLM API call? | Notebook: raw API call, messages, temperature |
-| [02 — Structured Output](./modules/02_structured_output/) | How to get reliable JSON from an LLM | Notebook: JSON mode + Pydantic validation |
-| [03 — Tool Use](./modules/03_tool_use/) | LLM calls functions instead of generating text | Agent that decides when to query the DB |
-| [04 — Agentic Loop](./modules/04_agentic_loop/) | Retry, reflect, recover from errors | Agent with max-steps guard and error recovery |
-| [05 — MCP Server](./modules/05_mcp_server/) | Expose tools via a standard protocol | MCP server connectable to Claude Desktop |
-
+New to AI agents? The step-by-step learning modules (LLM basics → structured output → tool
+use → agentic loop → MCP server) now live in the
+[becloudready/workshops](https://github.com/becloudready/workshops/tree/master/workshops/databricks-genie-ai-agents/fundamentals)
+repo as the notebook track of the Databricks Genie & AI Agents workshop. This repo stays
+focused on the agent itself.
 
 ---
 
