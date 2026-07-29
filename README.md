@@ -4,12 +4,6 @@
 
 ---
 
-> ### 🎙️ Free live webinar series — from the maintainer
-> **Production AI Agents on the Lakehouse: what actually breaks.** Live builds of DB Agent's newest features — redaction-first agent memory, S3 Vectors, knowledge files — no slides, notebook shared with every registrant.
-> **[Register free →](https://becloudready.com/webinar/db-agent?utm_source=github&utm_medium=readme)**
-
----
-
 [![Demo Video](https://img.shields.io/badge/Visit-Our%20Demo-red)](https://youtu.be/tt0oTIrY260)
 [![Streamlit Live App](https://img.shields.io/badge/Live-App-brightgreen)](https://db-agent.streamlit.app/)
 [![Live Webinar Series](https://img.shields.io/badge/Live-Webinar%20Series-1276c0)](https://becloudready.com/webinar/db-agent?utm_source=github&utm_medium=badge)
