@@ -25,6 +25,20 @@
 // }
 
 import fs from "node:fs";
+import { cosineSimilarity, embed } from "./memory.js";
+
+const DEFAULT_MAX_EXAMPLES = 3;
+// Rough estimate (chars/4), not a real tokenizer — good enough to flag
+// "this knowledge block is getting large" without adding a tokenizer
+// dependency for what's currently a diagnostic warning, not a hard limit.
+const TOKEN_WARN_THRESHOLD = 800;
+
+// Keyed by exact example question text. Both hand-curated knowledge.json
+// examples and benchmark-derived examples (see benchmarks.js) flow through
+// here, and neither changes example question text without also changing
+// the underlying object's identity, so no separate cache invalidation is
+// needed at this scale.
+const exampleEmbeddingCache = new Map();
 
 export function loadKnowledge(filePath) {
   if (!fs.existsSync(filePath)) return null;
@@ -49,6 +63,82 @@ export function loadKnowledge(filePath) {
     console.warn(`[knowledge] ${filePath} is not valid JSON, ignoring: ${exc.message || exc}`);
     return null;
   }
+}
+
+function mentionsWord(text, word) {
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${escaped}\\b`, "i").test(text);
+}
+
+// Descriptions/expressions are cheap to filter with keyword matching — no
+// embeddings needed. A description for "customers.email" only earns its
+// place in the prompt if the question actually mentions "customers" (or
+// "email"); same idea for expression names like "revenue".
+function filterByKeywordMatch(entries, question) {
+  return Object.fromEntries(
+    Object.entries(entries).filter(([key]) => {
+      const table = key.split(".")[0];
+      return mentionsWord(question, table) || mentionsWord(question, key);
+    })
+  );
+}
+
+async function selectRelevantExamples(examples, question, embeddingClient, embeddingModel, maxExamples) {
+  if (examples.length <= maxExamples) return examples;
+
+  // Only worth the embedding calls once there are more examples than the
+  // cap — small files (the common case) skip this entirely.
+  try {
+    const questionVector = await embed(embeddingClient, question, embeddingModel);
+
+    const scored = await Promise.all(
+      examples.map(async (ex) => {
+        let vector = exampleEmbeddingCache.get(ex.question);
+        if (!vector) {
+          vector = await embed(embeddingClient, ex.question, embeddingModel);
+          exampleEmbeddingCache.set(ex.question, vector);
+        }
+        return { ex, score: cosineSimilarity(questionVector, vector) };
+      })
+    );
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, maxExamples).map((s) => s.ex);
+  } catch (exc) {
+    // Selection is a refinement, not a correctness requirement — if
+    // embedding fails for any reason, fall back to the first N examples
+    // rather than failing the whole request.
+    console.warn(`[knowledge] example selection skipped, using first ${maxExamples}: ${exc.message || exc}`);
+    return examples.slice(0, maxExamples);
+  }
+}
+
+// Filters a knowledge object down to what's relevant to this specific
+// question, so the prompt isn't paying — in tokens, and in the
+// small-model-bias risk of irrelevant few-shot examples — for the whole
+// file (or the whole benchmark example set) on every request regardless of
+// relevance. `knowledge` doesn't have to come from loadKnowledge(); the
+// caller may merge in benchmark-derived examples first (see server.js).
+export async function selectRelevantKnowledge(
+  knowledge,
+  question,
+  embeddingClient,
+  embeddingModel,
+  { maxExamples = DEFAULT_MAX_EXAMPLES } = {}
+) {
+  if (!knowledge) return null;
+
+  const descriptions = filterByKeywordMatch(knowledge.descriptions, question);
+  const expressions = filterByKeywordMatch(knowledge.expressions, question);
+  const examples = await selectRelevantExamples(
+    knowledge.examples,
+    question,
+    embeddingClient,
+    embeddingModel,
+    maxExamples
+  );
+
+  return { descriptions, expressions, examples, instructions: knowledge.instructions };
 }
 
 export function formatKnowledge(knowledge) {
@@ -89,5 +179,14 @@ export function formatKnowledge(knowledge) {
   }
 
   if (sections.length === 0) return "";
-  return "\n\n" + sections.join("\n\n");
+
+  const text = "\n\n" + sections.join("\n\n");
+  const estimatedTokens = Math.ceil(text.length / 4); // no tokenizer dep — rough but enough to flag growth
+  if (estimatedTokens > TOKEN_WARN_THRESHOLD) {
+    console.warn(
+      `[knowledge] injected block is ~${estimatedTokens} tokens (over the ${TOKEN_WARN_THRESHOLD} warn threshold) — ` +
+        `consider trimming knowledge.json, lowering maxExamples, or pruning stale benchmark cases`
+    );
+  }
+  return text;
 }

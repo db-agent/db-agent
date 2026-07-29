@@ -13,8 +13,16 @@ import OpenAI from "openai";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { LocalJsonBackend, S3VectorsBackend, fetchRelevantMemories, writeMemory } from "./memory.js";
-import { formatKnowledge, loadKnowledge } from "./knowledge.js";
+import {
+  LocalJsonBackend,
+  S3VectorsBackend,
+  fetchRelevantMemories,
+  invalidateFollowup,
+  writeMemory,
+} from "./memory.js";
+import { formatKnowledge, loadKnowledge, selectRelevantKnowledge } from "./knowledge.js";
+import { validateSql } from "./sqlSafety.js";
+import { benchmarkStore } from "./benchmarks.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -194,6 +202,13 @@ Rules you must follow:
 - Write exactly one statement. No semicolons in the middle.
 - The database is SQLite — use SQLite date/string functions (date('now','-1 month')),
   not MySQL/Postgres equivalents.
+- Some text columns (e.g. person names) have their real values hidden from you for
+  privacy, so you cannot see exact stored strings for them. When the question
+  names a person or gives a partial/likely value for such a column, match it with
+  LIKE '%value%' (case-insensitive substring) instead of exact equality — an exact
+  '=' will silently miss rows whenever the stored value has more to it (e.g. a last
+  name) than what the question mentioned. Only use exact equality when the column's
+  schema entry lists sample values and the question's value matches one of them.
 - If the question cannot be answered from the schema, say so in the explanation
   and set sql to an empty string.
 
@@ -205,20 +220,20 @@ Always respond with valid JSON in this exact format:
 
 Do not include any text outside the JSON object.`;
 
-function buildUserPrompt(question, schema, knowledge) {
+function buildUserPrompt(question, schema, knowledgeText) {
   return `Database schema:
 ${formatSchema(schema)}
-${formatKnowledge(knowledge)}
+${knowledgeText}
 
 User question: ${question}
 
 Return only the JSON object described above.`;
 }
 
-function buildRepairPrompt(question, schema, failedSql, error, knowledge) {
+function buildRepairPrompt(question, schema, failedSql, error, knowledgeText) {
   return `Database schema:
 ${formatSchema(schema)}
-${formatKnowledge(knowledge)}
+${knowledgeText}
 
 User question: ${question}
 
@@ -320,38 +335,6 @@ function parseSqlResponse(raw) {
   }
 }
 
-// ── SQL safety layer (mirrors ../core/sql_safety.py) ─────────────────────────
-
-const FORBIDDEN = [
-  "DROP", "DELETE", "UPDATE", "INSERT", "ALTER",
-  "TRUNCATE", "CREATE", "REPLACE", "MERGE", "EXEC",
-  "EXECUTE", "GRANT", "REVOKE", "ATTACH", "DETACH",
-];
-
-function validateSql(sql) {
-  const stripped = sql.trim();
-  if (!stripped) return { isSafe: false, reason: "SQL is empty." };
-
-  const cleaned = stripped.replace(/;$/, "");
-  if (cleaned.includes(";")) {
-    return { isSafe: false, reason: "Multiple SQL statements detected. Only a single SELECT is allowed." };
-  }
-
-  const firstWord = cleaned.trim().split(/\s+/)[0].toUpperCase();
-  if (!["SELECT", "WITH"].includes(firstWord)) {
-    return { isSafe: false, reason: `Query must start with SELECT or WITH, got '${firstWord}'.` };
-  }
-
-  const upperSql = cleaned.toUpperCase();
-  for (const keyword of FORBIDDEN) {
-    if (new RegExp(`\\b${keyword}\\b`).test(upperSql)) {
-      return { isSafe: false, reason: `Forbidden keyword detected: ${keyword}.` };
-    }
-  }
-
-  return { isSafe: true, reason: "SQL passed all safety checks." };
-}
-
 // ── Query execution ───────────────────────────────────────────────────────────
 
 function runQuery(sql) {
@@ -363,9 +346,47 @@ function runQuery(sql) {
 
 // ── Pipeline (mirrors ../core/pipeline.py, including the SQL repair loop) ───
 
+// Verified benchmark cases double as few-shot examples, on top of whatever
+// knowledge.json provides — a benchmark question like "which SKU is best
+// performing?" only has one correct SQL interpretation of "best" (higher
+// volume vs. higher price, say), and once that's been confirmed by a
+// passing benchmark run, future similar questions should reuse it rather
+// than the LLM re-guessing the business meaning each time.
+//
+// "Confirmed" is load-bearing here: seed cases are trusted by construction
+// (hand-verified, repo-committed — see benchmarks.js), but user/feedback
+// cases must have an actual PASSING benchmark run before they're used as
+// examples. Including never-run cases would be a self-fulfilling prophecy —
+// someone submits a case, asks that exact question again before any
+// benchmark run has checked it, and the model just echoes their own
+// (possibly wrong) SQL back as if it were verified truth. Confirmed this
+// the hard way: an unverified case with deliberately-wrong ground truth got
+// selected as a top-similarity example for its own question and the model
+// copied it verbatim.
+function buildMergedKnowledge() {
+  const rawKnowledge = loadKnowledge(KNOWLEDGE_PATH);
+  const benchmarkExamples = benchmarkStore
+    .listCases()
+    .filter((c) => c.source === "seed" || c.lastRun?.status === "pass")
+    .map((c) => ({ question: c.question, sql: c.groundTruthSql }));
+
+  if (!rawKnowledge && benchmarkExamples.length === 0) return null;
+  return {
+    descriptions: rawKnowledge?.descriptions || {},
+    expressions: rawKnowledge?.expressions || {},
+    examples: [...(rawKnowledge?.examples || []), ...benchmarkExamples],
+    instructions: rawKnowledge?.instructions || [],
+  };
+}
+
 async function runPipeline(question) {
   const schema = getSchema();
-  const knowledge = loadKnowledge(KNOWLEDGE_PATH);
+  const knowledge = buildMergedKnowledge();
+  // Selected once per request and reused for every repair attempt — the
+  // relevant subset doesn't change mid-request, so there's no reason to
+  // re-embed on every repair loop iteration.
+  const selectedKnowledge = await selectRelevantKnowledge(knowledge, question, embeddingClient, MEMORY.embeddingModel);
+  const knowledgeText = formatKnowledge(selectedKnowledge);
   const output = {
     question,
     schemaContext: formatSchema(schema),
@@ -379,7 +400,7 @@ async function runPipeline(question) {
   };
 
   try {
-    const raw = await callLlm(SYSTEM_PROMPT, buildUserPrompt(question, schema, knowledge));
+    const raw = await callLlm(SYSTEM_PROMPT, buildUserPrompt(question, schema, knowledgeText));
     const parsed = parseSqlResponse(raw);
     output.sql = parsed.sql;
     output.explanation = parsed.explanation;
@@ -412,7 +433,7 @@ async function runPipeline(question) {
 
         const repairRaw = await callLlm(
           SYSTEM_PROMPT,
-          buildRepairPrompt(question, schema, currentSql, String(dbErr.message || dbErr), knowledge)
+          buildRepairPrompt(question, schema, currentSql, String(dbErr.message || dbErr), knowledgeText)
         );
         const repaired = parseSqlResponse(repairRaw);
         const repairValidation = validateSql(repaired.sql);
@@ -474,6 +495,7 @@ app.get("/api/config", (req, res) => {
     embeddingBaseUrl: EMBEDDING_BASE_URL,
     embeddingModel: MEMORY.embeddingModel,
     knowledgeLoaded: loadKnowledge(KNOWLEDGE_PATH) !== null,
+    benchmarkCaseCount: benchmarkStore.listCases().length,
   });
 });
 
@@ -526,6 +548,63 @@ app.post("/api/feedback", (req, res) => {
     };
     fs.appendFileSync(FEEDBACK_PATH, JSON.stringify(entry) + "\n");
     res.json({ ok: true });
+
+    // A thumbs-down means this question is actively misleading — strip it
+    // out of shared memory immediately rather than waiting for the next
+    // benchmark run, so other agents stop suggesting it right away.
+    // Fire-and-forget, same reasoning as the writeMemory call in /api/ask.
+    if (rating === "down") {
+      void invalidateFollowup(question, MEMORY).catch((err) => {
+        console.warn(`[memory] invalidate failed: ${err?.message || err}`);
+      });
+    }
+  } catch (exc) {
+    res.status(500).json({ error: String(exc.message || exc) });
+  }
+});
+
+// ── Benchmarks (question + ground-truth SQL, scored by benchmark.js) ────────
+// See benchmarks.js for the seed/user/feedback source model.
+
+app.get("/api/benchmarks", (req, res) => {
+  try {
+    res.json(benchmarkStore.listCases());
+  } catch (exc) {
+    res.status(500).json({ error: String(exc.message || exc) });
+  }
+});
+
+app.post("/api/benchmarks", (req, res) => {
+  const { question, groundTruthSql } = req.body || {};
+  try {
+    const entry = benchmarkStore.addCase({ question, groundTruthSql, source: "user" });
+    res.status(201).json(entry);
+  } catch (exc) {
+    res.status(400).json({ error: String(exc.message || exc) });
+  }
+});
+
+app.delete("/api/benchmarks/:id", (req, res) => {
+  try {
+    const removed = benchmarkStore.removeCase(req.params.id);
+    // Best-effort: a manually deleted case might also be a stale/bad
+    // suggestion floating around shared memory.
+    void invalidateFollowup(removed.question, MEMORY).catch(() => {});
+    res.json({ ok: true });
+  } catch (exc) {
+    res.status(400).json({ error: String(exc.message || exc) });
+  }
+});
+
+// Used by benchmark.js to purge a specific question from shared memory when
+// a case fails its run, and available generally for any other caller that
+// wants to signal "stop suggesting this question."
+app.post("/api/memories/invalidate", async (req, res) => {
+  const { question } = req.body || {};
+  if (!question) return res.status(400).json({ error: "question is required" });
+  try {
+    const result = await invalidateFollowup(question, MEMORY);
+    res.json(result);
   } catch (exc) {
     res.status(500).json({ error: String(exc.message || exc) });
   }

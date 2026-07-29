@@ -1,0 +1,91 @@
+name: DB Agent (Node) — Benchmark
+
+# Runs nodejs-app's text-to-SQL benchmark suite (npm run benchmark) against
+# a real LLM endpoint on every change to nodejs-app/. Scores generated SQL
+# by result set, not by string match — see nodejs-app/benchmark.js.
+#
+# Requires an LLM endpoint, which means real repo secrets. Gated so it
+# never just fails red for a fork or a repo that hasn't configured them:
+# the "check-secrets" job decides whether they're present, and the
+# benchmark job is skipped (not failed) when they aren't.
+#
+# Only a SEED case failing fails this workflow — a user/feedback-derived
+# ground-truth case failing gets auto-pruned by benchmark.js itself and is
+# reported, not treated as a build break. See benchmarks.js/benchmark.js
+# for that design.
+#
+# Configure repo secrets to enable:
+#   LLM_BASE_URL     — OpenAI-compatible chat endpoint
+#   LLM_API_KEY       — key for that endpoint
+#   LLM_MODEL         — chat model name
+#   EMBEDDING_MODEL   — only needed if the endpoint's embeddings model name
+#                       differs from LLM_MODEL; defaults to LLM_MODEL if unset
+
+on:
+  pull_request:
+    paths:
+      - "nodejs-app/**"
+      - ".github/workflows/nodejs-app-benchmark.yml"
+  push:
+    branches: [main]
+    paths:
+      - "nodejs-app/**"
+      - ".github/workflows/nodejs-app-benchmark.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-secrets:
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        env:
+          HAS_LLM_BASE_URL: ${{ secrets.LLM_BASE_URL != '' }}
+          HAS_LLM_API_KEY: ${{ secrets.LLM_API_KEY != '' }}
+        run: |
+          if [ "$HAS_LLM_BASE_URL" = "true" ] && [ "$HAS_LLM_API_KEY" = "true" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::LLM_BASE_URL/LLM_API_KEY repo secrets are not set — skipping the benchmark run."
+          fi
+
+  benchmark:
+    needs: check-secrets
+    if: needs.check-secrets.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: nodejs-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: nodejs-app/package-lock.json
+
+      - name: Install server dependencies
+        run: npm ci
+
+      - name: Install and build web frontend
+        run: npm run build
+
+      - name: Run benchmark
+        env:
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL }}
+          MEMORY_ENABLED: "false"
+          # feedback.jsonl never exists in CI (gitignored, local-only), so
+          # this is a documented no-op here — left on so behavior matches a
+          # local run rather than silently diverging.
+          IMPORT_FEEDBACK: "true"
+        run: npm run benchmark
