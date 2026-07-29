@@ -1,4 +1,4 @@
-# DB Agent — Text-to-SQL AI Agent for Databricks, Postgres, and AWS
+# DB Agent — Text-to-SQL AI Agent for Databricks, Postgres,Snowflake and AWS
 
 > An open-source **text-to-SQL AI agent** that converts natural language into safe SQL, with production deployment patterns for **Databricks Apps**, **Postgres/MySQL**, and cross-agent memory on **AWS S3 Vectors**. Schema-aware prompt engineering, SQL safety guardrails (SELECT-only validation), knowledge files, and result-set benchmarks you can deploy at work.
 
@@ -18,7 +18,7 @@
 
 ## What is DB Agent?
 
-DB Agent is a minimal **natural-language-to-SQL system**. A user asks a question in plain English; DB Agent retrieves relevant schema context, prompts an LLM to generate a SQL query, validates the query against a SELECT-only safety layer, executes it against the target database, and returns the results with every intermediate step visible. The primary implementation is a **Node.js/React app** that runs locally in one command or deploys natively to **Databricks Apps**; the original Python/Streamlit implementation is preserved under `legacy/` for reference.
+DB Agent is a minimal **natural-language-to-SQL system**. A user asks a question in plain English; DB Agent retrieves relevant schema context, prompts an LLM to generate a SQL query, validates the query against a SELECT-only safety layer, executes it against the target database, and returns the results with every intermediate step visible. The primary implementation is a **Node.js/React app** that runs locally in one command or deploys natively to **Databricks Apps**.
 
 ---
 ## Features
