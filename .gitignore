@@ -64,6 +64,7 @@ coverage.xml
 legacy/streamlit-app/data/memory_store.jsonl
 nodejs-app/data/memory_store.jsonl
 nodejs-app/data/feedback.jsonl
+nodejs-app/data/benchmark-cases.json
 # keep the data/ placeholder committed
 !**/data/.gitkeep
 

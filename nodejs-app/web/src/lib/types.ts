@@ -55,3 +55,19 @@ export interface MemoryRecord {
   insightSummary: string;
   suggestedFollowups: string[];
 }
+
+export interface BenchmarkRunResult {
+  status: "pass" | "fail";
+  at: string;
+  sql: string | null;
+  reason?: string;
+}
+
+export interface BenchmarkCase {
+  id: string;
+  question: string;
+  groundTruthSql: string;
+  source: "seed" | "user" | "feedback";
+  createdAt: string | null;
+  lastRun: BenchmarkRunResult | null;
+}

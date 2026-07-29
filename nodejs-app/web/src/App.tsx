@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import { BenchmarksPanel } from "@/components/BenchmarksPanel";
 import { ChatTurn } from "@/components/ChatTurn";
 import { Sidebar } from "@/components/Sidebar";
 import { Suggestions } from "@/components/Suggestions";
 import { Button } from "@/components/ui/button";
 import { ask, fetchConfig, fetchSchema } from "@/lib/api";
 import type { AppConfig, Conversation, Schema, Turn } from "@/lib/types";
-import { ArrowUp, Lightbulb, X } from "lucide-react";
+import { ArrowUp, FlaskConical, Lightbulb, X } from "lucide-react";
 
 const CONVERSATIONS_KEY = "dbagent.conversations";
 
@@ -65,6 +66,7 @@ function App() {
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
   const [showSuggestionsPanel, setShowSuggestionsPanel] = useState(false);
+  const [showBenchmarksPanel, setShowBenchmarksPanel] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const activeConversation = conversations.find((c) => c.id === activeId) ?? null;
@@ -160,15 +162,30 @@ useEffect(() => {
       />
 
       <main className="flex flex-1 flex-col">
-        <div className="flex justify-end px-4 pt-3">
+        <div className="flex justify-end gap-1 px-4 pt-3">
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setShowSuggestionsPanel((v) => !v)}
+            onClick={() => {
+              setShowSuggestionsPanel((v) => !v);
+              setShowBenchmarksPanel(false);
+            }}
             className="gap-1.5 text-xs text-muted-foreground"
           >
             <Lightbulb className="size-3.5 text-[var(--brand-orange)]" />
             Suggestions
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setShowBenchmarksPanel((v) => !v);
+              setShowSuggestionsPanel(false);
+            }}
+            className="gap-1.5 text-xs text-muted-foreground"
+          >
+            <FlaskConical className="size-3.5 text-[var(--brand-azure)]" />
+            Benchmarks
           </Button>
         </div>
         <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col overflow-y-auto px-6 pt-2">
@@ -231,6 +248,8 @@ useEffect(() => {
           <Suggestions config={config} schema={schema} onAsk={handleAsk} variant="panel" />
         </aside>
       )}
+
+      {showBenchmarksPanel && <BenchmarksPanel onClose={() => setShowBenchmarksPanel(false)} />}
     </div>
   );
 }

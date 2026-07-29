@@ -132,5 +132,37 @@ documented-supported) — the deployment shape is the same generic
   `encoding_format: "base64"` for embeddings, which at least the Databricks
   AI Gateway route mishandled — silently returning a truncated vector with
   no error. `memory.js` forces `encoding_format: "float"` to avoid it.)
+- **Benchmarks** (`benchmarks.js`, `benchmark.js`, `benchmarks.json`): a
+  question paired with hand-verified ground-truth SQL, scored by result set
+  (not SQL text) against the live pipeline — `npm run benchmark`. Three
+  sources of cases, in the "Benchmarks" panel in the UI or via
+  `GET/POST/DELETE /api/benchmarks`:
+  - **seed** — `benchmarks.json`, repo-tracked, hand-verified. Failures are
+    real regressions: reported, never auto-deleted.
+  - **user** — added through the UI or the API.
+  - **feedback** — auto-promoted from thumbs-up `/api/feedback` entries
+    before each run (`IMPORT_FEEDBACK=false` to disable).
+
+  Passing cases double as few-shot examples for the prompt (merged with
+  `knowledge.json`'s own `examples`, same relevance-ranked selection — see
+  `selectRelevantKnowledge` in `knowledge.js`) — a confirmed answer to
+  "which SKU is best performing?" teaches the model your business's
+  definition of "best" for similar future questions. A case only counts as
+  "confirmed" once it has an actual passing run recorded; a never-run case
+  is not used as an example, since that would let a bad self-submitted case
+  validate itself the moment someone asks the same question again.
+
+  user/feedback cases that **fail** a benchmark run are automatically
+  removed from the ground-truth set *and* purged from shared memory's
+  suggested follow-ups (`invalidateFollowup` in `memory.js`) — the same
+  purge also fires immediately on a thumbs-down in `/api/feedback`, rather
+  than waiting for the next benchmark run. This is what makes the
+  ground-truth set self-healing instead of monotonically accumulating stale
+  entries as the schema/data drifts.
+
+  CI runs the suite on every change to `nodejs-app/` via
+  `.github/workflows/nodejs-app-benchmark.yml`, gated on the
+  `LLM_BASE_URL`/`LLM_API_KEY` repo secrets being configured (skipped, not
+  failed, otherwise). Only a **seed** case failing fails the workflow.
 - No streaming, no auth — this is a UI comparison prototype, not a
   production alternative to the Streamlit app.
