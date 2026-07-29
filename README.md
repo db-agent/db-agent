@@ -5,7 +5,7 @@
 ---
 
 [![Demo Video](https://img.shields.io/badge/Visit-Our%20Demo-red)](https://youtu.be/tt0oTIrY260)
-[![Streamlit Live App](https://img.shields.io/badge/Live-App-brightgreen)](https://db-agent.streamlit.app/)
+[![Streamlit Live App](https://img.shields.io/badge/Live-App-brightgreen)](https://db-agent-pg42.onrender.com/)
 [![Live Webinar Series](https://img.shields.io/badge/Live-Webinar%20Series-1276c0)](https://becloudready.com/webinar/db-agent?utm_source=github&utm_medium=referral&utm_content=badge)
 
 ---
