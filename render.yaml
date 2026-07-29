@@ -1,0 +1,34 @@
+# Render Blueprint — deploys the DB Agent demo (app/) as a free web service.
+# Dashboard: New + → Blueprint → select this repo. Render reads this file.
+#
+# Free tier notes: the service sleeps after 15 min idle (~30-60s cold start on
+# the next request). The bundled SQLite demo DB ships in the repo; memory and
+# feedback writes go to ephemeral disk and reset on each deploy — fine for a demo.
+#
+# LLM_* values below are placeholders so the app boots and serves the UI and
+# schema browser without any real key; /api/ask returns an error until a real
+# OpenAI-compatible endpoint is configured in the Render dashboard
+# (Environment → edit LLM_BASE_URL / LLM_API_KEY / LLM_MODEL).
+services:
+  - type: web
+    name: db-agent-demo
+    runtime: node
+    plan: free
+    rootDir: app
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/config
+    autoDeploy: true
+    envVars:
+      - key: LLM_BASE_URL
+        value: "https://placeholder.invalid/v1"
+      - key: LLM_API_KEY
+        value: "placeholder-set-me-in-dashboard"
+      - key: LLM_MODEL
+        value: "placeholder"
+      # Public single-instance demo: cross-agent memory does nothing useful here
+      # and would double LLM calls per question once a real key is added.
+      - key: MEMORY_ENABLED
+        value: "false"
+      - key: DBAGENT_ID
+        value: "render-demo"

@@ -61,6 +61,10 @@ coverage.xml
 *.sqlite3
 *.db-shm
 *.db-wal
+
+# The bundled demo seed DB is intentionally committed (README promises a
+# self-contained app; git-based deploys like Render need it in the repo)
+!app/data/demo.db
 legacy/streamlit-app/data/memory_store.jsonl
 app/data/memory_store.jsonl
 app/data/feedback.jsonl
