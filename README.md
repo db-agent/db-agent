@@ -53,7 +53,7 @@ ollama pull qwen2.5-coder:7b
 ./run_local.sh
 ```
 
-Open http://localhost:3001. Any OpenAI-compatible endpoint works instead of Ollama — see [`app/.env.example`](./app/.env.example) for OpenAI, Groq, and Databricks Model Serving.
+Open `http://localhost:3001`. Any OpenAI-compatible endpoint works instead of Ollama — see [`app/.env.example`](./app/.env.example) for OpenAI, Groq, and Databricks Model Serving.
 
 **Deploy to Databricks Apps:**
 
