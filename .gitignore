@@ -62,16 +62,16 @@ coverage.xml
 *.db-shm
 *.db-wal
 legacy/streamlit-app/data/memory_store.jsonl
-nodejs-app/data/memory_store.jsonl
-nodejs-app/data/feedback.jsonl
-nodejs-app/data/benchmark-cases.json
+app/data/memory_store.jsonl
+app/data/feedback.jsonl
+app/data/benchmark-cases.json
 # keep the data/ placeholder committed
 !**/data/.gitkeep
 
 # Per-deployment knowledge file is personal/local config, not shared code —
 # same pattern as .env vs .env.example.
-nodejs-app/knowledge.json
-!nodejs-app/knowledge.json.example
+app/knowledge.json
+!app/knowledge.json.example
 
 # ── Python build & packaging ──────────────────────────────────────────────────
 dist/

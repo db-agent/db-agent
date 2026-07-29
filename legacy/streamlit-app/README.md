@@ -1,9 +1,9 @@
 # DB Agent (Streamlit) — archived
 
 This is the original Python/Streamlit implementation of DB Agent. It has been
-superseded by the Node.js/React app at [`nodejs-app/`](../../nodejs-app),
+superseded by the Node.js/React app at [`app/`](../../app),
 which is now the primary implementation. This folder is kept for reference
-— the code still runs, but new features and fixes land in `nodejs-app/` only.
+— the code still runs, but new features and fixes land in `app/` only.
 
 ## Run it locally
 

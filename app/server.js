@@ -31,7 +31,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.DATABRICKS_APP_PORT || process.env.PORT || 3001;
 // Self-contained default (data/demo.db bundled alongside this file) so the
 // app has no path dependency outside its own deployed source tree — required
-// since Databricks Apps deploys nodejs-app/ as its own isolated source root,
+// since Databricks Apps deploys app/ as its own isolated source root,
 // not the whole repo. DB_PATH can still override to ../data/demo.db for
 // local dev that shares the root Python app's seeded DB.
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "data", "demo.db");
@@ -62,7 +62,7 @@ const EMBEDDING_API_KEY = process.env.EMBEDDING_API_KEY || LLM_API_KEY;
 // ── Cross-platform contextual memory config ─────────────────────────────────
 // MEMORY_BACKEND=local (default, no cloud setup) or s3vectors (requires
 // MEMORY_S3_BUCKET + MEMORY_ORG_ID + a pre-provisioned vector bucket/index —
-// see nodejs-app/README.md).
+// see app/README.md).
 const memoryBackend =
   (process.env.MEMORY_BACKEND || "local").toLowerCase() === "s3vectors"
     ? new S3VectorsBackend({
@@ -460,7 +460,7 @@ async function runPipeline(question) {
 const app = express();
 app.use(express.json());
 // Serves the built React/Tailwind/shadcn frontend (web/). Run `npm run build`
-// in web/ first — see nodejs-app/README.md.
+// in web/ first — see app/README.md.
 const WEB_DIST = path.join(__dirname, "web", "dist");
 app.use(express.static(WEB_DIST));
 app.get(/^(?!\/api).*/, (req, res) => {

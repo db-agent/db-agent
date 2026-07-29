@@ -1,7 +1,7 @@
 name: "[LEGACY] DB Agent — Databricks Apps Deploy"
 # ──────────────────────────────────────────────────────────────────────────────
 # ARCHIVED: targets the retired Streamlit app, now under legacy/streamlit-app/.
-# The primary app is nodejs-app/. Kept for reference — re-verify before running.
+# The primary app is app/. Kept for reference — re-verify before running.
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Manual trigger only. Deploys the unified app.py entry point to Databricks

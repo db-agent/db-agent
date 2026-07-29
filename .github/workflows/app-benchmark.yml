@@ -1,8 +1,8 @@
 name: DB Agent (Node) — Benchmark
 
-# Runs nodejs-app's text-to-SQL benchmark suite (npm run benchmark) against
-# a real LLM endpoint on every change to nodejs-app/. Scores generated SQL
-# by result set, not by string match — see nodejs-app/benchmark.js.
+# Runs app's text-to-SQL benchmark suite (npm run benchmark) against
+# a real LLM endpoint on every change to app/. Scores generated SQL
+# by result set, not by string match — see app/benchmark.js.
 #
 # Requires an LLM endpoint, which means real repo secrets. Gated so it
 # never just fails red for a fork or a repo that hasn't configured them:
@@ -24,13 +24,13 @@ name: DB Agent (Node) — Benchmark
 on:
   pull_request:
     paths:
-      - "nodejs-app/**"
-      - ".github/workflows/nodejs-app-benchmark.yml"
+      - "app/**"
+      - ".github/workflows/app-benchmark.yml"
   push:
     branches: [main]
     paths:
-      - "nodejs-app/**"
-      - ".github/workflows/nodejs-app-benchmark.yml"
+      - "app/**"
+      - ".github/workflows/app-benchmark.yml"
   workflow_dispatch: {}
 
 concurrency:
@@ -61,7 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: nodejs-app
+        working-directory: app
     steps:
       - uses: actions/checkout@v4
 
@@ -69,7 +69,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: nodejs-app/package-lock.json
+          cache-dependency-path: app/package-lock.json
 
       - name: Install server dependencies
         run: npm ci

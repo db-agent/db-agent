@@ -5,7 +5,7 @@
 // cases as few-shot examples (see selectRelevantKnowledge in knowledge.js).
 //
 // Three sources of cases, ranked by trust:
-//   seed     — nodejs-app/benchmarks.json, repo-tracked and hand-verified.
+//   seed     — app/benchmarks.json, repo-tracked and hand-verified.
 //              Read-only through this module: seed cases can't be deleted
 //              or have their run result persisted back into a file that's
 //              committed to the repo, since that would make every CI run

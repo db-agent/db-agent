@@ -22,7 +22,7 @@ Two parts:
 
 ```bash
 ollama pull qwen2.5-coder:7b   # or any model you prefer
-cd nodejs-app
+cd app
 ./run_local.sh
 ```
 
@@ -35,7 +35,7 @@ doesn't exist yet. Pass a different model as `$1`:
 **Manual setup** (any OpenAI-compatible endpoint):
 
 ```bash
-cd nodejs-app
+cd app
 npm install
 cp .env.example .env      # defaults to local Ollama; edit for OpenAI/Groq/etc.
 
@@ -46,7 +46,7 @@ npm start
 Open http://localhost:3001. Default `DB_PATH` is the self-contained
 `./data/demo.db` bundled in this directory (so the app has no path
 dependency outside its own source tree — required for Databricks Apps,
-which deploys `nodejs-app/` as an isolated source root). To instead share
+which deploys `app/` as an isolated source root). To instead share
 the root Python app's seeded DB during local dev, set
 `DB_PATH=../data/demo.db` (run the Python app once first, or
 `python ../bootstrap.py`, if that file doesn't exist yet).
@@ -160,8 +160,8 @@ documented-supported) — the deployment shape is the same generic
   ground-truth set self-healing instead of monotonically accumulating stale
   entries as the schema/data drifts.
 
-  CI runs the suite on every change to `nodejs-app/` via
-  `.github/workflows/nodejs-app-benchmark.yml`, gated on the
+  CI runs the suite on every change to `app/` via
+  `.github/workflows/app-benchmark.yml`, gated on the
   `LLM_BASE_URL`/`LLM_API_KEY` repo secrets being configured (skipped, not
   failed, otherwise). Only a **seed** case failing fails the workflow.
 - No streaming, no auth — this is a UI comparison prototype, not a

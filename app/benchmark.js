@@ -6,7 +6,7 @@
 //
 // Cases come from benchmarks.js's shared store, which merges three
 // sources — see that file's header comment for the full model:
-//   seed     — nodejs-app/benchmarks.json, hand-verified, repo-tracked.
+//   seed     — app/benchmarks.json, hand-verified, repo-tracked.
 //              Failures here are real regressions: reported, never pruned.
 //   user     — added via POST /api/benchmarks.
 //   feedback — auto-promoted from thumbs-up feedback entries before this

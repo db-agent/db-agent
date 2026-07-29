@@ -1,7 +1,7 @@
 name: "[LEGACY] DB Agent — EKS CI/CD"
 # ──────────────────────────────────────────────────────────────────────────────
 # ARCHIVED: targets the retired Streamlit app, now under legacy/streamlit-app/.
-# The primary app is nodejs-app/. Kept for reference — re-verify before running.
+# The primary app is app/. Kept for reference — re-verify before running.
 
 # ──────────────────────────────────────────────────────────────────────────────
 # End-to-end CI/CD for the db-agent app on AWS EKS.
