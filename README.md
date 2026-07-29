@@ -5,7 +5,7 @@
 ---
 
 [![Demo Video](https://img.shields.io/badge/Visit-Our%20Demo-red)](https://youtu.be/tt0oTIrY260)
-[![Streamlit Live App](https://img.shields.io/badge/Live-App-brightgreen)](https://db-agent-pg42.onrender.com/)
+[![Live App](https://img.shields.io/badge/Live-App-brightgreen)](https://db-agent-pg42.onrender.com/)
 [![Live Webinar Series](https://img.shields.io/badge/Live-Webinar%20Series-1276c0)](https://becloudready.com/webinar/db-agent?utm_source=github&utm_medium=referral&utm_content=badge)
 
 ---
@@ -36,14 +36,14 @@ DB Agent is a minimal **natural-language-to-SQL system**. A user asks a question
 
 ## Deployment modes
 
-| | Local ([`app/`](./app)) | Databricks Apps ([`app/`](./app)) | Legacy Streamlit ([`legacy/streamlit-app/`](./legacy/streamlit-app)) |
-|---|---|---|---|
-| **Stack** | Node.js + Express + React | Node.js + Express + React (native Databricks App) | Python + Streamlit |
-| **Best for** | Trying it in one command, local dev | Enterprise Databricks deployments | Reference for the original pipeline |
-| **Auth** | `.env` | Databricks Apps runtime + secrets | `.env` + API keys |
-| **SQL target** | SQLite (bundled demo DB) | SQLite app DB; Unity Catalog via Lakehouse patterns | SQLite / PostgreSQL / MySQL / Databricks SQL |
-| **LLM endpoint** | Ollama or any OpenAI-compatible | Databricks Model Serving or any OpenAI-compatible | Any OpenAI-compatible |
-| **Memory backend** | Local JSONL or AWS S3 Vectors | Local or AWS S3 Vectors | — |
+| | Local ([`app/`](./app)) | Databricks Apps ([`app/`](./app)) |
+|---|---|---|
+| **Stack** | Node.js + Express + React | Node.js + Express + React (native Databricks App) |
+| **Best for** | Trying it in one command, local dev | Enterprise Databricks deployments |
+| **Auth** | `.env` | Databricks Apps runtime + secrets |
+| **SQL target** | SQLite (bundled demo DB) | SQLite app DB; Unity Catalog via Lakehouse patterns |
+| **LLM endpoint** | Ollama or any OpenAI-compatible | Databricks Model Serving or any OpenAI-compatible |
+| **Memory backend** | Local JSONL or AWS S3 Vectors | Local or AWS S3 Vectors |
 
 **Run it locally** (SQLite + local Ollama, no API key needed):
 
@@ -66,8 +66,6 @@ databricks apps deploy db-agent-node --source-code-path /Workspace/Users/<you>/d
 ```
 
 Databricks installs dependencies and builds the frontend automatically. See [`app/README.md`](./app/README.md) for `app.yaml` configuration (LLM endpoint, secrets, embeddings model for the memory feature).
-
-An earlier Python/Streamlit implementation is preserved under [`legacy/streamlit-app/`](./legacy/streamlit-app) for reference — see its README for how to run it.
 
 **Running multiple instances** (for cross-agent memory — see Agentic Memory above): each running instance is tagged via `DBAGENT_ID`, so you can spin up as many as you like, locally or on Databricks, and they'll share suggestions with each other through a common memory store.
 
