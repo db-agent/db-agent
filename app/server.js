@@ -8,13 +8,13 @@
 
 import "dotenv/config";
 import express from "express";
-import { DatabaseSync } from "node:sqlite";
 import OpenAI from "openai";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { fetchRelevantMemories, invalidateFollowup, writeMemory } from "./memory.js";
 import { createMemoryBackend, listMemoryBackends } from "./memoryBackends/index.js";
+import { createSqlEngine, listSqlEngines } from "./sqlEngines/index.js";
 import { formatKnowledge, loadKnowledge, selectRelevantKnowledge } from "./knowledge.js";
 import { validateSql } from "./sqlSafety.js";
 import { benchmarkStore } from "./benchmarks.js";
@@ -67,7 +67,18 @@ const memoryBackend = createMemoryBackend(process.env.MEMORY_BACKEND, {
   dataDir: path.join(__dirname, "data"),
 });
 
-const db = new DatabaseSync(DB_PATH, { readOnly: false });
+// ── SQL engine config ────────────────────────────────────────────────────────
+// SQL_ENGINE selects the query engine from the pluggable registry in
+// sqlEngines/index.js — "sqlite" (default, local file, zero config) or
+// "minio-duckdb" (Parquet objects in MinIO/any S3-compatible store, queried
+// via DuckDB — requires MINIO_ENDPOINT + MINIO_BUCKET, see app/README.md).
+// Adding a new engine means adding one entry to that registry, not touching
+// this file.
+const sqlEngine = createSqlEngine(process.env.SQL_ENGINE, {
+  env: process.env,
+  dataDir: path.join(__dirname, "data"),
+});
+
 const llm = new OpenAI({ baseURL: LLM_BASE_URL, apiKey: LLM_API_KEY });
 const embeddingClient = new OpenAI({ baseURL: EMBEDDING_BASE_URL, apiKey: EMBEDDING_API_KEY });
 
@@ -83,89 +94,14 @@ const MEMORY = {
 };
 
 // ── Schema introspection ─────────────────────────────────────────────────────
+// Delegated to the active sqlEngine (see sqlEngines/index.js) — schema shape
+// and PII-aware sample-value logic now live per-engine (sqlEngines/sqlite.js
+// has the full PII/sampling implementation; sqlEngines/minioDuckdb.js
+// doesn't sample values in this first pass). async because not every engine
+// can answer synchronously (minio-duckdb awaits DuckDB's httpfs setup).
 
-// The LLM guesses literal column values ("status = 'Pending'" when the data
-// stores 'pending'), returning zero rows with no error — one of the most
-// common real-world text-to-SQL failures. Sampling distinct values for
-// low-cardinality TEXT columns and showing them in the schema fixes this
-// automatically, no config needed.
-const MAX_DISTINCT_VALUES = 10;
-// Skip columns whose name suggests personal data even if low-cardinality —
-// sampling exists to disambiguate enum-like columns, not to leak literal
-// customer data into every prompt. These patterns are unambiguous on their
-// own regardless of table.
-const PII_ALWAYS_PATTERNS = [
-  "email", "phone", "address", "ssn", "password", "secret", "token", "dob", "birth",
-];
-// "name" alone is ambiguous — customers.name is a person's name (PII),
-// products.name is not. Only treat *_name columns as PII when the table
-// itself looks like it holds people.
-const PERSON_TABLE_PATTERNS = [
-  "customer", "user", "person", "employee", "contact", "client", "patient", "student", "member",
-];
-
-function looksLikePII(table, columnName) {
-  const lowerCol = columnName.toLowerCase();
-  if (PII_ALWAYS_PATTERNS.some((p) => lowerCol.includes(p))) return true;
-  if (lowerCol.includes("name")) {
-    const lowerTable = table.toLowerCase();
-    return PERSON_TABLE_PATTERNS.some((p) => lowerTable.includes(p));
-  }
-  return false;
-}
-
-// Cached for the process lifetime rather than re-sampled every request —
-// the schema itself is read fresh each time (cheap PRAGMA calls), but
-// sampling adds a real query per eligible column, and the underlying data
-// doesn't change from a user's perspective the way a knowledge.json edit
-// would. A server restart clears it.
-const columnValueCache = new Map();
-
-function sampleColumnValues(table, column) {
-  const cacheKey = `${table}.${column}`;
-  if (columnValueCache.has(cacheKey)) return columnValueCache.get(cacheKey);
-
-  let values = null;
-  try {
-    const safeTable = `"${table.replaceAll('"', '""')}"`;
-    const safeColumn = `"${column.replaceAll('"', '""')}"`;
-    const rows = db
-      .prepare(
-        `SELECT DISTINCT ${safeColumn} AS v FROM ${safeTable} WHERE ${safeColumn} IS NOT NULL LIMIT ${MAX_DISTINCT_VALUES + 1}`
-      )
-      .all();
-    // Hitting the +1 limit means the column is higher-cardinality than
-    // "enum-like" — skip it rather than show a truncated, misleading list.
-    if (rows.length > 0 && rows.length <= MAX_DISTINCT_VALUES) {
-      values = rows.map((r) => String(r.v));
-    }
-  } catch {
-    values = null;
-  }
-
-  columnValueCache.set(cacheKey, values);
-  return values;
-}
-
-function getSchema() {
-  const tables = db
-    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-    .all();
-
-  const schema = {};
-  for (const { name: table } of tables) {
-    const safeTable = `"${String(table).replaceAll('"', '""')}"`;
-    const columns = db.prepare(`PRAGMA table_info(${safeTable})`).all();
-    schema[table] = columns.map((c) => {
-      const col = { name: c.name, type: c.type };
-      if (String(c.type).toUpperCase().includes("TEXT") && !looksLikePII(table, c.name)) {
-        const values = sampleColumnValues(table, c.name);
-        if (values) col.sampleValues = values;
-      }
-      return col;
-    });
-  }
-  return schema;
+async function getSchema() {
+  return await sqlEngine.getSchema();
 }
 
 function formatSchema(schema) {
@@ -329,12 +265,10 @@ function parseSqlResponse(raw) {
 }
 
 // ── Query execution ───────────────────────────────────────────────────────────
+// Delegated to the active sqlEngine — same reasoning as getSchema() above.
 
-function runQuery(sql) {
-  const stmt = db.prepare(sql);
-  const rows = stmt.all();
-  const columns = rows.length > 0 ? Object.keys(rows[0]) : stmt.columns().map((c) => c.name);
-  return { columns, rows };
+async function runQuery(sql) {
+  return await sqlEngine.runQuery(sql);
 }
 
 // ── Pipeline (mirrors ../core/pipeline.py, including the SQL repair loop) ───
@@ -373,7 +307,7 @@ function buildMergedKnowledge() {
 }
 
 async function runPipeline(question) {
-  const schema = getSchema();
+  const schema = await getSchema();
   const knowledge = buildMergedKnowledge();
   // Selected once per request and reused for every repair attempt — the
   // relevant subset doesn't change mid-request, so there's no reason to
@@ -415,7 +349,7 @@ async function runPipeline(question) {
     // layer above before it's allowed to run.
     while (true) {
       try {
-        const { columns, rows } = runQuery(currentSql);
+        const { columns, rows } = await runQuery(currentSql);
         output.columns = columns;
         output.rows = rows;
         output.sql = currentSql;
@@ -460,9 +394,9 @@ app.get(/^(?!\/api).*/, (req, res) => {
   res.sendFile(path.join(WEB_DIST, "index.html"));
 });
 
-app.get("/api/schema", (req, res) => {
+app.get("/api/schema", async (req, res) => {
   try {
-    res.json(getSchema());
+    res.json(await getSchema());
   } catch (exc) {
     res.status(500).json({ error: String(exc.message || exc) });
   }
@@ -470,7 +404,8 @@ app.get("/api/schema", (req, res) => {
 
 app.get("/api/example-questions", async (req, res) => {
   try {
-    const questions = await generateExampleQuestions(getSchema());
+    const schema = await getSchema();
+    const questions = await generateExampleQuestions(schema);
     res.json(questions);
   } catch (exc) {
     res.status(500).json({ error: String(exc.message || exc) });
@@ -482,6 +417,8 @@ app.get("/api/config", (req, res) => {
     llmBaseUrl: LLM_BASE_URL,
     llmModel: LLM_MODEL,
     dbPath: path.basename(DB_PATH),
+    sqlEngine: process.env.SQL_ENGINE || "sqlite",
+    availableSqlEngines: listSqlEngines(),
     memoryEnabled: MEMORY.memoryEnabled,
     dbagentId: MEMORY.dbagentId,
     memoryBackend: process.env.MEMORY_BACKEND || "local",

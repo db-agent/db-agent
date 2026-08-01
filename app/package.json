@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3vectors": "^3.1095.0",
+    "@duckdb/node-api": "^1.5.5-r.2",
     "@zilliz/milvus2-sdk-node": "^3.0.3",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
