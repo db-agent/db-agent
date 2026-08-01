@@ -40,6 +40,7 @@ function looksLikePII(table, columnName) {
 
 export class SQLiteEngine {
   constructor({ dbPath }) {
+    this.dbPath = dbPath;
     this.db = new DatabaseSync(dbPath, { readOnly: false });
     // Cached for the process lifetime rather than re-sampled every request
     // — the schema itself is read fresh each time (cheap PRAGMA calls), but
@@ -101,5 +102,14 @@ export class SQLiteEngine {
     const rows = stmt.all();
     const columns = rows.length > 0 ? Object.keys(rows[0]) : stmt.columns().map((c) => c.name);
     return { columns, rows };
+  }
+
+  // Surfaced in server.js's startup log and /api/config so it's obvious at
+  // a glance (and from the UI) which physical location a query is actually
+  // hitting — added after a live test made clear the old startup log line
+  // ("DB: <path>") stayed hardcoded to the sqlite default even when a
+  // different engine was active, which was actively misleading.
+  describe() {
+    return { type: "sqlite", location: this.dbPath };
   }
 }

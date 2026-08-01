@@ -307,6 +307,14 @@ function buildMergedKnowledge() {
 }
 
 async function runPipeline(question) {
+  // Cheap, always-on visibility into which engine/location actually served
+  // this request — added after a live real-S3 test made clear there was
+  // otherwise no way to confirm from the server logs whether a request hit
+  // local SQLite or a remote S3/MinIO bucket without separately hitting
+  // /api/config.
+  const engineInfo = sqlEngine.describe();
+  console.log(`[ask] "${question}" -> ${engineInfo.type} (${engineInfo.location})`);
+
   const schema = await getSchema();
   const knowledge = buildMergedKnowledge();
   // Selected once per request and reused for every repair attempt — the
@@ -418,6 +426,7 @@ app.get("/api/config", (req, res) => {
     llmModel: LLM_MODEL,
     dbPath: path.basename(DB_PATH),
     sqlEngine: process.env.SQL_ENGINE || "sqlite",
+    sqlEngineInfo: sqlEngine.describe(),
     availableSqlEngines: listSqlEngines(),
     memoryEnabled: MEMORY.memoryEnabled,
     dbagentId: MEMORY.dbagentId,
@@ -542,7 +551,11 @@ app.post("/api/memories/invalidate", async (req, res) => {
 });
 
 app.listen(PORT, () => {
+  const engineInfo = sqlEngine.describe();
   console.log(`DB Agent (Node) running at http://localhost:${PORT}`);
-  console.log(`DB: ${DB_PATH}`);
+  console.log(
+    `SQL engine: ${engineInfo.type} -> ${engineInfo.location}` +
+      (engineInfo.endpoint ? ` (endpoint: ${engineInfo.endpoint})` : "")
+  );
   console.log(`LLM: ${LLM_BASE_URL} (${LLM_MODEL})`);
 });

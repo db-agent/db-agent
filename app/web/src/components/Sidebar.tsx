@@ -5,8 +5,9 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Separator } from "@/components/ui/separator";
+import { getSqlEngineIcon } from "@/components/SqlEngineIcon";
 import type { AppConfig, Conversation, Schema } from "@/lib/types";
-import { Database, MessageSquare, Plus, Server } from "lucide-react";
+import { MessageSquare, Plus, Server } from "lucide-react";
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -92,12 +93,24 @@ export function Sidebar({
             </div>
 
             <FieldLabel>Database</FieldLabel>
-            <div className="flex items-center gap-2 text-xs">
-              <Database className="size-3.5 text-muted-foreground" />
-              <code className="rounded bg-muted px-1.5 py-0.5">
-                {config?.dbPath ?? "…"}
-              </code>
-            </div>
+            {(() => {
+              const engineInfo = config?.sqlEngineInfo;
+              const { icon, label } = getSqlEngineIcon(engineInfo?.type);
+              return (
+                <div className="flex items-center gap-2 text-xs" title={label}>
+                  {icon}
+                  <code className="rounded bg-muted px-1.5 py-0.5 break-all">
+                    {engineInfo?.location ?? config?.dbPath ?? "…"}
+                  </code>
+                </div>
+              );
+            })()}
+            {config?.sqlEngineInfo && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {getSqlEngineIcon(config.sqlEngineInfo.type).label}
+                {config.sqlEngineInfo.endpoint ? ` · ${config.sqlEngineInfo.endpoint}` : ""}
+              </p>
+            )}
 
             <FieldLabel>Schema</FieldLabel>
             {schema ? (
