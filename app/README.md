@@ -6,10 +6,13 @@ Streamlit app — built to compare how the UI feels on a real frontend stack
 model and widget styling. See the root `README.md` for background on the
 project.
 
-Scope is intentionally narrower than the Python app in one respect: SQLite
-only, a single LLM (no model failover chain, no Databricks-native SQL
-backend). It does carry over the SQL repair-on-failure loop and the
-cross-platform contextual memory feature — see Notes below.
+Scope is intentionally narrower than the Python app in one respect: a
+single LLM (no model failover chain, no Databricks-native SQL backend). It
+does carry over the SQL repair-on-failure loop and the cross-platform
+contextual memory feature. The SQL layer itself is pluggable
+(`sqlEngines/`, same registry pattern as the memory backends): `sqlite`
+(default, a local file) or `minio-duckdb` (Parquet objects in MinIO/any
+S3-compatible store, via DuckDB) — see Notes below.
 
 Two parts:
 - `server.js` / `memory.js` — Express API (`/api/schema`, `/api/config`,
@@ -69,7 +72,66 @@ documented-supported) — the deployment shape is the same generic
 - Mirrors `../core/sql_safety.py`'s safety rules and `../core/pipeline.py`'s
   SQL repair-on-failure loop (failed execution → error fed back to the LLM →
   re-validated before retrying) — same behavior, ported by hand since this is
-  a separate runtime, not a shared library.
+  a separate runtime, not a shared library. `sqlSafety.js`'s validator runs
+  identically regardless of which SQL engine is active (see below) — it
+  gates the SQL string itself, before any engine ever sees it.
+- **Pluggable SQL engines** (`sqlEngines/`): the same registry pattern as
+  the memory backends below — `getSchema()`/`runQuery()` behind one
+  interface, selected via `SQL_ENGINE`, adding a new one means one new file
+  plus one registry entry, nothing in `server.js` changes.
+  - `sqlite` (default) — Node's built-in `node:sqlite` module (stable in
+    Node ≥ 22.5) against `DB_PATH` (a local file, `./data/demo.db` by
+    default) — no native build step, unlike `better-sqlite3`.
+  - `minio-duckdb` — Parquet objects in MinIO (or any S3-compatible object
+    store), queried through [DuckDB](https://duckdb.org)'s `httpfs`
+    extension. MinIO holds no live database here, just Parquet files under
+    a bucket/prefix; DuckDB is the query engine. **Verified end-to-end
+    against a real local MinIO instance** (Docker, not mocked): schema
+    introspection, a multi-table join, and the repair loop's error-catching
+    path all confirmed working.
+
+    Convention: every `<bucket>/<prefix>/<table>.parquet` object becomes one
+    logical table named `<table>`, exposed as a DuckDB view over
+    `read_parquet()` — the LLM's generated SQL never needs to know an S3
+    path or Parquet is involved, it just sees table names like any other
+    engine. **Partitioned or multi-file-per-table datasets aren't supported
+    in this first pass** — each table must be exactly one Parquet object.
+    Iceberg table support (DuckDB has an `iceberg` extension, and MinIO's
+    AIStor product supports Iceberg-backed tables natively) is a natural
+    next step but isn't wired up yet.
+
+    Requires `MINIO_ENDPOINT` + `MINIO_BUCKET` (see `.env.example`); tables
+    are discovered once at startup via `glob()`, so adding/removing a
+    Parquet object under the prefix needs a server restart to pick up —
+    not re-scanned per request. `s3_url_style` is forced to `path`, which
+    MinIO (and most self-hosted S3-compatible stores) require — AWS S3
+    itself defaults to virtual-hosted style, which is why this isn't
+    DuckDB's own default.
+
+    **Caveat found while testing**: DuckDB's `BIGINT` columns (which is what
+    `COUNT(*)`/integer aggregates come back as) are returned as JSON
+    *strings*, not native JSON numbers, in query results — a raw JS
+    `bigint` isn't valid input to `JSON.stringify` (which `res.json()` uses
+    under the hood), so the DuckDB Node API stringifies rather than crash
+    the response. `DOUBLE` columns (e.g. `SUM(price)`) come back as normal
+    numbers. Something to know if you're formatting result values on the
+    frontend.
+
+    **Quick local demo** (for a live walkthrough, not just a smoke test):
+    ```bash
+    cd app
+    docker compose -f scripts/minio-demo-compose.yml up -d   # real MinIO, localhost:9000/9001
+    node scripts/seed-minio-demo.js                            # exports data/demo.db -> Parquet -> uploads to MinIO
+    SQL_ENGINE=minio-duckdb MINIO_ENDPOINT=localhost:9000 MINIO_BUCKET=demo-bucket \
+      MINIO_PREFIX=db-agent-demo MINIO_ACCESS_KEY=minioadmin MINIO_SECRET_KEY=minioadmin \
+      MINIO_USE_SSL=false ./run_local.sh
+    ```
+    Seeds the same customers/products/orders demo domain as the SQLite
+    default (exported via DuckDB's `sqlite` extension, so no separate
+    dataset to maintain) — ask it the same questions you'd ask the SQLite
+    demo and compare. MinIO console at `http://localhost:9001`
+    (`minioadmin`/`minioadmin`) if you want to browse the uploaded Parquet
+    objects visually mid-demo.
 - **Optional knowledge file** (`knowledge.js`, `knowledge.json`): the schema
   alone (table/column names + types) doesn't carry business terminology,
   ambiguous-column meaning, or house rules — this is where those go. Copy

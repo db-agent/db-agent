@@ -1,0 +1,30 @@
+# docker-compose for the minio-duckdb SQL engine demo — see
+# scripts/seed-minio-demo.js and app/README.md's "MinIO / DuckDB SQL engine"
+# section for the full walkthrough.
+#
+#   cd app/scripts
+#   docker compose -f minio-demo-compose.yml up -d
+#   cd .. && node scripts/seed-minio-demo.js
+#   SQL_ENGINE=minio-duckdb MINIO_ENDPOINT=localhost:9000 MINIO_BUCKET=demo-bucket \
+#     MINIO_PREFIX=db-agent-demo MINIO_ACCESS_KEY=minioadmin MINIO_SECRET_KEY=minioadmin \
+#     MINIO_USE_SSL=false ./run_local.sh
+#
+# Console at http://localhost:9001 (minioadmin / minioadmin) if you want to
+# browse the uploaded Parquet objects visually during a demo.
+
+services:
+  minio:
+    image: minio/minio
+    container_name: dbagent-minio-demo
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
