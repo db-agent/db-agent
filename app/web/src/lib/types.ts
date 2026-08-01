@@ -23,10 +23,18 @@ export interface PipelineOutput {
   repairAttempts: number;
 }
 
+export interface SqlEngineInfo {
+  type: string;
+  location: string;
+  endpoint?: string;
+}
+
 export interface AppConfig {
   llmBaseUrl: string;
   llmModel: string;
   dbPath: string;
+  sqlEngine: string;
+  sqlEngineInfo: SqlEngineInfo;
   memoryEnabled: boolean;
   dbagentId: string;
   memoryBackend: string;

@@ -28,6 +28,7 @@ function quoteIdentifier(value) {
 
 export class MinioDuckDBEngine {
   constructor({ endpoint, bucket, prefix, accessKey, secretKey, useSsl, region }) {
+    this.endpoint = endpoint;
     this.bucket = bucket;
     // Normalize so joining with the bucket/table name never produces a
     // double slash regardless of how the env var was written.
@@ -120,5 +121,14 @@ export class MinioDuckDBEngine {
     // connection unmodified.
     const reader = await this.connection.runAndReadAll(sql);
     return { columns: reader.columnNames(), rows: reader.getRowObjectsJson() };
+  }
+
+  // Same purpose as SQLiteEngine.describe() — lets server.js's startup log
+  // and /api/config say where a query is actually going, rather than the
+  // old always-shows-the-sqlite-default behavior. `endpoint` is included
+  // since the same engine serves both MinIO and real AWS S3 (and any other
+  // S3-compatible store) — the bucket path alone doesn't tell you which.
+  describe() {
+    return { type: "minio-duckdb", location: this.s3Path(""), endpoint: this.endpoint };
   }
 }
