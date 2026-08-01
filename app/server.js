@@ -13,13 +13,8 @@ import OpenAI from "openai";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  LocalJsonBackend,
-  S3VectorsBackend,
-  fetchRelevantMemories,
-  invalidateFollowup,
-  writeMemory,
-} from "./memory.js";
+import { fetchRelevantMemories, invalidateFollowup, writeMemory } from "./memory.js";
+import { createMemoryBackend, listMemoryBackends } from "./memoryBackends/index.js";
 import { formatKnowledge, loadKnowledge, selectRelevantKnowledge } from "./knowledge.js";
 import { validateSql } from "./sqlSafety.js";
 import { benchmarkStore } from "./benchmarks.js";
@@ -60,19 +55,17 @@ const EMBEDDING_BASE_URL = process.env.EMBEDDING_BASE_URL || LLM_BASE_URL;
 const EMBEDDING_API_KEY = process.env.EMBEDDING_API_KEY || LLM_API_KEY;
 
 // ── Cross-platform contextual memory config ─────────────────────────────────
-// MEMORY_BACKEND=local (default, no cloud setup) or s3vectors (requires
-// MEMORY_S3_BUCKET + MEMORY_ORG_ID + a pre-provisioned vector bucket/index —
-// see app/README.md).
-const memoryBackend =
-  (process.env.MEMORY_BACKEND || "local").toLowerCase() === "s3vectors"
-    ? new S3VectorsBackend({
-        bucket: process.env.MEMORY_S3_BUCKET || "",
-        index: process.env.MEMORY_ORG_ID || "demo-org",
-        region: process.env.MEMORY_S3_REGION || "us-east-1",
-      })
-    : new LocalJsonBackend(
-        process.env.MEMORY_STORE_PATH || path.join(__dirname, "data", "memory_store.jsonl")
-      );
+// MEMORY_BACKEND selects the storage backend from the pluggable registry in
+// memoryBackends/index.js — "local" (default, no cloud setup), "s3vectors"
+// (AWS S3 Vectors, requires MEMORY_S3_BUCKET + MEMORY_ORG_ID + a
+// pre-provisioned vector bucket/index), or "milvus" (self-hosted or Zilliz
+// Cloud, requires MILVUS_ADDRESS + MEMORY_VECTOR_DIM matching
+// EMBEDDING_MODEL's output dimension) — see app/README.md. Adding a new
+// backend means adding one entry to that registry, not touching this file.
+const memoryBackend = createMemoryBackend(process.env.MEMORY_BACKEND, {
+  env: process.env,
+  dataDir: path.join(__dirname, "data"),
+});
 
 const db = new DatabaseSync(DB_PATH, { readOnly: false });
 const llm = new OpenAI({ baseURL: LLM_BASE_URL, apiKey: LLM_API_KEY });
@@ -492,6 +485,7 @@ app.get("/api/config", (req, res) => {
     memoryEnabled: MEMORY.memoryEnabled,
     dbagentId: MEMORY.dbagentId,
     memoryBackend: process.env.MEMORY_BACKEND || "local",
+    availableMemoryBackends: listMemoryBackends(),
     embeddingBaseUrl: EMBEDDING_BASE_URL,
     embeddingModel: MEMORY.embeddingModel,
     knowledgeLoaded: loadKnowledge(KNOWLEDGE_PATH) !== null,
