@@ -7,12 +7,13 @@ model and widget styling. See the root `README.md` for background on the
 project.
 
 Scope is intentionally narrower than the Python app in one respect: a
-single LLM (no model failover chain, no Databricks-native SQL backend). It
-does carry over the SQL repair-on-failure loop and the cross-platform
-contextual memory feature. The SQL layer itself is pluggable
-(`sqlEngines/`, same registry pattern as the memory backends): `sqlite`
-(default, a local file) or `minio-duckdb` (Parquet objects in MinIO/any
-S3-compatible store, via DuckDB) — see Notes below.
+single LLM (no model failover chain). It does carry over the SQL
+repair-on-failure loop and the cross-platform contextual memory feature.
+The SQL layer itself is pluggable (`sqlEngines/`, same registry pattern as
+the memory backends): `sqlite` (default, a local file), `minio-duckdb`
+(Parquet objects in MinIO/any S3-compatible store, via DuckDB), or
+`postgres` (any standard Postgres database — covers Databricks Lakebase
+directly) — see Notes below.
 
 Two parts:
 - `server.js` / `memory.js` — Express API (`/api/schema`, `/api/config`,
@@ -132,6 +133,30 @@ documented-supported) — the deployment shape is the same generic
     demo and compare. MinIO console at `http://localhost:9001`
     (`minioadmin`/`minioadmin`) if you want to browse the uploaded Parquet
     objects visually mid-demo.
+  - `postgres` — any standard Postgres database, via [`pg`](https://node-postgres.com)
+    (node-postgres). Covers **Databricks Lakebase directly** — Lakebase
+    speaks the standard Postgres wire protocol, so this engine has no
+    Lakebase-specific code, just connection details pointed at it. **Verified
+    end-to-end against a real Lakebase instance** (a Kaggle Olist e-commerce
+    dataset, 12 tables) — schema introspection and a live query both
+    confirmed working, local Ollama generating the SQL.
+
+    Either a full connection string (`DB_URL`) or individual
+    `PG_HOST`/`PG_PORT`/`PG_DATABASE`/`PG_USER`/`PG_PASSWORD` fields (see
+    `.env.example`). Lakebase's own connection-details panel gives you a
+    `postgresql+psycopg://...` string (a Python-driver convention) — that
+    works as-is for `DB_URL`, node-postgres's connection-string parser
+    ignores the `+psycopg` suffix. `PG_SSL` defaults to TLS with relaxed
+    certificate validation (works against most managed-Postgres CA chains
+    out of the box); set `PG_SSL=strict` for full verification or
+    `PG_SSL=false` to disable TLS (local Postgres only, never for Lakebase).
+
+    No PII-aware sample-value mining in this first pass (same scope decision
+    as `minio-duckdb`) — every column is exposed as name+type only. If your
+    Lakebase connection uses a short-lived Databricks OAuth token as the
+    password (common), expect to refresh `DB_URL` periodically — an expired
+    token surfaces as a normal Postgres auth error in the `/api/ask`
+    response, not a crash.
 - **Optional knowledge file** (`knowledge.js`, `knowledge.json`): the schema
   alone (table/column names + types) doesn't carry business terminology,
   ambiguous-column meaning, or house rules — this is where those go. Copy
@@ -226,5 +251,13 @@ documented-supported) — the deployment shape is the same generic
   `.github/workflows/app-benchmark.yml`, gated on the
   `LLM_BASE_URL`/`LLM_API_KEY` repo secrets being configured (skipped, not
   failed, otherwise). Only a **seed** case failing fails the workflow.
+- **Timestamped request logging** (`logger.js`): every server log line is
+  prefixed with an ISO timestamp, and `/api/ask` logs a line at each stage
+  of the pipeline — request start (with which SQL engine/location is
+  serving it), SQL generated, each repair attempt, and done (with row count
+  and repair-attempt count). No duration/timing math is done by the app
+  itself on purpose — diff the timestamps yourself to see where time is
+  actually going (LLM call vs. query execution vs. repairs), since that's
+  more trustworthy than a single self-reported number would be.
 - No streaming, no auth — this is a UI comparison prototype, not a
   production alternative to the Streamlit app.
