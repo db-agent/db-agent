@@ -18,6 +18,7 @@ import { createSqlEngine, listSqlEngines } from "./sqlEngines/index.js";
 import { formatKnowledge, loadKnowledge, selectRelevantKnowledge } from "./knowledge.js";
 import { validateSql } from "./sqlSafety.js";
 import { benchmarkStore } from "./benchmarks.js";
+import { log, warn } from "./logger.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -242,7 +243,7 @@ Respond with ONLY a JSON array of 5 strings, no other text.`;
     }
     questions = parsed.slice(0, 5);
   } catch (exc) {
-    console.warn(`[examples] generation failed, using heuristic fallback: ${exc.message || exc}`);
+    warn(`[examples] generation failed, using heuristic fallback: ${exc.message || exc}`);
     questions = heuristicExampleQuestions(schema);
   }
 
@@ -307,21 +308,31 @@ function buildMergedKnowledge() {
 }
 
 async function runPipeline(question) {
-  // Cheap, always-on visibility into which engine/location actually served
-  // this request — added after a live real-S3 test made clear there was
-  // otherwise no way to confirm from the server logs whether a request hit
-  // local SQLite or a remote S3/MinIO bucket without separately hitting
-  // /api/config.
+  // Every line here is timestamped (see logger.js) specifically so
+  // end-to-end text-to-SQL latency — and where it's actually going, LLM
+  // call vs. query execution vs. repair loop — can be read straight off
+  // the log by diffing timestamps, with no timing/duration math done by
+  // the app itself.
   const engineInfo = sqlEngine.describe();
-  console.log(`[ask] "${question}" -> ${engineInfo.type} (${engineInfo.location})`);
+  log(`[ask] start "${question}" -> ${engineInfo.type} (${engineInfo.location})`);
 
-  const schema = await getSchema();
-  const knowledge = buildMergedKnowledge();
-  // Selected once per request and reused for every repair attempt — the
-  // relevant subset doesn't change mid-request, so there's no reason to
-  // re-embed on every repair loop iteration.
-  const selectedKnowledge = await selectRelevantKnowledge(knowledge, question, embeddingClient, MEMORY.embeddingModel);
-  const knowledgeText = formatKnowledge(selectedKnowledge);
+  let schema, knowledgeText;
+  try {
+    schema = await getSchema();
+    const knowledge = buildMergedKnowledge();
+    // Selected once per request and reused for every repair attempt — the
+    // relevant subset doesn't change mid-request, so there's no reason to
+    // re-embed on every repair loop iteration.
+    const selectedKnowledge = await selectRelevantKnowledge(knowledge, question, embeddingClient, MEMORY.embeddingModel);
+    knowledgeText = formatKnowledge(selectedKnowledge);
+  } catch (exc) {
+    // Rethrown as-is (same behavior as before this log line was added) —
+    // just makes sure a failure this early still gets a "done" timestamp
+    // instead of silently having no closing log line for the request.
+    log(`[ask] done (error before SQL generation: ${String(exc.message || exc)})`);
+    throw exc;
+  }
+
   const output = {
     question,
     schemaContext: formatSchema(schema),
@@ -339,13 +350,18 @@ async function runPipeline(question) {
     const parsed = parseSqlResponse(raw);
     output.sql = parsed.sql;
     output.explanation = parsed.explanation;
+    log(`[ask] sql generated: ${parsed.sql || "(empty)"}`);
 
     const validation = validateSql(parsed.sql);
     output.validation = validation;
-    if (!validation.isSafe) return output;
+    if (!validation.isSafe) {
+      log(`[ask] done (rejected by safety validation: ${validation.reason})`);
+      return output;
+    }
 
     if (!parsed.sql) {
       output.validation = { isSafe: false, reason: "The LLM could not generate a query for this question." };
+      log(`[ask] done (no SQL generated)`);
       return output;
     }
 
@@ -361,10 +377,12 @@ async function runPipeline(question) {
         output.columns = columns;
         output.rows = rows;
         output.sql = currentSql;
+        log(`[ask] done, ${rows.length} row(s) returned (${attempts} repair attempt(s))`);
         break;
       } catch (dbErr) {
         if (attempts >= MAX_REPAIR_ATTEMPTS) throw dbErr;
         attempts += 1;
+        log(`[ask] query failed, starting repair attempt ${attempts}: ${String(dbErr.message || dbErr)}`);
 
         const repairRaw = await callLlm(
           SYSTEM_PROMPT,
@@ -375,9 +393,11 @@ async function runPipeline(question) {
         output.sql = repaired.sql;
         output.explanation = repaired.explanation;
         output.repairAttempts = attempts;
+        log(`[ask] repair attempt ${attempts} sql: ${repaired.sql || "(empty)"}`);
 
         if (!repairValidation.isSafe) {
           output.validation = repairValidation;
+          log(`[ask] done (repair rejected by safety validation: ${repairValidation.reason})`);
           return output;
         }
         currentSql = repaired.sql;
@@ -385,6 +405,7 @@ async function runPipeline(question) {
     }
   } catch (exc) {
     output.error = String(exc.message || exc);
+    log(`[ask] done (error: ${output.error})`);
   }
 
   return output;
@@ -450,7 +471,7 @@ app.post("/api/ask", async (req, res) => {
     // Fire-and-forget: memory is cross-platform context, not a critical path
     // — never block the response on a second LLM call + store write.
     void writeMemory(llm, output, MEMORY).catch((err) => {
-      console.warn(`[memory] write failed: ${err?.message || err}`);
+      warn(`[memory] write failed: ${err?.message || err}`);
     });
   } catch (exc) {
     res.status(500).json({ error: String(exc.message || exc) });
@@ -495,7 +516,7 @@ app.post("/api/feedback", (req, res) => {
     // Fire-and-forget, same reasoning as the writeMemory call in /api/ask.
     if (rating === "down") {
       void invalidateFollowup(question, MEMORY).catch((err) => {
-        console.warn(`[memory] invalidate failed: ${err?.message || err}`);
+        warn(`[memory] invalidate failed: ${err?.message || err}`);
       });
     }
   } catch (exc) {
@@ -552,10 +573,10 @@ app.post("/api/memories/invalidate", async (req, res) => {
 
 app.listen(PORT, () => {
   const engineInfo = sqlEngine.describe();
-  console.log(`DB Agent (Node) running at http://localhost:${PORT}`);
-  console.log(
+  log(`DB Agent (Node) running at http://localhost:${PORT}`);
+  log(
     `SQL engine: ${engineInfo.type} -> ${engineInfo.location}` +
       (engineInfo.endpoint ? ` (endpoint: ${engineInfo.endpoint})` : "")
   );
-  console.log(`LLM: ${LLM_BASE_URL} (${LLM_MODEL})`);
+  log(`LLM: ${LLM_BASE_URL} (${LLM_MODEL})`);
 });

@@ -15,6 +15,8 @@
 import path from "node:path";
 import { SQLiteEngine } from "./sqlite.js";
 import { MinioDuckDBEngine } from "./minioDuckdb.js";
+import { PostgresEngine } from "./postgres.js";
+
 
 const REGISTRY = {
   sqlite: {
@@ -41,6 +43,28 @@ const REGISTRY = {
         secretKey: env.MINIO_SECRET_KEY || "",
         useSsl: (env.MINIO_USE_SSL || "false").toLowerCase() === "true",
         region: env.MINIO_REGION || "us-east-1",
+      });
+    },
+  },
+  postgres: {
+    description:
+      "Any standard Postgres database (covers Databricks Lakebase directly — same wire protocol).",
+    create: (env) => {
+      if (!env.DB_URL && !(env.PG_HOST && env.PG_DATABASE)) {
+        throw new Error(
+          "SQL_ENGINE=postgres requires either DB_URL (a full postgres:// connection string) " +
+            "or PG_HOST + PG_DATABASE (see .env.example)."
+        );
+      }
+      return new PostgresEngine({
+        connectionString: env.DB_URL || undefined,
+        host: env.PG_HOST,
+        port: env.PG_PORT || "5432",
+        database: env.PG_DATABASE,
+        user: env.PG_USER,
+        password: env.PG_PASSWORD,
+        ssl: env.PG_SSL || "default",
+        schema: env.PG_SCHEMA || "public",
       });
     },
   },

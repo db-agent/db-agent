@@ -30,6 +30,10 @@ const REGISTRY: Record<string, SqlEngineIconEntry> = {
     icon: <Cloud className="size-3.5 text-[var(--brand-azure)]" />,
     label: "S3-compatible object storage",
   },
+  postgres: {
+    icon: <Database className="size-3.5 text-[var(--brand-orange)]" />,
+    label: "Postgres (or Databricks Lakebase)",
+  },
 };
 
 const FALLBACK: SqlEngineIconEntry = {
