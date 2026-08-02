@@ -33,6 +33,10 @@ DB Agent is a minimal **natural-language-to-SQL system**. A user asks a question
 - **Benchmarks** — question + ground-truth SQL pairs scored on result sets, with UI and CI integration
 ---
 
+### Architecture
+
+![DB Agent architecture](./assets/app-architecture-july-2026.png)
+
 
 ## Deployment modes
 
