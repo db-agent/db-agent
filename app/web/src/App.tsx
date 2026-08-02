@@ -61,6 +61,7 @@ function EmptyState({
 function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [schema, setSchema] = useState<Schema | null>(null);
+  const [schemaError, setSchemaError] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>(loadConversations);
   const [activeId, setActiveId] = useState<string | null>(() => loadConversations()[0]?.id ?? null);
   const [question, setQuestion] = useState("");
@@ -72,9 +73,22 @@ function App() {
   const activeConversation = conversations.find((c) => c.id === activeId) ?? null;
   const turns = activeConversation?.turns ?? [];
 
+  function loadSchema() {
+    setSchemaError(null);
+    fetchSchema()
+      .then((s) => {
+        setSchema(s);
+        setSchemaError(null);
+      })
+      .catch((exc: Error) => {
+        setSchema(null);
+        setSchemaError(exc.message);
+      });
+  }
+
   useEffect(() => {
     fetchConfig().then(setConfig).catch(() => setConfig(null));
-    fetchSchema().then(setSchema).catch(() => setSchema(null));
+    loadSchema();
   }, []);
 
 useEffect(() => {
@@ -155,6 +169,8 @@ useEffect(() => {
       <Sidebar
         config={config}
         schema={schema}
+        schemaError={schemaError}
+        onRetrySchema={loadSchema}
         conversations={conversations}
         activeId={activeId}
         onSelect={setActiveId}
