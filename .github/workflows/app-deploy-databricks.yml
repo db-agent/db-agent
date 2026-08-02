@@ -1,0 +1,177 @@
+name: DB Agent (Node) — Deploy to Databricks Apps
+
+# Manual-trigger deploy of app/ to Databricks Apps, built specifically to
+# fix a recurring problem: the app's AI Gateway token (used as LLM_API_KEY,
+# stored as the Databricks secret db-agent/ai-gateway-token) goes stale and
+# every deployment after that starts returning 401 on every LLM call until
+# someone manually runs `databricks secrets put-secret` and redeploys.
+#
+# This workflow makes GitHub repo secrets the single place to update
+# tokens: every run pushes the current value of each secret into the
+# Databricks secret scope BEFORE syncing/deploying, so refreshing a token
+# is "update one GitHub secret, re-run this workflow" — no manual CLI
+# commands, no remembering which scope/key name to target.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   DATABRICKS_HOST               — workspace URL, e.g. https://xxx.cloud.databricks.com
+#   DATABRICKS_TOKEN              — auth for the CLI itself. Strongly prefer a
+#                                    service-principal token over a personal one —
+#                                    personal tokens/OAuth refresh tokens are exactly
+#                                    the kind of thing that silently expires and
+#                                    reproduces this same problem one layer up.
+#   DATABRICKS_AI_GATEWAY_TOKEN   — pushed to secret scope "db-agent", key
+#                                    "ai-gateway-token" (what LLM_API_KEY resolves to
+#                                    in app.yaml). This is the one that's been going
+#                                    stale.
+# Optional repo secrets (only pushed if set — the app has these bound as
+# resources already but app.yaml doesn't currently wire them into any env
+# var, so this is only useful once/if a future app.yaml turns on the
+# s3vectors memory backend for this deployment):
+#   DATABRICKS_AWS_ACCESS_KEY_ID
+#   DATABRICKS_AWS_SECRET_ACCESS_KEY
+#
+# Optional repo variable:
+#   DATABRICKS_APP_NAME — defaults to "db-agent"
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: "Databricks App name"
+        required: false
+        default: "db-agent"
+
+concurrency:
+  group: databricks-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: "Databricks | Refresh secrets + Deploy"
+    runs-on: ubuntu-latest
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      APP_NAME: ${{ inputs.app_name || vars.DATABRICKS_APP_NAME || 'db-agent' }}
+      SECRET_SCOPE: db-agent
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Databricks CLI
+        uses: databricks/setup-cli@main
+
+      - name: Verify CLI auth
+        run: databricks current-user me --output json > /dev/null
+
+      - name: Ensure secret scope exists
+        run: |
+          if databricks secrets list-scopes --output json | python3 -c "
+          import json, sys
+          scopes = json.load(sys.stdin)
+          sys.exit(0 if any(s['name'] == '$SECRET_SCOPE' for s in scopes) else 1)
+          "; then
+            echo "Scope '$SECRET_SCOPE' already exists"
+          else
+            databricks secrets create-scope "$SECRET_SCOPE"
+          fi
+
+      # The actual fix: every run refreshes every configured token from
+      # GitHub secrets, unconditionally — so a token going stale is fixed
+      # by updating it in one place (GitHub) and re-running, not by anyone
+      # needing to remember a `databricks secrets put-secret` invocation.
+      - name: Refresh Databricks secrets from GitHub secrets
+        env:
+          AI_GATEWAY_TOKEN: ${{ secrets.DATABRICKS_AI_GATEWAY_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.DATABRICKS_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.DATABRICKS_AWS_SECRET_ACCESS_KEY }}
+        run: |
+          if [ -z "$AI_GATEWAY_TOKEN" ]; then
+            echo "::error::DATABRICKS_AI_GATEWAY_TOKEN repo secret is not set — this is the token that's been going stale, deploy cannot fix the 401 without it."
+            exit 1
+          fi
+          echo "$AI_GATEWAY_TOKEN" | databricks secrets put-secret "$SECRET_SCOPE" ai-gateway-token
+          echo "Refreshed $SECRET_SCOPE/ai-gateway-token"
+
+          if [ -n "$AWS_ACCESS_KEY_ID" ]; then
+            echo "$AWS_ACCESS_KEY_ID" | databricks secrets put-secret "$SECRET_SCOPE" aws-access-key-id
+            echo "Refreshed $SECRET_SCOPE/aws-access-key-id"
+          fi
+          if [ -n "$AWS_SECRET_ACCESS_KEY" ]; then
+            echo "$AWS_SECRET_ACCESS_KEY" | databricks secrets put-secret "$SECRET_SCOPE" aws-secret-access-key
+            echo "Refreshed $SECRET_SCOPE/aws-secret-access-key"
+          fi
+
+      - name: Create app if it does not exist
+        run: |
+          if databricks apps get "$APP_NAME" --output json &>/dev/null; then
+            echo "App '$APP_NAME' already exists — skipping create"
+          else
+            databricks apps create "$APP_NAME" --description "DB Agent (Node)"
+          fi
+
+      - name: Determine workspace source path
+        run: |
+          PATH_FROM_APP=$(databricks apps get "$APP_NAME" --output json \
+            | python3 -c "import sys,json; print(json.load(sys.stdin).get('default_source_code_path',''))")
+          if [ -z "$PATH_FROM_APP" ]; then
+            ME=$(databricks current-user me --output json | python3 -c "import sys,json; print(json.load(sys.stdin)['userName'])")
+            PATH_FROM_APP="/Workspace/Users/${ME}/${APP_NAME}"
+          fi
+          echo "WORKSPACE_PATH=$PATH_FROM_APP" >> "$GITHUB_ENV"
+          echo "Workspace source path: $PATH_FROM_APP"
+
+      - name: Sync app/ source to workspace
+        run: |
+          databricks workspace mkdirs "$WORKSPACE_PATH"
+          databricks sync app "$WORKSPACE_PATH" \
+            --exclude "node_modules/**" --exclude "web/node_modules/**" --exclude "web/dist/**" \
+            --full --watch=false
+
+      - name: Start app if not running
+        run: |
+          STATE=$(databricks apps get "$APP_NAME" --output json \
+            | python3 -c "import sys,json; print(json.load(sys.stdin).get('compute_status',{}).get('state','UNKNOWN'))")
+          echo "Current compute state: $STATE"
+          if [ "$STATE" != "ACTIVE" ]; then
+            databricks apps start "$APP_NAME"
+            for i in $(seq 1 30); do
+              STATE=$(databricks apps get "$APP_NAME" --output json \
+                | python3 -c "import sys,json; print(json.load(sys.stdin).get('compute_status',{}).get('state','UNKNOWN'))")
+              echo "  attempt $i/30 — state: $STATE"
+              [ "$STATE" = "ACTIVE" ] && break
+              sleep 10
+            done
+          fi
+          [ "$STATE" = "ACTIVE" ] || { echo "::error::App compute never reached ACTIVE"; exit 1; }
+
+      - name: Deploy
+        run: databricks apps deploy "$APP_NAME" --source-code-path "$WORKSPACE_PATH"
+
+      - name: Verify deployment succeeded
+        run: |
+          STATUS=$(databricks apps get "$APP_NAME" --output json \
+            | python3 -c "import sys,json; print(json.load(sys.stdin).get('active_deployment',{}).get('status',{}).get('state','UNKNOWN'))")
+          MESSAGE=$(databricks apps get "$APP_NAME" --output json \
+            | python3 -c "import sys,json; print(json.load(sys.stdin).get('active_deployment',{}).get('status',{}).get('message',''))")
+          echo "Deployment status: $STATUS — $MESSAGE"
+          if [ "$STATUS" != "SUCCEEDED" ]; then
+            echo "::error::Deployment did not succeed: $MESSAGE"
+            exit 1
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          URL=$(databricks apps get "$APP_NAME" --output json \
+            | python3 -c "import sys,json; print(json.load(sys.stdin).get('url','(not yet assigned)'))" 2>/dev/null || echo "(unavailable)")
+          {
+            echo "## DB Agent (Node) — Databricks deploy"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **App** | \`$APP_NAME\` |"
+            echo "| **URL** | $URL |"
+            echo "| **Commit** | \`${{ github.sha }}\` |"
+            echo "| **Ref** | \`${{ github.ref_name }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
