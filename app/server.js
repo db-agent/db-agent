@@ -18,7 +18,7 @@ import { createSqlEngine, listSqlEngines } from "./sqlEngines/index.js";
 import { formatKnowledge, loadKnowledge, selectRelevantKnowledge } from "./knowledge.js";
 import { validateSql } from "./sqlSafety.js";
 import { benchmarkStore } from "./benchmarks.js";
-import { log, warn } from "./logger.js";
+import { describeError, log, warn } from "./logger.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -243,7 +243,7 @@ Respond with ONLY a JSON array of 5 strings, no other text.`;
     }
     questions = parsed.slice(0, 5);
   } catch (exc) {
-    warn(`[examples] generation failed, using heuristic fallback: ${exc.message || exc}`);
+    warn(`[examples] generation failed, using heuristic fallback: ${describeError(exc)}`);
     questions = heuristicExampleQuestions(schema);
   }
 
@@ -329,7 +329,7 @@ async function runPipeline(question) {
     // Rethrown as-is (same behavior as before this log line was added) —
     // just makes sure a failure this early still gets a "done" timestamp
     // instead of silently having no closing log line for the request.
-    log(`[ask] done (error before SQL generation: ${String(exc.message || exc)})`);
+    log(`[ask] done (error before SQL generation: ${describeError(exc)})`);
     throw exc;
   }
 
@@ -404,7 +404,7 @@ async function runPipeline(question) {
       }
     }
   } catch (exc) {
-    output.error = String(exc.message || exc);
+    output.error = describeError(exc);
     log(`[ask] done (error: ${output.error})`);
   }
 
@@ -427,7 +427,7 @@ app.get("/api/schema", async (req, res) => {
   try {
     res.json(await getSchema());
   } catch (exc) {
-    res.status(500).json({ error: String(exc.message || exc) });
+    res.status(500).json({ error: describeError(exc) });
   }
 });
 
@@ -437,7 +437,7 @@ app.get("/api/example-questions", async (req, res) => {
     const questions = await generateExampleQuestions(schema);
     res.json(questions);
   } catch (exc) {
-    res.status(500).json({ error: String(exc.message || exc) });
+    res.status(500).json({ error: describeError(exc) });
   }
 });
 
@@ -474,7 +474,7 @@ app.post("/api/ask", async (req, res) => {
       warn(`[memory] write failed: ${err?.message || err}`);
     });
   } catch (exc) {
-    res.status(500).json({ error: String(exc.message || exc) });
+    res.status(500).json({ error: describeError(exc) });
   }
 });
 
@@ -487,7 +487,7 @@ app.get("/api/memories", async (req, res) => {
     const memories = await fetchRelevantMemories(queryText, MEMORY, 3);
     res.json(memories);
   } catch (exc) {
-    res.status(500).json({ error: String(exc.message || exc) });
+    res.status(500).json({ error: describeError(exc) });
   }
 });
 
@@ -520,7 +520,7 @@ app.post("/api/feedback", (req, res) => {
       });
     }
   } catch (exc) {
-    res.status(500).json({ error: String(exc.message || exc) });
+    res.status(500).json({ error: describeError(exc) });
   }
 });
 
@@ -531,7 +531,7 @@ app.get("/api/benchmarks", (req, res) => {
   try {
     res.json(benchmarkStore.listCases());
   } catch (exc) {
-    res.status(500).json({ error: String(exc.message || exc) });
+    res.status(500).json({ error: describeError(exc) });
   }
 });
 
@@ -541,7 +541,7 @@ app.post("/api/benchmarks", (req, res) => {
     const entry = benchmarkStore.addCase({ question, groundTruthSql, source: "user" });
     res.status(201).json(entry);
   } catch (exc) {
-    res.status(400).json({ error: String(exc.message || exc) });
+    res.status(400).json({ error: describeError(exc) });
   }
 });
 
@@ -553,7 +553,7 @@ app.delete("/api/benchmarks/:id", (req, res) => {
     void invalidateFollowup(removed.question, MEMORY).catch(() => {});
     res.json({ ok: true });
   } catch (exc) {
-    res.status(400).json({ error: String(exc.message || exc) });
+    res.status(400).json({ error: describeError(exc) });
   }
 });
 
@@ -567,7 +567,7 @@ app.post("/api/memories/invalidate", async (req, res) => {
     const result = await invalidateFollowup(question, MEMORY);
     res.json(result);
   } catch (exc) {
-    res.status(500).json({ error: String(exc.message || exc) });
+    res.status(500).json({ error: describeError(exc) });
   }
 });
 
