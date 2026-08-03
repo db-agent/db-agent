@@ -19,6 +19,11 @@ resources:
       scope: db-agent
       key: ai-gateway-token
       permission: READ
+  - name: lakebase-db-url
+    secret:
+      scope: db-agent
+      key: lakebase-db-url
+      permission: READ
 
 env:
   # Databricks AI Gateway (Mosaic AI Model Serving) — OpenAI-compatible
@@ -32,3 +37,12 @@ env:
     valueFrom: "llm-api-key"
   - name: "EMBEDDING_MODEL"
     value: "system.ai.qwen3-embedding-0-6b"
+  # SQL_ENGINE=postgres queries Databricks Lakebase directly (see
+  # sqlEngines/postgres.js) instead of the bundled SQLite demo DB.
+  # DB_URL points at a role scoped to SELECT-only — see app/README.md's
+  # "pgvector" section for why the read role and the memory-write role
+  # (used separately by MEMORY_BACKEND=pgvector) must not be the same one.
+  - name: "SQL_ENGINE"
+    value: "postgres"
+  - name: "DB_URL"
+    valueFrom: "lakebase-db-url"
