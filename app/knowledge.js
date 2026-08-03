@@ -26,6 +26,7 @@
 
 import fs from "node:fs";
 import { cosineSimilarity, embed } from "./memory.js";
+import { describeError, warn } from "./logger.js";
 
 const DEFAULT_MAX_EXAMPLES = 3;
 // Rough estimate (chars/4), not a real tokenizer — good enough to flag
@@ -47,7 +48,7 @@ export function loadKnowledge(filePath) {
   try {
     raw = fs.readFileSync(filePath, "utf-8");
   } catch (exc) {
-    console.warn(`[knowledge] could not read ${filePath}: ${exc.message || exc}`);
+    warn(`[knowledge] could not read ${filePath}: ${describeError(exc)}`);
     return null;
   }
 
@@ -60,7 +61,7 @@ export function loadKnowledge(filePath) {
       instructions: Array.isArray(data.instructions) ? data.instructions : [],
     };
   } catch (exc) {
-    console.warn(`[knowledge] ${filePath} is not valid JSON, ignoring: ${exc.message || exc}`);
+    warn(`[knowledge] ${filePath} is not valid JSON, ignoring: ${describeError(exc)}`);
     return null;
   }
 }
@@ -108,7 +109,7 @@ async function selectRelevantExamples(examples, question, embeddingClient, embed
     // Selection is a refinement, not a correctness requirement — if
     // embedding fails for any reason, fall back to the first N examples
     // rather than failing the whole request.
-    console.warn(`[knowledge] example selection skipped, using first ${maxExamples}: ${exc.message || exc}`);
+    warn(`[knowledge] example selection skipped, using first ${maxExamples}: ${describeError(exc)}`);
     return examples.slice(0, maxExamples);
   }
 }
@@ -183,7 +184,7 @@ export function formatKnowledge(knowledge) {
   const text = "\n\n" + sections.join("\n\n");
   const estimatedTokens = Math.ceil(text.length / 4); // no tokenizer dep — rough but enough to flag growth
   if (estimatedTokens > TOKEN_WARN_THRESHOLD) {
-    console.warn(
+    warn(
       `[knowledge] injected block is ~${estimatedTokens} tokens (over the ${TOKEN_WARN_THRESHOLD} warn threshold) — ` +
         `consider trimming knowledge.json, lowering maxExamples, or pruning stale benchmark cases`
     );
