@@ -182,7 +182,8 @@ documented-supported) — the deployment shape is the same generic
   pointed at the same store surface it as "Suggested from other agents" in
   the sidebar. Set `DBAGENT_ID` per instance (`run_local.sh` supports
   `DBAGENT_ID=oltp-sqlserver ./run_local.sh`, same as the Python app).
-  Two backends, selected via `MEMORY_BACKEND`:
+  Pluggable backends (`memoryBackends/`, same registry pattern as the SQL
+  engines above), selected via `MEMORY_BACKEND`:
   - `local` (default) — JSONL + cosine similarity, no cloud setup.
   - `s3vectors` — `@aws-sdk/client-s3vectors`, **verified end-to-end against
     real AWS** (a provisioned vector bucket + index, write from one agent,
@@ -199,6 +200,31 @@ documented-supported) — the deployment shape is the same generic
     (768 matches `nomic-embed-text`; use your embedding model's actual
     output dimension.) AWS credentials resolve via the standard SDK chain
     (env vars, shared config/profile, instance role, etc.).
+  - `milvus` — self-hosted or Zilliz Cloud, via `@zilliz/milvus2-sdk-node`.
+    Auto-creates its collection/index on first use.
+  - `pgvector` — any Postgres with the `pgvector` extension, via `pg` (the
+    same driver `SQL_ENGINE=postgres` uses). Covers **Databricks Lakebase
+    directly** — **verified end-to-end against a real Lakebase instance**
+    (`pgvector` 0.8, HNSW index, confirmed present before writing this):
+    `put`/`query` with correct self-exclusion and TTL filtering, and
+    `invalidateFollowup` as an exact match over a real array column rather
+    than the best-effort semantic lookup the other two vector backends need
+    (see `memoryBackends/pgvector.js`'s header comment for why Postgres
+    doesn't need that workaround — it can do similarity ranking, TTL
+    filtering, and self-exclusion in one indexed query). Auto-creates the
+    extension/table/index on first use; falls back to the same connection
+    as `SQL_ENGINE=postgres` (`DB_URL`/`PG_*`) if `MEMORY_PG_*` is unset.
+
+    The connecting role needs `INSERT`/`UPDATE`/`SELECT` on its own
+    `db_agent_memory_*` table (and `CREATE` on the schema, the first time,
+    to make that table) — **do not reuse a read-only role** scoped for
+    `SQL_ENGINE=postgres`, it can't write:
+    ```sql
+    CREATE EXTENSION IF NOT EXISTS vector;
+    CREATE ROLE db_agent_memory_rw WITH LOGIN PASSWORD '...';
+    GRANT CONNECT ON DATABASE your_db TO db_agent_memory_rw;
+    GRANT USAGE, CREATE ON SCHEMA public TO db_agent_memory_rw;
+    ```
 
   **Chat and embeddings are independent endpoints** (`EMBEDDING_BASE_URL`/
   `EMBEDDING_API_KEY`, default to `LLM_BASE_URL`/`LLM_API_KEY` if unset).
