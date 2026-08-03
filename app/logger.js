@@ -32,6 +32,18 @@ export function warn(message) {
 // This walks both: the full .cause chain, unwrapping any AggregateError
 // found at each level, and joins every level into one message so nothing
 // in the chain is lost.
+// Some errors embed the literal value that caused them — notably
+// undici/fetch's "X is not a legal HTTP header value", which puts the
+// full "Bearer <token>" string straight into .message. Redact anything
+// that looks like a bearer token or a Databricks PAT (dapi...) before
+// this ever reaches a log line, since logs (CI output, `databricks apps
+// logs`) are far more widely readable than the process that raised it.
+function redactSecrets(text) {
+  return text
+    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/\bdapi[0-9a-f]{20,}\b/gi, "[redacted]");
+}
+
 export function describeError(exc) {
   const parts = [];
   let current = exc;
@@ -47,5 +59,6 @@ export function describeError(exc) {
     }
     current = current.cause;
   }
-  return parts.filter(Boolean).join(" <- caused by: ") || String(exc);
+  const joined = parts.filter(Boolean).join(" <- caused by: ") || String(exc);
+  return redactSecrets(joined);
 }

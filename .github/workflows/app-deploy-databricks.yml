@@ -99,22 +99,22 @@ jobs:
             echo "::error::LLM_API_KEY repo secret is not set — this is the token that's been going stale, deploy cannot fix the 401 without it."
             exit 1
           fi
-          echo "$AI_GATEWAY_TOKEN" | databricks secrets put-secret "$SECRET_SCOPE" ai-gateway-token
+          printf %s "$AI_GATEWAY_TOKEN" | databricks secrets put-secret "$SECRET_SCOPE" ai-gateway-token
           echo "Refreshed $SECRET_SCOPE/ai-gateway-token"
 
           if [ -z "$EMBEDDING_TOKEN" ]; then
             echo "::error::EMBEDDING_LLM_KEY repo secret is not set — embeddings use a separate AI Gateway token from chat, deploy cannot fix embedding 401s without it."
             exit 1
           fi
-          echo "$EMBEDDING_TOKEN" | databricks secrets put-secret "$SECRET_SCOPE" embedding-token
+          printf %s "$EMBEDDING_TOKEN" | databricks secrets put-secret "$SECRET_SCOPE" embedding-token
           echo "Refreshed $SECRET_SCOPE/embedding-token"
 
           if [ -n "$AWS_ACCESS_KEY_ID" ]; then
-            echo "$AWS_ACCESS_KEY_ID" | databricks secrets put-secret "$SECRET_SCOPE" aws-access-key-id
+            printf %s "$AWS_ACCESS_KEY_ID" | databricks secrets put-secret "$SECRET_SCOPE" aws-access-key-id
             echo "Refreshed $SECRET_SCOPE/aws-access-key-id"
           fi
           if [ -n "$AWS_SECRET_ACCESS_KEY" ]; then
-            echo "$AWS_SECRET_ACCESS_KEY" | databricks secrets put-secret "$SECRET_SCOPE" aws-secret-access-key
+            printf %s "$AWS_SECRET_ACCESS_KEY" | databricks secrets put-secret "$SECRET_SCOPE" aws-secret-access-key
             echo "Refreshed $SECRET_SCOPE/aws-secret-access-key"
           fi
 
