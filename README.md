@@ -47,7 +47,7 @@ DB Agent is a minimal **natural-language-to-SQL system**. A user asks a question
 | **Auth** | `.env` | Databricks Apps runtime + secrets |
 | **SQL target** | SQLite (bundled demo DB) | SQLite app DB; Unity Catalog via Lakehouse patterns |
 | **LLM endpoint** | Ollama or any OpenAI-compatible | Databricks Model Serving or any OpenAI-compatible |
-| **Memory backend** | Local JSONL or AWS S3 Vectors | Local or AWS S3 Vectors |
+| **Memory backend** | Local JSONL or AWS S3 Vectors | Lakebase  pgvector |
 
 **Run it locally** (SQLite + local Ollama, no API key needed):
 
