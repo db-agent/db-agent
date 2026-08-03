@@ -22,10 +22,15 @@ name: DB Agent (Node) — Deploy to Databricks Apps
 #                                    personal tokens/OAuth refresh tokens are exactly
 #                                    the kind of thing that silently expires and
 #                                    reproduces this same problem one layer up.
-#   DATABRICKS_AI_GATEWAY_TOKEN   — pushed to secret scope "db-agent", key
+#   LLM_API_KEY                   — pushed to secret scope "db-agent", key
 #                                    "ai-gateway-token" (what LLM_API_KEY resolves to
 #                                    in app.yaml). This is the one that's been going
 #                                    stale.
+#   EMBEDDING_LLM_KEY              — pushed to secret scope "db-agent", key
+#                                    "embedding-token" (what EMBEDDING_API_KEY
+#                                    resolves to in app.yaml). Chat and embeddings
+#                                    are separate AI Gateway routes with separate
+#                                    tokens — reusing the chat token here 401s.
 # Optional repo secrets (only pushed if set — the app has these bound as
 # resources already but app.yaml doesn't currently wire them into any env
 # var, so this is only useful once/if a future app.yaml turns on the
@@ -85,23 +90,31 @@ jobs:
       # needing to remember a `databricks secrets put-secret` invocation.
       - name: Refresh Databricks secrets from GitHub secrets
         env:
-          AI_GATEWAY_TOKEN: ${{ secrets.DATABRICKS_AI_GATEWAY_TOKEN }}
+          AI_GATEWAY_TOKEN: ${{ secrets.LLM_API_KEY }}
+          EMBEDDING_TOKEN: ${{ secrets.EMBEDDING_LLM_KEY }}
           AWS_ACCESS_KEY_ID: ${{ secrets.DATABRICKS_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.DATABRICKS_AWS_SECRET_ACCESS_KEY }}
         run: |
           if [ -z "$AI_GATEWAY_TOKEN" ]; then
-            echo "::error::DATABRICKS_AI_GATEWAY_TOKEN repo secret is not set — this is the token that's been going stale, deploy cannot fix the 401 without it."
+            echo "::error::LLM_API_KEY repo secret is not set — this is the token that's been going stale, deploy cannot fix the 401 without it."
             exit 1
           fi
-          echo "$AI_GATEWAY_TOKEN" | databricks secrets put-secret "$SECRET_SCOPE" ai-gateway-token
+          printf %s "$AI_GATEWAY_TOKEN" | databricks secrets put-secret "$SECRET_SCOPE" ai-gateway-token
           echo "Refreshed $SECRET_SCOPE/ai-gateway-token"
 
+          if [ -z "$EMBEDDING_TOKEN" ]; then
+            echo "::error::EMBEDDING_LLM_KEY repo secret is not set — embeddings use a separate AI Gateway token from chat, deploy cannot fix embedding 401s without it."
+            exit 1
+          fi
+          printf %s "$EMBEDDING_TOKEN" | databricks secrets put-secret "$SECRET_SCOPE" embedding-token
+          echo "Refreshed $SECRET_SCOPE/embedding-token"
+
           if [ -n "$AWS_ACCESS_KEY_ID" ]; then
-            echo "$AWS_ACCESS_KEY_ID" | databricks secrets put-secret "$SECRET_SCOPE" aws-access-key-id
+            printf %s "$AWS_ACCESS_KEY_ID" | databricks secrets put-secret "$SECRET_SCOPE" aws-access-key-id
             echo "Refreshed $SECRET_SCOPE/aws-access-key-id"
           fi
           if [ -n "$AWS_SECRET_ACCESS_KEY" ]; then
-            echo "$AWS_SECRET_ACCESS_KEY" | databricks secrets put-secret "$SECRET_SCOPE" aws-secret-access-key
+            printf %s "$AWS_SECRET_ACCESS_KEY" | databricks secrets put-secret "$SECRET_SCOPE" aws-secret-access-key
             echo "Refreshed $SECRET_SCOPE/aws-secret-access-key"
           fi
 
@@ -112,6 +125,31 @@ jobs:
           else
             databricks apps create "$APP_NAME" --description "DB Agent (Node)"
           fi
+
+      # app.yaml's `resources:` list only declares intent — a resource must
+      # also be bound to the app object itself via this API call before
+      # `valueFrom` can resolve it. Without this step, a resource newly
+      # added to app.yaml (like embedding-api-key above) deploys fine but
+      # crashes the app at startup with "error resolving resource ... not
+      # found" — this is what happened to lakebase-db-url on first setup.
+      - name: Bind resources to the app object
+        run: |
+          databricks apps update "$APP_NAME" --json '{
+            "resources": [
+              {
+                "name": "llm-api-key",
+                "secret": {"scope": "'"$SECRET_SCOPE"'", "key": "ai-gateway-token", "permission": "READ"}
+              },
+              {
+                "name": "embedding-api-key",
+                "secret": {"scope": "'"$SECRET_SCOPE"'", "key": "embedding-token", "permission": "READ"}
+              },
+              {
+                "name": "lakebase-db-url",
+                "secret": {"scope": "'"$SECRET_SCOPE"'", "key": "lakebase-db-url", "permission": "READ"}
+              }
+            ]
+          }'
 
       - name: Determine workspace source path
         run: |

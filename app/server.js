@@ -32,7 +32,11 @@ const PORT = process.env.DATABRICKS_APP_PORT || process.env.PORT || 3001;
 // local dev that shares the root Python app's seeded DB.
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "data", "demo.db");
 const LLM_BASE_URL = process.env.LLM_BASE_URL || "https://api.openai.com/v1";
-const LLM_API_KEY = process.env.LLM_API_KEY || "no-key";
+// .trim(): a secret pushed via `echo "$TOKEN" | databricks secrets
+// put-secret` bakes in a trailing newline, which later fails as "not a
+// legal HTTP header value" on the Authorization header — trimming here
+// makes the app resilient to that regardless of how the secret was set.
+const LLM_API_KEY = (process.env.LLM_API_KEY || "no-key").trim();
 const LLM_MODEL = process.env.LLM_MODEL || "gpt-4o-mini";
 const MAX_REPAIR_ATTEMPTS = 2;
 // Optional per-deployment context (descriptions, expressions, example
@@ -53,7 +57,7 @@ const FEEDBACK_PATH = process.env.FEEDBACK_STORE_PATH || path.join(__dirname, "d
 // comparing two unrelated vector spaces. Defaults to LLM_BASE_URL/KEY if
 // unset, so single-endpoint setups (the common case) need no extra config.
 const EMBEDDING_BASE_URL = process.env.EMBEDDING_BASE_URL || LLM_BASE_URL;
-const EMBEDDING_API_KEY = process.env.EMBEDDING_API_KEY || LLM_API_KEY;
+const EMBEDDING_API_KEY = (process.env.EMBEDDING_API_KEY || "").trim() || LLM_API_KEY;
 
 // ── Cross-platform contextual memory config ─────────────────────────────────
 // MEMORY_BACKEND selects the storage backend from the pluggable registry in

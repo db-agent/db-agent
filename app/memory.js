@@ -16,6 +16,7 @@
 // implements the same put()/query()/invalidateFollowup() interface.
 
 import crypto from "node:crypto";
+import { describeError, warn } from "./logger.js";
 
 // Shared by invalidateFollowup on every backend — case/whitespace/trailing-
 // punctuation-insensitive so "Show me X?" matches a stored "show me x".
@@ -101,7 +102,7 @@ Row count returned: ${rowCount}
     });
     data = parseSummaryJson(response.choices[0].message.content || "");
   } catch (exc) {
-    console.warn(`[memory] summarization skipped: ${exc.message || exc}`);
+    warn(`[memory] summarization skipped: ${describeError(exc)}`);
     return null;
   }
 
@@ -152,7 +153,7 @@ export async function writeMemory(llm, output, cfg) {
     const vector = await embed(cfg.embeddingClient, record.insightSummary, cfg.embeddingModel);
     await cfg.backend.put(record, vector);
   } catch (exc) {
-    console.warn(`[memory] write skipped: ${exc.message || exc}`);
+    warn(`[memory] write skipped: ${describeError(exc)}`);
   }
 }
 
@@ -162,7 +163,7 @@ export async function fetchRelevantMemories(queryText, cfg, topK = 3) {
     const vector = await embed(cfg.embeddingClient, queryText, cfg.embeddingModel);
     return await cfg.backend.query(vector, { excludeAgent: cfg.dbagentId, topK });
   } catch (exc) {
-    console.warn(`[memory] fetch skipped: ${exc.message || exc}`);
+    warn(`[memory] fetch skipped: ${describeError(exc)}`);
     return [];
   }
 }
@@ -178,7 +179,7 @@ export async function invalidateFollowup(questionText, cfg) {
     const vector = await embed(cfg.embeddingClient, questionText, cfg.embeddingModel);
     return await cfg.backend.invalidateFollowup(questionText, vector);
   } catch (exc) {
-    console.warn(`[memory] invalidate skipped: ${exc.message || exc}`);
+    warn(`[memory] invalidate skipped: ${describeError(exc)}`);
     return { removed: 0 };
   }
 }
