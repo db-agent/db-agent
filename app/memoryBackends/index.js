@@ -13,6 +13,7 @@ import path from "node:path";
 import { LocalJsonBackend } from "./local.js";
 import { S3VectorsBackend } from "./s3vectors.js";
 import { MilvusBackend } from "./milvus.js";
+import { PgVectorBackend } from "./pgvector.js";
 
 const REGISTRY = {
   local: {
@@ -46,6 +47,39 @@ const REGISTRY = {
         password: env.MILVUS_PASSWORD,
         ssl: (env.MILVUS_SSL || "false").toLowerCase() === "true",
       }),
+  },
+  pgvector: {
+    description:
+      "Any Postgres database with the pgvector extension (covers Databricks Lakebase directly). Auto-creates its table/index on first use.",
+    create: (env) => {
+      // Falls back to the same connection as the `postgres` SQL engine
+      // (DB_URL / PG_*) since pointing memory at the same Lakebase/Postgres
+      // instance already being queried is the common case — override with
+      // MEMORY_PG_* to put memory on a different Postgres instance.
+      const connectionString = env.MEMORY_PG_URL || env.DB_URL || undefined;
+      if (!connectionString && !(env.MEMORY_PG_HOST || env.PG_HOST)) {
+        throw new Error(
+          "MEMORY_BACKEND=pgvector requires MEMORY_PG_URL/DB_URL or MEMORY_PG_HOST+PG_HOST (see .env.example)."
+        );
+      }
+      const orgId = env.MEMORY_ORG_ID || "demo_org";
+      const table = "db_agent_memory_" + orgId.toLowerCase().replace(/[^a-z0-9_]/g, "_");
+      return new PgVectorBackend({
+        connectionString,
+        host: env.MEMORY_PG_HOST || env.PG_HOST,
+        port: env.MEMORY_PG_PORT || env.PG_PORT || "5432",
+        database: env.MEMORY_PG_DATABASE || env.PG_DATABASE,
+        user: env.MEMORY_PG_USER || env.PG_USER,
+        password: env.MEMORY_PG_PASSWORD || env.PG_PASSWORD,
+        ssl: env.MEMORY_PG_SSL || env.PG_SSL || "default",
+        // Must match EMBEDDING_MODEL's output dimension exactly — same
+        // constraint as the other two vector backends, just enforced via
+        // the VECTOR(n) column type here instead of an out-of-band index
+        // creation call.
+        dimension: Number(env.MEMORY_VECTOR_DIM || 768),
+        table,
+      });
+    },
   },
 };
 
