@@ -66,6 +66,58 @@ documented-supported) — the deployment shape is the same generic
 "process bound to a port," just with one extra build step
 (`npm run build` in `web/`) before `npm start`.
 
+`app.yaml` is the deploy manifest: `command`, `resources` (Databricks
+secrets bound to the app object), and `env` (`value` for plain config,
+`valueFrom` for anything resolved from a `resources` entry). A typical
+deployment against Lakebase wires:
+
+- `SQL_ENGINE=postgres` + `DB_URL` — Lakebase as the queried database (see
+  "Notes" below for the role setup)
+- `LLM_BASE_URL`/`LLM_MODEL`/`LLM_API_KEY` — the Databricks AI Gateway
+  (Mosaic AI Model Serving), OpenAI-compatible
+- `EMBEDDING_MODEL`/`EMBEDDING_API_KEY` — **a separate token from
+  `LLM_API_KEY`.** Chat completions and embeddings are distinct AI Gateway
+  routes with distinct tokens; reusing the chat token for embeddings fails
+  auth. `EMBEDDING_API_KEY` falls back to `LLM_API_KEY` if unset, which
+  works for some deployments but not others — set it explicitly.
+- `MEMORY_BACKEND=pgvector` — optional, points cross-platform memory at
+  Lakebase too (see the pgvector section below)
+
+**A resource declared in `app.yaml` isn't automatically usable.**
+`resources:` only states intent — each entry also has to be bound to the
+app object itself via a separate API call:
+
+```bash
+databricks apps update <app-name> --json '{
+  "resources": [
+    {"name": "llm-api-key", "secret": {"scope": "db-agent", "key": "ai-gateway-token", "permission": "READ"}},
+    {"name": "embedding-api-key", "secret": {"scope": "db-agent", "key": "embedding-token", "permission": "READ"}},
+    {"name": "lakebase-db-url", "secret": {"scope": "db-agent", "key": "lakebase-db-url", "permission": "READ"}}
+  ]
+}'
+```
+
+Skipping this deploys fine but crashes the app at startup with `error
+resolving resource <name>: resource not found`, since `valueFrom` has
+nothing to resolve against yet.
+
+**Deploying via GitHub Actions**: `.github/workflows/app-deploy-databricks.yml`
+(manual `workflow_dispatch`) automates the whole flow — refreshes Databricks
+secrets from GitHub repo secrets, runs the resource-binding step above,
+syncs `app/` to the workspace, and deploys. Required repo secrets:
+`DATABRICKS_TOKEN` (CLI auth — prefer a service-principal token, not a
+personal one), `LLM_API_KEY`, `EMBEDDING_LLM_KEY`; required repo variable:
+`DATABRICKS_HOST`. See the workflow file's header comment for the full list.
+Re-running it after rotating a token is the whole "fix" for a stale-token
+401 — no manual `databricks secrets put-secret` needed.
+
+**If a token comes back invalid after setting it via the CLI or a shell
+pipe**, check for a trailing newline — `echo "$TOKEN" | databricks secrets
+put-secret ...` bakes one in, which then fails as `Bearer <token>\n is not
+a legal HTTP header value`. Use `printf %s "$TOKEN" | ...` instead (what
+the GitHub Actions workflow does). `server.js` also defensively `.trim()`s
+`LLM_API_KEY`/`EMBEDDING_API_KEY` regardless of how they were set.
+
 ## Notes
 
 - Uses Node's built-in `node:sqlite` module (stable in Node ≥ 22.5) — no
@@ -152,11 +204,16 @@ documented-supported) — the deployment shape is the same generic
     `PG_SSL=false` to disable TLS (local Postgres only, never for Lakebase).
 
     No PII-aware sample-value mining in this first pass (same scope decision
-    as `minio-duckdb`) — every column is exposed as name+type only. If your
-    Lakebase connection uses a short-lived Databricks OAuth token as the
-    password (common), expect to refresh `DB_URL` periodically — an expired
-    token surfaces as a normal Postgres auth error in the `/api/ask`
-    response, not a crash.
+    as `minio-duckdb`) — every column is exposed as name+type only. **Prefer
+    a dedicated, long-lived Postgres role over a short-lived Databricks
+    OAuth token as the password** — this is Databricks' own guidance for
+    long-running workloads, and avoids the recurring 401s a ~1hr-expiring
+    token causes on every deployment. Create one with plain `CREATE ROLE ...
+    WITH LOGIN PASSWORD` + `GRANT CONNECT/USAGE/SELECT`, scoped to
+    `SELECT`-only for this engine (a separate, write-capable role is used
+    for `MEMORY_BACKEND=pgvector` below — never the same role for both). If
+    you do use an OAuth token anyway, an expired one surfaces as a normal
+    Postgres auth error in the `/api/ask` response, not a crash.
 - **Optional knowledge file** (`knowledge.js`, `knowledge.json`): the schema
   alone (table/column names + types) doesn't carry business terminology,
   ambiguous-column meaning, or house rules — this is where those go. Copy
