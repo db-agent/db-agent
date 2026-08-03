@@ -12,8 +12,11 @@ name: DB Agent (Node) — Deploy to Databricks Apps
 # is "update one GitHub secret, re-run this workflow" — no manual CLI
 # commands, no remembering which scope/key name to target.
 #
-# Required repo secrets (Settings → Secrets and variables → Actions):
-#   DATABRICKS_HOST               — workspace URL, e.g. https://xxx.cloud.databricks.com
+# Required repo variable (Settings → Secrets and variables → Actions → Variables
+# tab — not a secret, it's just a workspace URL):
+#   DATABRICKS_HOST                — workspace URL, e.g. https://xxx.cloud.databricks.com
+#
+# Required repo secrets (same page, Secrets tab):
 #   DATABRICKS_TOKEN              — auth for the CLI itself. Strongly prefer a
 #                                    service-principal token over a personal one —
 #                                    personal tokens/OAuth refresh tokens are exactly
@@ -50,7 +53,7 @@ jobs:
     name: "Databricks | Refresh secrets + Deploy"
     runs-on: ubuntu-latest
     env:
-      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_HOST: ${{ vars.DATABRICKS_HOST }}
       DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
       APP_NAME: ${{ inputs.app_name || vars.DATABRICKS_APP_NAME || 'db-agent' }}
       SECRET_SCOPE: db-agent
