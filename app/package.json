@@ -1,7 +1,7 @@
 {
   "name": "db-agent-node",
   "version": "0.1.0",
-  "description": "DB Agent — Node.js/Express prototype of the same text-to-SQL agent as the Streamlit app, for UI comparison.",
+  "description": "DB Agent \u2014 Node.js/Express prototype of the same text-to-SQL agent as the Streamlit app, for UI comparison.",
   "type": "module",
   "engines": {
     "node": ">=22.5.0"
@@ -20,5 +20,10 @@
     "express": "^4.21.0",
     "openai": "^4.67.0",
     "pg": "^8.22.0"
+  },
+  "overrides": {
+    "get-uri": {
+      "basic-ftp": "6.2.1"
+    }
   }
 }
