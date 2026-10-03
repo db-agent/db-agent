@@ -185,6 +185,16 @@ the GitHub Actions workflow does). `server.js` also defensively `.trim()`s
     demo and compare. MinIO console at `http://localhost:9001`
     (`minioadmin`/`minioadmin`) if you want to browse the uploaded Parquet
     objects visually mid-demo.
+  - `databricks-sql` — a Databricks SQL warehouse (Unity Catalog tables)
+    via the official `@databricks/sql` driver. Needs `DATABRICKS_HOST`,
+    `DATABRICKS_HTTP_PATH` (warehouse "Connection details" tab),
+    `DATABRICKS_TOKEN`, `DATABRICKS_CATALOG`, `DATABRICKS_SCHEMA` (see
+    `.env.example`). Introspects one schema via `information_schema`, sends
+    the prompt a Databricks SQL dialect rule, and caps returned rows at
+    `DATABRICKS_MAX_ROWS` (default 1000). Use a token with `CAN USE` on the
+    warehouse and `SELECT` only on the schema. **Unit-tested with a stubbed
+    driver only, not yet verified against a live warehouse.** For Lakebase
+    use `postgres` below instead.
   - `postgres` — any standard Postgres database, via [`pg`](https://node-postgres.com)
     (node-postgres). Covers **Databricks Lakebase directly** — Lakebase
     speaks the standard Postgres wire protocol, so this engine has no

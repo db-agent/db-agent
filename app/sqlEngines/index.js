@@ -16,6 +16,7 @@ import path from "node:path";
 import { SQLiteEngine } from "./sqlite.js";
 import { MinioDuckDBEngine } from "./minioDuckdb.js";
 import { PostgresEngine } from "./postgres.js";
+import { DatabricksSqlEngine } from "./databricksSql.js";
 
 
 const REGISTRY = {
@@ -65,6 +66,32 @@ const REGISTRY = {
         password: env.PG_PASSWORD,
         ssl: env.PG_SSL || "default",
         schema: env.PG_SCHEMA || "public",
+      });
+    },
+  },
+  "databricks-sql": {
+    description:
+      "A Databricks SQL warehouse (Unity Catalog tables), via the @databricks/sql driver.",
+    create: (env) => {
+      const missing = [
+        "DATABRICKS_HOST",
+        "DATABRICKS_HTTP_PATH",
+        "DATABRICKS_TOKEN",
+        "DATABRICKS_CATALOG",
+        "DATABRICKS_SCHEMA",
+      ].filter((k) => !env[k]);
+      if (missing.length > 0) {
+        throw new Error(
+          `SQL_ENGINE=databricks-sql requires ${missing.join(", ")} to be set (see .env.example).`
+        );
+      }
+      return new DatabricksSqlEngine({
+        host: env.DATABRICKS_HOST,
+        httpPath: env.DATABRICKS_HTTP_PATH,
+        token: env.DATABRICKS_TOKEN,
+        catalog: env.DATABRICKS_CATALOG,
+        schema: env.DATABRICKS_SCHEMA,
+        maxRows: env.DATABRICKS_MAX_ROWS,
       });
     },
   },
