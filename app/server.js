@@ -126,6 +126,18 @@ function formatSchema(schema) {
 
 // ── Prompts (mirrors ../prompts.py's generic/SQLite system prompt) ──────────
 
+// Per-engine dialect guidance. Engines that don't declare `sqlDialect` keep
+// the original SQLite wording, so existing behavior is unchanged.
+const DIALECT_RULES = {
+  "databricks-sql":
+    "- The database is Databricks SQL (Spark SQL) — use Databricks functions (date_sub(current_date(), 30),\n" +
+    "  date_trunc, ilike, ||/concat), backtick-quote identifiers if needed, and reference tables by\n" +
+    "  their bare name (the catalog and schema are already selected).",
+};
+const SQLITE_DIALECT_RULE =
+  "- The database is SQLite — use SQLite date/string functions (date('now','-1 month')),\n" +
+  "  not MySQL/Postgres equivalents.";
+
 const SYSTEM_PROMPT = `You are a SQL assistant. Your only job is to generate a single, safe, read-only \
 SELECT (or WITH…SELECT) query against the database below.
 
@@ -134,8 +146,7 @@ Rules you must follow:
 - Never use DROP, DELETE, UPDATE, INSERT, ALTER, TRUNCATE, MERGE, CREATE, REPLACE,
   GRANT, REVOKE, or any other write / admin operation.
 - Write exactly one statement. No semicolons in the middle.
-- The database is SQLite — use SQLite date/string functions (date('now','-1 month')),
-  not MySQL/Postgres equivalents.
+${DIALECT_RULES[process.env.SQL_ENGINE] || SQLITE_DIALECT_RULE}
 - Some text columns (e.g. person names) have their real values hidden from you for
   privacy, so you cannot see exact stored strings for them. When the question
   names a person or gives a partial/likely value for such a column, match it with
