@@ -4,7 +4,7 @@ import { ChatTurn } from "@/components/ChatTurn";
 import { Sidebar } from "@/components/Sidebar";
 import { Suggestions } from "@/components/Suggestions";
 import { Button } from "@/components/ui/button";
-import { ask, fetchConfig, fetchSchema } from "@/lib/api";
+import { ask, executeSql, fetchConfig, fetchSchema } from "@/lib/api";
 import type { AppConfig, Conversation, Schema, Turn } from "@/lib/types";
 import { ArrowUp, FlaskConical, Lightbulb, X } from "lucide-react";
 
@@ -154,6 +154,8 @@ useEffect(() => {
                   rows: null,
                   error: String((exc as Error).message ?? exc),
                   repairAttempts: 0,
+                  analysis: null,
+                  status: null,
                 },
               }
             : t
@@ -164,6 +166,67 @@ useEffect(() => {
     }
   }
 
+  async function handleAcceptTurn(turnId: string) {
+    if (!activeId) return;
+    const turn = conversations
+      .find((c) => c.id === activeId)
+      ?.turns.find((t) => t.id === turnId);
+    const sql = turn?.output?.sql;
+    if (!sql) return;
+
+    try {
+      const result = await executeSql(sql, turn.question);
+      updateTurns(activeId, (prev) =>
+        prev.map((t) => {
+          if (t.id !== turnId || !t.output) return t;
+          if (result.error && (result.rows == null || result.rows === undefined)) {
+            return {
+              ...t,
+              output: {
+                ...t.output,
+                error: result.error,
+                status: "awaiting_approval",
+                columns: null,
+                rows: null,
+              },
+            };
+          }
+          return {
+            ...t,
+            output: {
+              ...t.output,
+              sql: result.sql ?? t.output.sql,
+              columns: result.columns,
+              rows: result.rows,
+              error: null,
+              status: "complete",
+            },
+          };
+        })
+      );
+    } catch (exc) {
+      updateTurns(activeId, (prev) =>
+        prev.map((t) =>
+          t.id === turnId && t.output
+            ? {
+                ...t,
+                output: {
+                  ...t.output,
+                  error: String((exc as Error).message ?? exc),
+                  status: "awaiting_approval",
+                },
+              }
+            : t
+        )
+      );
+    }
+  }
+
+  function handleRejectTurn(turnId: string) {
+    if (!activeId) return;
+    updateTurns(activeId, (prev) => prev.filter((t) => t.id !== turnId));
+  }
+
   return (
     <div className="flex h-screen bg-background text-foreground">
       <Sidebar
@@ -171,6 +234,10 @@ useEffect(() => {
         schema={schema}
         schemaError={schemaError}
         onRetrySchema={loadSchema}
+        onConnectionSaved={(next) => {
+          setConfig(next);
+          loadSchema();
+        }}
         conversations={conversations}
         activeId={activeId}
         onSelect={setActiveId}
@@ -210,7 +277,12 @@ useEffect(() => {
           ) : (
             <>
               {turns.map((t) => (
-                <ChatTurn key={t.id} turn={t} />
+                <ChatTurn
+                  key={t.id}
+                  turn={t}
+                  onAccept={handleAcceptTurn}
+                  onReject={handleRejectTurn}
+                />
               ))}
               <div ref={chatEndRef} />
             </>

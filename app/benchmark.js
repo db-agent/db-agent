@@ -133,27 +133,55 @@ async function main() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question }),
     });
-    const output = await res.json();
+    const draft = await res.json();
 
-    if (output.error || output.rows === null) {
+    if (draft.error || !draft.sql) {
       console.log(`✗ FAIL  [${source}] ${question}`);
-      console.log(`  Generated SQL: ${output.sql || "(none)"}`);
+      console.log(`  Generated SQL: ${draft.sql || "(none)"}`);
+      console.log(`  Error: ${draft.error || draft.validation?.reason || "no SQL generated"}\n`);
+      await handleFailure({ id, question, source, reason: "pipeline error", sql: draft.sql });
+      continue;
+    }
+
+    // /api/ask now stops at EXPLAIN / awaiting_approval — execute approved SQL.
+    const execRes = await fetch(`${baseUrl}/api/execute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sql: draft.sql, question }),
+    });
+    const output = await execRes.json();
+
+    if (output.error || output.rows === null || output.rows === undefined) {
+      console.log(`✗ FAIL  [${source}] ${question}`);
+      console.log(`  Generated SQL: ${output.sql || draft.sql || "(none)"}`);
       console.log(`  Error: ${output.error || output.validation?.reason || "no rows returned"}\n`);
-      await handleFailure({ id, question, source, reason: "pipeline error", sql: output.sql });
+      await handleFailure({
+        id,
+        question,
+        source,
+        reason: "pipeline error",
+        sql: output.sql || draft.sql,
+      });
       continue;
     }
 
     if (resultSetsMatch(output.rows, expectedRows)) {
       console.log(`✓ PASS  [${source}] ${question}`);
       passed++;
-      benchmarkStore.recordRunResult(id, { status: "pass", at, sql: output.sql });
+      benchmarkStore.recordRunResult(id, { status: "pass", at, sql: output.sql || draft.sql });
     } else {
       console.log(`✗ FAIL  [${source}] ${question}`);
-      console.log(`  Generated SQL: ${output.sql}`);
+      console.log(`  Generated SQL: ${output.sql || draft.sql}`);
       console.log(`  Ground truth:  ${groundTruthSql}`);
       console.log(`  Got:      ${JSON.stringify(output.rows)}`);
       console.log(`  Expected: ${JSON.stringify(expectedRows)}\n`);
-      await handleFailure({ id, question, source, reason: "result mismatch", sql: output.sql });
+      await handleFailure({
+        id,
+        question,
+        source,
+        reason: "result mismatch",
+        sql: output.sql || draft.sql,
+      });
     }
   }
 

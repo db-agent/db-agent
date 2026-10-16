@@ -11,6 +11,16 @@ export interface Validation {
   reason: string;
 }
 
+export interface QueryAnalysis {
+  sizeInBytes?: number | null;
+  sizeLabel?: string | null;
+  rowCount?: number | null;
+  rawPlan?: string | null;
+  error?: string | null;
+}
+
+export type PipelineStatus = "awaiting_approval" | "complete" | "rejected";
+
 export interface PipelineOutput {
   question: string;
   schemaContext: string;
@@ -21,12 +31,25 @@ export interface PipelineOutput {
   rows: Record<string, unknown>[] | null;
   error: string | null;
   repairAttempts: number;
+  analysis?: QueryAnalysis | null;
+  status?: PipelineStatus | null;
 }
 
 export interface SqlEngineInfo {
   type: string;
   location: string;
   endpoint?: string;
+  catalog?: string;
+  schema?: string;
+  httpPath?: string;
+}
+
+export interface DatabricksConfig {
+  host: string;
+  httpPath: string;
+  catalog: string;
+  schema: string;
+  tokenConfigured: boolean;
 }
 
 export interface AppConfig {
@@ -38,6 +61,7 @@ export interface AppConfig {
   memoryEnabled: boolean;
   dbagentId: string;
   memoryBackend: string;
+  databricks?: DatabricksConfig;
 }
 
 export interface Turn {

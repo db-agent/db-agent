@@ -74,15 +74,43 @@ const memoryBackend = createMemoryBackend(process.env.MEMORY_BACKEND, {
 
 // ── SQL engine config ────────────────────────────────────────────────────────
 // SQL_ENGINE selects the query engine from the pluggable registry in
-// sqlEngines/index.js — "sqlite" (default, local file, zero config) or
-// "minio-duckdb" (Parquet objects in MinIO/any S3-compatible store, queried
-// via DuckDB — requires MINIO_ENDPOINT + MINIO_BUCKET, see app/README.md).
-// Adding a new engine means adding one entry to that registry, not touching
-// this file.
-const sqlEngine = createSqlEngine(process.env.SQL_ENGINE, {
+// sqlEngines/index.js — default is "databricks-sql". Mutable so the sidebar
+// can reconnect via POST /api/sql-connection without restarting the process.
+const DATA_DIR = path.join(__dirname, "data");
+let activeSqlEngineName = (process.env.SQL_ENGINE || "databricks-sql").toLowerCase();
+let sqlEngine = createSqlEngine(activeSqlEngineName, {
   env: process.env,
-  dataDir: path.join(__dirname, "data"),
+  dataDir: DATA_DIR,
 });
+
+// In-memory Databricks connection override (session-only; does not rewrite .env).
+function databricksConnectionFromEnv() {
+  return {
+    host: process.env.DATABRICKS_HOST || "",
+    httpPath: process.env.DATABRICKS_HTTP_PATH || "",
+    token: process.env.DATABRICKS_TOKEN || "",
+    catalog: process.env.DATABRICKS_CATALOG || "",
+    schema: process.env.DATABRICKS_SCHEMA || "",
+    maxRows: process.env.DATABRICKS_MAX_ROWS || "",
+  };
+}
+let databricksConnection = databricksConnectionFromEnv();
+
+async function replaceSqlEngine(name, envOverrides = {}) {
+  const env = { ...process.env, ...envOverrides };
+  const next = createSqlEngine(name, { env, dataDir: DATA_DIR });
+  // Verify before swapping so a bad token doesn't leave us disconnected.
+  await next.getSchema();
+  if (typeof sqlEngine.reset === "function") {
+    await sqlEngine.reset().catch(() => {});
+  }
+  sqlEngine = next;
+  activeSqlEngineName = name;
+  for (const [k, v] of Object.entries(envOverrides)) {
+    if (v != null) process.env[k] = String(v);
+  }
+  process.env.SQL_ENGINE = name;
+}
 
 const llm = new OpenAI({ baseURL: LLM_BASE_URL, apiKey: LLM_API_KEY });
 const embeddingClient = new OpenAI({ baseURL: EMBEDDING_BASE_URL, apiKey: EMBEDDING_API_KEY });
@@ -138,7 +166,9 @@ const SQLITE_DIALECT_RULE =
   "- The database is SQLite — use SQLite date/string functions (date('now','-1 month')),\n" +
   "  not MySQL/Postgres equivalents.";
 
-const SYSTEM_PROMPT = `You are a SQL assistant. Your only job is to generate a single, safe, read-only \
+function getSystemPrompt() {
+  const dialect = DIALECT_RULES[activeSqlEngineName] || SQLITE_DIALECT_RULE;
+  return `You are a SQL assistant. Your only job is to generate a single, safe, read-only \
 SELECT (or WITH…SELECT) query against the database below.
 
 Rules you must follow:
@@ -146,7 +176,7 @@ Rules you must follow:
 - Never use DROP, DELETE, UPDATE, INSERT, ALTER, TRUNCATE, MERGE, CREATE, REPLACE,
   GRANT, REVOKE, or any other write / admin operation.
 - Write exactly one statement. No semicolons in the middle.
-${DIALECT_RULES[process.env.SQL_ENGINE] || SQLITE_DIALECT_RULE}
+${dialect}
 - Some text columns (e.g. person names) have their real values hidden from you for
   privacy, so you cannot see exact stored strings for them. When the question
   names a person or gives a partial/likely value for such a column, match it with
@@ -164,6 +194,7 @@ Always respond with valid JSON in this exact format:
 }
 
 Do not include any text outside the JSON object.`;
+}
 
 function buildUserPrompt(question, schema, knowledgeText) {
   return `Database schema:
@@ -358,10 +389,13 @@ async function runPipeline(question) {
     rows: null,
     error: null,
     repairAttempts: 0,
+    analysis: null,
+    status: null,
   };
 
   try {
-    const raw = await callLlm(SYSTEM_PROMPT, buildUserPrompt(question, schema, knowledgeText));
+    const systemPrompt = getSystemPrompt();
+    const raw = await callLlm(systemPrompt, buildUserPrompt(question, schema, knowledgeText));
     const parsed = parseSqlResponse(raw);
     output.sql = parsed.sql;
     output.explanation = parsed.explanation;
@@ -380,50 +414,69 @@ async function runPipeline(question) {
       return output;
     }
 
-    let currentSql = parsed.sql;
-    let attempts = 0;
-    // The database itself is the syntax checker across dialects — a failed
-    // execution's error is fed back to the LLM rather than re-implementing
-    // a SQL parser. Every repair is re-validated through the same safety
-    // layer above before it's allowed to run.
-    while (true) {
+    // Analyze only — do not execute until the user accepts via POST /api/execute.
+    if (typeof sqlEngine.analyzeQuery === "function") {
       try {
-        const { columns, rows } = await runQuery(currentSql);
-        output.columns = columns;
-        output.rows = rows;
-        output.sql = currentSql;
-        log(`[ask] done, ${rows.length} row(s) returned (${attempts} repair attempt(s))`);
-        break;
-      } catch (dbErr) {
-        if (attempts >= MAX_REPAIR_ATTEMPTS) throw dbErr;
-        attempts += 1;
-        log(`[ask] query failed, starting repair attempt ${attempts}: ${String(dbErr.message || dbErr)}`);
-
-        const repairRaw = await callLlm(
-          SYSTEM_PROMPT,
-          buildRepairPrompt(question, schema, currentSql, String(dbErr.message || dbErr), knowledgeText)
+        output.analysis = await sqlEngine.analyzeQuery(parsed.sql);
+        log(
+          `[ask] EXPLAIN COST: size=${output.analysis.sizeLabel ?? "n/a"} ` +
+            `rows=${output.analysis.rowCount ?? "n/a"}`
         );
-        const repaired = parseSqlResponse(repairRaw);
-        const repairValidation = validateSql(repaired.sql);
-        output.sql = repaired.sql;
-        output.explanation = repaired.explanation;
-        output.repairAttempts = attempts;
-        log(`[ask] repair attempt ${attempts} sql: ${repaired.sql || "(empty)"}`);
-
-        if (!repairValidation.isSafe) {
-          output.validation = repairValidation;
-          log(`[ask] done (repair rejected by safety validation: ${repairValidation.reason})`);
-          return output;
-        }
-        currentSql = repaired.sql;
+      } catch (analyzeErr) {
+        output.analysis = { error: describeError(analyzeErr), rawPlan: null };
+        warn(`[ask] EXPLAIN COST failed (non-fatal): ${output.analysis.error}`);
       }
     }
+
+    output.status = "awaiting_approval";
+    log(`[ask] done (awaiting approval) — SQL not executed yet`);
   } catch (exc) {
     output.error = describeError(exc);
     log(`[ask] done (error: ${output.error})`);
   }
 
   return output;
+}
+
+async function executeApprovedSql(sql) {
+  const trimmed = String(sql || "").trim();
+  if (!trimmed) {
+    return { sql: null, columns: null, rows: null, error: "sql is required", status: null };
+  }
+  const validation = validateSql(trimmed);
+  if (!validation.isSafe) {
+    return {
+      sql: trimmed,
+      columns: null,
+      rows: null,
+      validation,
+      error: validation.reason,
+      status: null,
+    };
+  }
+  try {
+    const { columns, rows } = await runQuery(trimmed);
+    log(`[execute] done, ${rows.length} row(s) returned`);
+    return {
+      sql: trimmed,
+      columns,
+      rows,
+      validation,
+      error: null,
+      status: "complete",
+    };
+  } catch (exc) {
+    const error = describeError(exc);
+    log(`[execute] error: ${error}`);
+    return {
+      sql: trimmed,
+      columns: null,
+      rows: null,
+      validation,
+      error,
+      status: null,
+    };
+  }
 }
 
 // ── HTTP server ───────────────────────────────────────────────────────────────
@@ -457,12 +510,13 @@ app.get("/api/example-questions", async (req, res) => {
 });
 
 app.get("/api/config", (req, res) => {
+  const info = sqlEngine.describe();
   res.json({
     llmBaseUrl: LLM_BASE_URL,
     llmModel: LLM_MODEL,
     dbPath: path.basename(DB_PATH),
-    sqlEngine: process.env.SQL_ENGINE || "sqlite",
-    sqlEngineInfo: sqlEngine.describe(),
+    sqlEngine: activeSqlEngineName,
+    sqlEngineInfo: info,
     availableSqlEngines: listSqlEngines(),
     memoryEnabled: MEMORY.memoryEnabled,
     dbagentId: MEMORY.dbagentId,
@@ -472,7 +526,66 @@ app.get("/api/config", (req, res) => {
     embeddingModel: MEMORY.embeddingModel,
     knowledgeLoaded: loadKnowledge(KNOWLEDGE_PATH) !== null,
     benchmarkCaseCount: benchmarkStore.listCases().length,
+    // Non-secret Databricks fields for the sidebar connection form.
+    // Token is never echoed — only whether one is configured.
+    databricks: {
+      host: databricksConnection.host,
+      httpPath: databricksConnection.httpPath,
+      catalog: databricksConnection.catalog,
+      schema: databricksConnection.schema,
+      tokenConfigured: Boolean(databricksConnection.token),
+    },
   });
+});
+
+// Session-only Databricks reconnect — does not rewrite .env.
+app.post("/api/sql-connection", async (req, res) => {
+  const body = req.body || {};
+  const host = String(body.host || "").trim();
+  const httpPath = String(body.httpPath || "").trim();
+  const catalog = String(body.catalog || "").trim();
+  const schema = String(body.schema || "").trim();
+  let token = String(body.token || "").trim();
+  if (!token && databricksConnection.token) {
+    token = databricksConnection.token;
+  }
+
+  const missing = [];
+  if (!host) missing.push("host");
+  if (!httpPath) missing.push("httpPath");
+  if (!token) missing.push("token");
+  if (!catalog) missing.push("catalog");
+  if (!schema) missing.push("schema");
+  if (missing.length) {
+    return res.status(400).json({ error: `Missing required fields: ${missing.join(", ")}` });
+  }
+
+  try {
+    await replaceSqlEngine("databricks-sql", {
+      SQL_ENGINE: "databricks-sql",
+      DATABRICKS_HOST: host,
+      DATABRICKS_HTTP_PATH: httpPath,
+      DATABRICKS_TOKEN: token,
+      DATABRICKS_CATALOG: catalog,
+      DATABRICKS_SCHEMA: schema,
+    });
+    databricksConnection = { host, httpPath, token, catalog, schema, maxRows: databricksConnection.maxRows };
+    log(`[sql-connection] reconnected -> ${host} (${catalog}.${schema})`);
+    res.json({
+      ok: true,
+      sqlEngine: activeSqlEngineName,
+      sqlEngineInfo: sqlEngine.describe(),
+      databricks: {
+        host,
+        httpPath,
+        catalog,
+        schema,
+        tokenConfigured: true,
+      },
+    });
+  } catch (exc) {
+    res.status(400).json({ error: describeError(exc) });
+  }
 });
 
 app.post("/api/ask", async (req, res) => {
@@ -481,13 +594,43 @@ app.post("/api/ask", async (req, res) => {
 
   try {
     const output = await runPipeline(question);
+    // Memory is written after the user accepts and /api/execute succeeds —
+    // storing pre-approval SQL would record queries that were never run.
     res.json(output);
+  } catch (exc) {
+    res.status(500).json({ error: describeError(exc) });
+  }
+});
 
-    // Fire-and-forget: memory is cross-platform context, not a critical path
-    // — never block the response on a second LLM call + store write.
-    void writeMemory(llm, output, MEMORY).catch((err) => {
-      warn(`[memory] write failed: ${err?.message || err}`);
-    });
+app.post("/api/execute", async (req, res) => {
+  const sql = (req.body?.sql || "").trim();
+  const question = (req.body?.question || "").trim();
+  if (!sql) return res.status(400).json({ error: "sql is required" });
+
+  try {
+    const result = await executeApprovedSql(sql);
+    if (result.validation && !result.validation.isSafe) {
+      return res.status(400).json(result);
+    }
+    res.json(result);
+
+    if (question && result.rows) {
+      const memoryOutput = {
+        question,
+        sql: result.sql,
+        rows: result.rows,
+        columns: result.columns,
+        error: null,
+        explanation: null,
+        validation: result.validation,
+        schemaContext: "",
+        repairAttempts: 0,
+        status: "complete",
+      };
+      void writeMemory(llm, memoryOutput, MEMORY).catch((err) => {
+        warn(`[memory] write failed: ${err?.message || err}`);
+      });
+    }
   } catch (exc) {
     res.status(500).json({ error: describeError(exc) });
   }

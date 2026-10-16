@@ -5,8 +5,11 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { getSqlEngineIcon } from "@/components/SqlEngineIcon";
+import { saveSqlConnection } from "@/lib/api";
 import type { AppConfig, Conversation, Schema } from "@/lib/types";
 import { AlertTriangle, MessageSquare, Plus, RefreshCw, Server } from "lucide-react";
 
@@ -23,6 +26,7 @@ export function Sidebar({
   schema,
   schemaError,
   onRetrySchema,
+  onConnectionSaved,
   conversations,
   activeId,
   onSelect,
@@ -32,19 +36,64 @@ export function Sidebar({
   schema: Schema | null;
   schemaError?: string | null;
   onRetrySchema?: () => void;
+  onConnectionSaved?: (next: AppConfig) => void;
   conversations: Conversation[];
   activeId: string | null;
   onSelect: (id: string) => void;
   onNewChat: () => void;
 }) {
-  // Controlled (rather than defaultValue) specifically so a connection
-  // error that arrives after initial mount (schema fetch is async) still
-  // forces this section open — an uncontrolled accordion's defaultValue is
-  // only read once, so it wouldn't react to an error appearing later.
   const [openItems, setOpenItems] = useState<string[]>([]);
+  const [host, setHost] = useState("");
+  const [httpPath, setHttpPath] = useState("");
+  const [token, setToken] = useState("");
+  const [catalog, setCatalog] = useState("");
+  const [schemaName, setSchemaName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveOk, setSaveOk] = useState(false);
+
   useEffect(() => {
     if (schemaError) setOpenItems(["connection-info"]);
   }, [schemaError]);
+
+  useEffect(() => {
+    if (!config?.databricks) return;
+    setHost(config.databricks.host || "");
+    setHttpPath(config.databricks.httpPath || "");
+    setCatalog(config.databricks.catalog || "");
+    setSchemaName(config.databricks.schema || "");
+    setToken("");
+  }, [config?.databricks]);
+
+  const showDatabricksForm =
+    !config?.sqlEngine || config.sqlEngine === "databricks-sql" || Boolean(config.databricks);
+
+  async function handleSaveConnection() {
+    setSaving(true);
+    setSaveError(null);
+    setSaveOk(false);
+    try {
+      const result = await saveSqlConnection({
+        host,
+        httpPath,
+        token,
+        catalog,
+        schema: schemaName,
+      });
+      setSaveOk(true);
+      setToken("");
+      onConnectionSaved?.({
+        ...(config as AppConfig),
+        sqlEngine: "databricks-sql",
+        sqlEngineInfo: result.sqlEngineInfo,
+        databricks: result.databricks,
+      });
+    } catch (exc) {
+      setSaveError(exc instanceof Error ? exc.message : String(exc));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <aside className="flex h-screen w-72 shrink-0 flex-col overflow-y-auto border-r bg-sidebar px-4 py-5">
@@ -128,6 +177,93 @@ export function Sidebar({
                 {config.sqlEngineInfo.endpoint ? ` · ${config.sqlEngineInfo.endpoint}` : ""}
               </p>
             )}
+
+            {showDatabricksForm && (
+              <>
+                <FieldLabel>Databricks connection</FieldLabel>
+                <div className="flex flex-col gap-2">
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-foreground">
+                      Host
+                    </label>
+                    <Input
+                      value={host}
+                      onChange={(e) => setHost(e.target.value)}
+                      placeholder="dbc-….cloud.databricks.com"
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-foreground">
+                      HTTP path
+                    </label>
+                    <Input
+                      value={httpPath}
+                      onChange={(e) => setHttpPath(e.target.value)}
+                      placeholder="/sql/1.0/warehouses/…"
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-foreground">
+                      Token
+                    </label>
+                    <Input
+                      type="password"
+                      value={token}
+                      onChange={(e) => setToken(e.target.value)}
+                      placeholder={
+                        config?.databricks?.tokenConfigured
+                          ? "Leave blank to keep current"
+                          : "Personal access token"
+                      }
+                      className="h-7 text-xs"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-foreground">
+                      Catalog
+                    </label>
+                    <Input
+                      value={catalog}
+                      onChange={(e) => setCatalog(e.target.value)}
+                      placeholder="samples"
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-foreground">
+                      Schema
+                    </label>
+                    <Input
+                      value={schemaName}
+                      onChange={(e) => setSchemaName(e.target.value)}
+                      placeholder="tpcds_sf1"
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-7 text-xs"
+                    disabled={saving || !host || !httpPath || !catalog || !schemaName}
+                    onClick={handleSaveConnection}
+                  >
+                    {saving ? "Connecting…" : "Save & reconnect"}
+                  </Button>
+                  {saveOk && (
+                    <p className="text-[11px] text-emerald-600 dark:text-emerald-500">
+                      Connected. Schema refreshed.
+                    </p>
+                  )}
+                  {saveError && (
+                    <p className="break-words text-[11px] text-destructive">{saveError}</p>
+                  )}
+                </div>
+              </>
+            )}
+
             {schemaError && (
               <div className="mt-2 flex flex-col gap-1.5 rounded-lg border border-destructive/30 bg-destructive/10 p-2">
                 <div className="flex items-start gap-1.5 text-xs text-destructive">

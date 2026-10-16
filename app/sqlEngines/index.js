@@ -21,7 +21,7 @@ import { DatabricksSqlEngine } from "./databricksSql.js";
 
 const REGISTRY = {
   sqlite: {
-    description: "Node's built-in node:sqlite against a local file. The default.",
+    description: "Node's built-in node:sqlite against a local file (optional offline path).",
     create: (env, { dataDir }) =>
       new SQLiteEngine({
         dbPath: env.DB_PATH || path.join(dataDir, "demo.db"),
@@ -106,7 +106,8 @@ export function listSqlEngines() {
 // __dirname-relative path) so it's resolved the same way regardless of
 // engine, same reasoning as memoryBackends/index.js's createMemoryBackend.
 export function createSqlEngine(name, { env = process.env, dataDir } = {}) {
-  const key = (name || "sqlite").toLowerCase();
+  // Default is Databricks SQL; set SQL_ENGINE=sqlite|postgres|minio-duckdb to override.
+  const key = (name || "databricks-sql").toLowerCase();
   const entry = REGISTRY[key];
   if (!entry) {
     const available = Object.keys(REGISTRY).join(", ");

@@ -43,6 +43,56 @@ function normalizeValue(v) {
   return v;
 }
 
+// Spark / Databricks EXPLAIN COST prints Statistics(sizeInBytes=…, rowCount=…).
+// Prefer the last (outermost) match — that is usually the full-plan estimate.
+const SIZE_RE = /sizeInBytes\s*=\s*([0-9.]+)\s*([KMGTP]?i?B)/gi;
+const ROWS_RE = /rowCount\s*=\s*([0-9.]+(?:[eE][+-]?\d+)?)/gi;
+
+function parseSizeToBytes(value, unit) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const u = (unit || "B").toUpperCase();
+  const mult =
+    u === "B" ? 1
+    : u === "KIB" || u === "KB" ? 1024
+    : u === "MIB" || u === "MB" ? 1024 ** 2
+    : u === "GIB" || u === "GB" ? 1024 ** 3
+    : u === "TIB" || u === "TB" ? 1024 ** 4
+    : u === "PIB" || u === "PB" ? 1024 ** 5
+    : 1;
+  return Math.round(n * mult);
+}
+
+export function parseExplainCost(planText) {
+  const text = String(planText || "");
+  // Data consumption ≈ largest sizeInBytes in the plan (typically a Relation
+  // scan). Outermost Aggregate stats are often tiny output estimates.
+  let sizeInBytes = null;
+  let sizeLabel = null;
+  let m;
+  SIZE_RE.lastIndex = 0;
+  while ((m = SIZE_RE.exec(text)) !== null) {
+    const bytes = parseSizeToBytes(m[1], m[2]);
+    if (bytes != null && (sizeInBytes == null || bytes > sizeInBytes)) {
+      sizeInBytes = bytes;
+      sizeLabel = `${m[1]} ${m[2]}`;
+    }
+  }
+  // Result-row estimate: last (outermost) rowCount in the plan.
+  let rowCount = null;
+  ROWS_RE.lastIndex = 0;
+  while ((m = ROWS_RE.exec(text)) !== null) {
+    const n = Number(m[1]);
+    if (Number.isFinite(n)) rowCount = n;
+  }
+  return {
+    sizeInBytes,
+    sizeLabel,
+    rowCount,
+    rawPlan: text,
+  };
+}
+
 export class DatabricksSqlEngine {
   constructor({ host, httpPath, token, catalog, schema, maxRows }) {
     this.host = host.replace(/^https?:\/\//, "").replace(/\/+$/, "");
@@ -100,7 +150,7 @@ export class DatabricksSqlEngine {
       // Only drop the session for connection-level failures. A bad query
       // (syntax error, missing column) must leave it intact for the repair retry.
       const msg = String(exc?.message || exc);
-      if (/ECONN|ETIMEDOUT|ENOTFOUND|socket|session|closed|expired|401|403/i.test(msg)) {
+      if (/ECONN|ETIMEDOUT|ENOTFOUND|socket|session|closed|expired|401|403|400|bad HTTP status/i.test(msg)) {
         await this.reset();
       }
       throw exc;
@@ -133,10 +183,28 @@ export class DatabricksSqlEngine {
     return { columns, rows: capped.map((r) => Object.fromEntries(columns.map((c) => [c, normalizeValue(r[c])]))) };
   }
 
+  // Uses Databricks/Spark EXPLAIN COST — no custom cost model. Estimates
+  // sizeInBytes / rowCount from the plan text when the optimizer has stats.
+  async analyzeQuery(sql) {
+    const trimmed = String(sql || "").trim().replace(/;+\s*$/, "");
+    if (!trimmed) {
+      return { sizeInBytes: null, sizeLabel: null, rowCount: null, rawPlan: "", error: "empty SQL" };
+    }
+    const { rows } = await this.execute(`EXPLAIN COST ${trimmed}`);
+    const planText = rows
+      .map((r) => Object.values(r).map((v) => (v == null ? "" : String(v))).join(" "))
+      .join("\n");
+    return parseExplainCost(planText);
+  }
+
   describe() {
     return {
       type: "databricks-sql",
       location: `https://${this.host}${this.httpPath} (${this.catalog}.${this.schemaName})`,
+      endpoint: this.host,
+      catalog: this.catalog,
+      schema: this.schemaName,
+      httpPath: this.httpPath,
     };
   }
 }
