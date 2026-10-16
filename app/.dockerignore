@@ -1,0 +1,8 @@
+node_modules
+web/node_modules
+web/dist
+.env
+data/memory_store.jsonl
+data/feedback.jsonl
+*.log
+.DS_Store

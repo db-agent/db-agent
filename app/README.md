@@ -10,10 +10,11 @@ Scope is intentionally narrower than the Python app in one respect: a
 single LLM (no model failover chain). It does carry over the SQL
 repair-on-failure loop and the cross-platform contextual memory feature.
 The SQL layer itself is pluggable (`sqlEngines/`, same registry pattern as
-the memory backends): `sqlite` (default, a local file), `minio-duckdb`
-(Parquet objects in MinIO/any S3-compatible store, via DuckDB), or
-`postgres` (any standard Postgres database — covers Databricks Lakebase
-directly) — see Notes below.
+the memory backends): `databricks-sql` (default — Unity Catalog warehouse),
+`sqlite` (optional local file), `minio-duckdb` (Parquet in MinIO via DuckDB),
+or `postgres` (any standard Postgres / Lakebase) — see Notes below.
+Generated queries are analyzed with Databricks `EXPLAIN COST` to estimate
+data consumption before results are shown.
 
 Two parts:
 - `server.js` / `memory.js` — Express API (`/api/schema`, `/api/config`,
@@ -22,42 +23,50 @@ Two parts:
 
 ## Run it
 
-**Quick start with local Ollama** (mirrors `../run_local.sh`):
+**Quick start** (Databricks warehouse + local Ollama):
 
 ```bash
 ollama pull qwen2.5-coder:7b   # or any model you prefer
 cd app
+cp .env.example .env           # set DATABRICKS_HOST / HTTP_PATH / TOKEN / CATALOG / SCHEMA
 ./run_local.sh
 ```
 
-Checks Ollama is installed, the model is pulled, and the server is reachable
-before starting — same preflight checks as the Streamlit app's
-`run_local.sh`. Builds the frontend automatically on first run if `web/dist`
-doesn't exist yet. Pass a different model as `$1`:
-`./run_local.sh llama3.2`.
+Checks Ollama is installed, the model is pulled, and Databricks env vars
+are present before starting. Builds the frontend automatically on first run
+if `web/dist` doesn't exist yet. Pass a different model as `$1`:
+`./run_local.sh qwen2.5-coder:0.5b`.
+
+You can also edit the warehouse connection from the sidebar (Connection info)
+without restarting the process.
 
 **Manual setup** (any OpenAI-compatible endpoint):
 
 ```bash
 cd app
 npm install
-cp .env.example .env      # defaults to local Ollama; edit for OpenAI/Groq/etc.
+cp .env.example .env      # Databricks SQL + local Ollama by default
 
 npm run build              # builds web/dist
 npm start
 ```
 
-Open http://localhost:3001. Default `DB_PATH` is the self-contained
-`./data/demo.db` bundled in this directory (so the app has no path
-dependency outside its own source tree — required for Databricks Apps,
-which deploys `app/` as an isolated source root). To instead share
-the root Python app's seeded DB during local dev, set
-`DB_PATH=../data/demo.db` (run the Python app once first, or
-`python ../bootstrap.py`, if that file doesn't exist yet).
+Open http://localhost:3001. Default SQL engine is `databricks-sql`. For an
+offline SQLite path, set `SQL_ENGINE=sqlite` and optionally `DB_PATH`.
 
 **Frontend dev mode** (hot reload, instead of building): run `npm run dev` in
 `web/` (http://localhost:5173) with `server.js` running separately — Vite
 proxies `/api/*` to `http://localhost:3001` (see `web/vite.config.ts`).
+
+**Docker Compose** (Ollama + DB Agent; Databricks warehouse stays in the cloud):
+
+```bash
+# from repo root, with app/.env filled in
+docker compose up --build
+# → http://localhost:3001
+```
+
+On Mac with host Ollama (Metal): `docker compose --profile host-ollama up --build db-agent-host`.
 
 ## Databricks Apps
 

@@ -5,6 +5,30 @@ export async function fetchConfig(): Promise<AppConfig> {
   return res.json();
 }
 
+export async function saveSqlConnection(connection: {
+  host: string;
+  httpPath: string;
+  token: string;
+  catalog: string;
+  schema: string;
+}): Promise<{
+  ok: boolean;
+  sqlEngineInfo: AppConfig["sqlEngineInfo"];
+  databricks: NonNullable<AppConfig["databricks"]>;
+  error?: string;
+}> {
+  const res = await fetch("/api/sql-connection", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(connection),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(body.error || `Request failed (${res.status})`);
+  }
+  return body;
+}
+
 export async function fetchSchema(): Promise<Schema> {
   const res = await fetch("/api/schema");
   if (!res.ok) {
@@ -25,6 +49,29 @@ export async function ask(question: string): Promise<PipelineOutput> {
     throw new Error(body.error || `Request failed (${res.status})`);
   }
   return res.json();
+}
+
+export async function executeSql(
+  sql: string,
+  question?: string
+): Promise<{
+  sql: string | null;
+  columns: string[] | null;
+  rows: Record<string, unknown>[] | null;
+  error: string | null;
+  status?: string | null;
+  validation?: { isSafe: boolean; reason: string };
+}> {
+  const res = await fetch("/api/execute", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sql, question }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok && !body.sql && !body.error) {
+    throw new Error(body.error || `Request failed (${res.status})`);
+  }
+  return body;
 }
 
 export async function fetchMemories(tables: string[]): Promise<MemoryRecord[]> {

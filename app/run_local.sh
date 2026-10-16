@@ -1,30 +1,27 @@
 #!/usr/bin/env bash
-# run_local.sh — fire up DB Agent (Node) against local SQLite + local Ollama
-# by default. Respects any LLM_BASE_URL / EMBEDDING_BASE_URL / etc. already
-# exported by the caller — chat and embeddings are independent endpoints
-# (see server.js), so e.g. chat can stay on local Ollama while embeddings
-# route to Databricks AI Gateway, which is what cross-platform memory needs:
-# every agent sharing a vector store must use the same embedding model, but
-# each agent's own chat/SQL-generation model can be anything.
+# run_local.sh — fire up DB Agent (Node) against Databricks SQL (from .env)
+# + local Ollama by default. Respects any LLM_BASE_URL / EMBEDDING_BASE_URL /
+# etc. already exported by the caller.
 #
+#   cp .env.example .env   # set DATABRICKS_* then:
 #   ./run_local.sh
-#   ./run_local.sh llama3.2       # use a different local Ollama chat model
-#
-#   Chat on Ollama, embeddings on Databricks (for testing S3 Vectors memory
-#   against a Databricks-hosted agent):
-#     EMBEDDING_BASE_URL=https://.../ai-gateway/mlflow/v1 EMBEDDING_API_KEY=$TOKEN \
-#       EMBEDDING_MODEL=system.ai.qwen3-embedding-0-6b ./run_local.sh
+#   ./run_local.sh qwen2.5-coder:0.5b
 #
 #   Both chat and embeddings on a remote endpoint (skips Ollama entirely):
 #     LLM_BASE_URL=https://.../ai-gateway/mlflow/v1 LLM_API_KEY=$TOKEN \
-#       LLM_MODEL=main.default.lama-3 EMBEDDING_MODEL=system.ai.qwen3-embedding-0-6b \
-#       ./run_local.sh
+#       LLM_MODEL=main.default.lama-3 ./run_local.sh
 
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+fi
+
 if [ -z "${LLM_BASE_URL:-}" ]; then
-    # No LLM_BASE_URL set — default chat to local Ollama, with preflight checks.
     MODEL="${1:-qwen2.5-coder:7b}"
 
     if ! command -v ollama >/dev/null 2>&1; then
@@ -46,14 +43,10 @@ if [ -z "${LLM_BASE_URL:-}" ]; then
     export LLM_API_KEY="${LLM_API_KEY:-ollama}"
     export LLM_MODEL="$MODEL"
 else
-    # LLM_BASE_URL already set by the caller — use it as-is.
     export LLM_MODEL="${LLM_MODEL:-gpt-4o-mini}"
 fi
 
 if [ -z "${EMBEDDING_BASE_URL:-}" ] && [ "$LLM_BASE_URL" = "http://localhost:11434/v1" ]; then
-    # No EMBEDDING_BASE_URL set, and chat is on Ollama — embeddings will fall
-    # back to that same Ollama endpoint too (server.js's default), so check
-    # the embedding model is actually pulled there.
     EMBED_MODEL="${EMBEDDING_MODEL:-nomic-embed-text}"
     if ! ollama list | tail -n +2 | awk '{print $1}' | grep -qx "$EMBED_MODEL"; then
         echo "Embedding model '$EMBED_MODEL' not pulled — cross-agent memory will be" >&2
@@ -61,23 +54,34 @@ if [ -z "${EMBEDDING_BASE_URL:-}" ] && [ "$LLM_BASE_URL" = "http://localhost:114
     fi
     export EMBEDDING_MODEL="$EMBED_MODEL"
 else
-    # Either EMBEDDING_BASE_URL is set explicitly (embeddings go elsewhere,
-    # e.g. Databricks, independent of the Ollama chat model above), or chat
-    # itself isn't on Ollama — no Ollama embedding check applies either way.
     export EMBEDDING_MODEL="${EMBEDDING_MODEL:-text-embedding-3-small}"
 fi
 
 export DBAGENT_ID="${DBAGENT_ID:-local}"
-# DB_PATH is intentionally not set here — server.js defaults to the
-# self-contained ./data/demo.db bundled in this directory. Export DB_PATH
-# yourself before calling this script to point elsewhere.
+export SQL_ENGINE="${SQL_ENGINE:-databricks-sql}"
+
+missing=()
+for key in DATABRICKS_HOST DATABRICKS_HTTP_PATH DATABRICKS_TOKEN DATABRICKS_CATALOG DATABRICKS_SCHEMA; do
+  if [ -z "${!key:-}" ]; then
+    missing+=("$key")
+  fi
+done
+if [ "$SQL_ENGINE" = "databricks-sql" ] && [ "${#missing[@]}" -gt 0 ]; then
+  echo "SQL_ENGINE=databricks-sql requires: ${missing[*]}" >&2
+  echo "Copy .env.example to .env and fill in your warehouse details." >&2
+  exit 1
+fi
 
 echo "LLM_BASE_URL=$LLM_BASE_URL"
 echo "LLM_MODEL=$LLM_MODEL"
 echo "EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-(default: same as LLM_BASE_URL)}"
 echo "EMBEDDING_MODEL=$EMBEDDING_MODEL"
 echo "DBAGENT_ID=$DBAGENT_ID"
-echo "DB_PATH=${DB_PATH:-(default: ./data/demo.db)}"
+echo "SQL_ENGINE=$SQL_ENGINE"
+if [ "$SQL_ENGINE" = "databricks-sql" ]; then
+  echo "DATABRICKS_HOST=$DATABRICKS_HOST"
+  echo "DATABRICKS_CATALOG=$DATABRICKS_CATALOG.$DATABRICKS_SCHEMA"
+fi
 
 if [ ! -d node_modules ]; then
     echo "Installing server dependencies…"

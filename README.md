@@ -45,19 +45,26 @@ DB Agent is a minimal **natural-language-to-SQL system**. A user asks a question
 | **Stack** | Node.js + Express + React | Node.js + Express + React (native Databricks App) |
 | **Best for** | Trying it in one command, local dev | Enterprise Databricks deployments |
 | **Auth** | `.env` | Databricks Apps runtime + secrets |
-| **SQL target** | SQLite (bundled demo DB) | SQLite app DB; Unity Catalog via Lakehouse patterns |
+| **SQL target** | Databricks SQL warehouse (default) | Unity Catalog / Lakebase via env |
 | **LLM endpoint** | Ollama or any OpenAI-compatible | Databricks Model Serving or any OpenAI-compatible |
 | **Memory backend** | Local JSONL or AWS S3 Vectors | Lakebase  pgvector |
 
-**Run it locally** (SQLite + local Ollama, no API key needed):
+**Run it locally** (Databricks SQL + local Ollama):
 
 ```bash
 cd app
+cp .env.example .env    # set DATABRICKS_* warehouse credentials
 ollama pull qwen2.5-coder:7b
 ./run_local.sh
 ```
 
-Open `http://localhost:3001`. Any OpenAI-compatible endpoint works instead of Ollama — see [`app/.env.example`](./app/.env.example) for OpenAI, Groq, and Databricks Model Serving.
+Open `http://localhost:3001`. Generated SQL is analyzed with warehouse `EXPLAIN COST` (estimated bytes / rows). Any OpenAI-compatible endpoint works instead of Ollama — see [`app/.env.example`](./app/.env.example).
+
+**Docker one-click** (Ollama + agent; Databricks stays in the cloud):
+
+```bash
+docker compose up --build
+```
 
 **Deploy to Databricks Apps:**
 
