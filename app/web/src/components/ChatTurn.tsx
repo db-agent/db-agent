@@ -14,9 +14,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { sendFeedback } from "@/lib/api";
+import { exportCsv, sendFeedback } from "@/lib/api";
 import type { QueryAnalysis, Turn } from "@/lib/types";
-import { Check, CheckCircle2, Loader2, ThumbsDown, ThumbsUp, Wrench, X, XCircle } from "lucide-react";
+import { Check, CheckCircle2, Download, Loader2, ThumbsDown, ThumbsUp, Wrench, X, XCircle } from "lucide-react";
 
 function formatBytes(n: number | null | undefined): string | null {
   if (n == null || !Number.isFinite(n)) return null;
@@ -28,6 +28,46 @@ function formatBytes(n: number | null | undefined): string | null {
     i += 1;
   }
   return `${v < 10 && i > 0 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
+}
+
+function formatUsd(n: number): string {
+  if (n >= 1) return `$${n.toFixed(2)}`;
+  if (n >= 0.01) return `$${n.toFixed(3)}`;
+  return `$${n.toPrecision(2)}`;
+}
+
+function CostPanel({ cost }: { cost: NonNullable<QueryAnalysis["cost"]> }) {
+  if (cost.error) {
+    return (
+      <p className="text-xs text-muted-foreground">Cost estimate unavailable: {cost.error}</p>
+    );
+  }
+  const secs = ((cost.durationMs ?? 0) / 1000).toFixed(1);
+  return (
+    <div className="rounded-md border p-3 text-sm">
+      <div className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
+        Estimated compute cost
+      </div>
+      <div className="mt-1 text-lg font-semibold">
+        ~{formatUsd(cost.usd ?? 0)}{" "}
+        <span className="text-xs font-normal text-muted-foreground">
+          (range {formatUsd(cost.usdLow ?? 0)} to {formatUsd(cost.usdHigh ?? 0)}, {cost.confidence} confidence)
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
+        About {secs}s on a {cost.warehouseType?.toLowerCase()} {cost.warehouseSize?.replace("_", "-")} warehouse
+        ({cost.dbuPerHour} DBU/h at ${cost.pricePerDbu}/DBU), scanning ~
+        {Math.round(cost.scanRows ?? 0).toLocaleString()} rows. Based on {cost.historySamples} similar past
+        queries from <code>system.query.history</code>. This is the query&apos;s share of warehouse
+        time, not the bill: serverless also bills startup and idle time.
+      </p>
+      {cost.notes?.map((n) => (
+        <p key={n} className="mt-1 text-xs text-amber-600 dark:text-amber-500">
+          {n}
+        </p>
+      ))}
+    </div>
+  );
 }
 
 function QueryAnalysisPanel({ analysis }: { analysis: QueryAnalysis }) {
@@ -61,6 +101,7 @@ function QueryAnalysisPanel({ analysis }: { analysis: QueryAnalysis }) {
           <div className="mt-1 font-medium">{rowsText}</div>
         </div>
       </div>
+      {analysis.cost && <CostPanel cost={analysis.cost} />}
       <p className="text-[11px] text-muted-foreground">
         From Databricks <code>EXPLAIN COST</code> (optimizer estimates; not billed usage).
       </p>
@@ -199,6 +240,9 @@ export function ChatTurn({
 }) {
   const { question, output } = turn;
   const [executing, setExecuting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportDone, setExportDone] = useState<string | null>(null);
   const awaiting =
     output != null &&
     output.sql != null &&
@@ -217,6 +261,21 @@ export function ChatTurn({
     }
   }
 
+  async function handleExport() {
+    if (!output?.sql || exporting) return;
+    setExporting(true);
+    setExportError(null);
+    setExportDone(null);
+    try {
+      const { name, bytes } = await exportCsv(output.sql);
+      setExportDone(`Downloaded ${name} (${(bytes / 1024).toFixed(bytes < 1024 * 100 ? 1 : 0)} KB). If it contains only the header row, the query returned no rows.`);
+    } catch (exc) {
+      setExportError(String((exc as Error).message ?? exc));
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="mb-6">
       <UserBubble question={question} />
@@ -230,7 +289,7 @@ export function ChatTurn({
             </div>
           )}
 
-          {output?.error && !output.sql && (
+          {output?.error && (!output.sql || !awaiting) && (
             <div className="flex items-start gap-2 text-sm">
               <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
               <div>
@@ -311,38 +370,66 @@ export function ChatTurn({
                       <span>Execution failed — {output.error}</span>
                     </div>
                   )}
+                  {output.approvalReason && (
+                    <p className="text-sm font-medium text-amber-600 dark:text-amber-500">
+                      {output.approvalReason}
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground">
-                    Review the query analysis, then accept to run on the warehouse or discard.
+                    Approve to run it and show the rows here, decline to discard it, or export every row to a CSV file without displaying them.
                   </p>
                   <div className="flex items-center gap-2">
                     <Button
                       type="button"
                       size="sm"
                       className="h-8 gap-1.5"
-                      disabled={executing}
+                      disabled={executing || exporting}
                       onClick={handleAccept}
-                      title="Accept and run query"
+                      title="Approve and run query"
                     >
                       {executing ? (
                         <Loader2 className="size-4 animate-spin" />
                       ) : (
                         <Check className="size-4" />
                       )}
-                      {executing ? "Running…" : "Accept & run"}
+                      {executing ? "Running…" : "Approve"}
                     </Button>
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
                       className="h-8 gap-1.5"
-                      disabled={executing}
+                      disabled={executing || exporting}
                       onClick={() => onReject?.(turn.id)}
-                      title="Discard this query"
+                      title="Decline and discard this query"
                     >
                       <X className="size-4" />
-                      Discard
+                      Decline
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1.5"
+                      disabled={executing || exporting}
+                      onClick={handleExport}
+                      title="Run the query and download all rows as a CSV file"
+                    >
+                      {exporting ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Download className="size-4" />
+                      )}
+                      {exporting ? "Exporting…" : "Export CSV"}
                     </Button>
                   </div>
+                  {exportDone && <p className="text-xs text-muted-foreground">{exportDone}</p>}
+                  {exportError && (
+                    <div className="flex items-start gap-2 text-sm text-destructive">
+                      <XCircle className="mt-0.5 size-4 shrink-0" />
+                      <span>Export failed — {exportError}</span>
+                    </div>
+                  )}
                 </div>
               )}
 

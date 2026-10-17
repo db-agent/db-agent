@@ -116,6 +116,11 @@ useEffect(() => {
 
   async function handleAsk(q: string) {
     if (!q.trim() || busy) return;
+    // "! <sql>" runs the SQL directly (like "!" for shell commands in Claude
+    // Code): no LLM, still SELECT-only validated and cost-checked.
+    const bang = q.trim().startsWith("!");
+    const rawSql = bang ? q.trim().slice(1).trim() : undefined;
+    if (bang && !rawSql) return;
     setBusy(true);
     setQuestion("");
 
@@ -136,7 +141,7 @@ useEffect(() => {
     updateTurns(conversationId, (prev) => [...prev, { id, question: q, output: null }]);
 
     try {
-      const output = await ask(q);
+      const output = await ask(q, rawSql);
       updateTurns(conversationId, (prev) => prev.map((t) => (t.id === id ? { ...t, output } : t)));
     } catch (exc) {
       updateTurns(conversationId, (prev) =>
@@ -300,7 +305,7 @@ useEffect(() => {
             <input
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Ask a question about your data …"
+              placeholder="Ask a question about your data, or ! followed by SQL to run it directly …"
               disabled={busy}
               autoFocus
               className="flex-1 bg-transparent py-1.5 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"

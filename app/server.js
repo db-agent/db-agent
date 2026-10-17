@@ -17,6 +17,7 @@ import { createMemoryBackend, listMemoryBackends } from "./memoryBackends/index.
 import { createSqlEngine, listSqlEngines } from "./sqlEngines/index.js";
 import { formatKnowledge, loadKnowledge, selectRelevantKnowledge } from "./knowledge.js";
 import { validateSql } from "./sqlSafety.js";
+import { needsCostAnalysis } from "./queryShape.js";
 import { benchmarkStore } from "./benchmarks.js";
 import { describeError, log, warn } from "./logger.js";
 
@@ -353,7 +354,47 @@ function buildMergedKnowledge() {
   };
 }
 
-async function runPipeline(question) {
+// Cost guard thresholds (see runPipeline). A query auto-runs only if the
+// engine's estimate is known and under ALL limits (bytes, rows, and
+// APPROVAL_MAX_COST_USD, which uses the high end of the cost range); 0 disables that limit.
+// APPROVAL_ALWAYS=true restores "ask for every query".
+const APPROVAL_MAX_BYTES = Number(process.env.APPROVAL_MAX_BYTES ?? 100 * 1024 ** 2);
+const APPROVAL_MAX_ROWS = Number(process.env.APPROVAL_MAX_ROWS ?? 100000);
+const APPROVAL_MAX_COST_USD = Number(process.env.APPROVAL_MAX_COST_USD ?? 0.25);
+// COST_ANALYSIS=auto (default): only analyze queries that may return a large
+// result (see queryShape.js); bounded ones (small LIMIT, single-row
+// aggregates) run straight away. "always" analyzes every query.
+const COST_ANALYSIS = (process.env.COST_ANALYSIS || "auto").toLowerCase();
+const ANALYZE_SKIP_LIMIT = Number(process.env.ANALYZE_SKIP_LIMIT ?? 1000);
+const APPROVAL_ALWAYS = (process.env.APPROVAL_ALWAYS || "false").toLowerCase() === "true";
+
+function approvalReason(analysis) {
+  if (APPROVAL_ALWAYS) return "Approval required for every query (APPROVAL_ALWAYS).";
+  if (!analysis || analysis.error) {
+    return `Cost estimate unavailable${analysis?.error ? ` (${analysis.error})` : ""}, so the query was not run automatically.`;
+  }
+  if (analysis.sizeInBytes == null && analysis.rowCount == null) {
+    return "Optimizer returned no size or row estimate, so the query was not run automatically.";
+  }
+  if (APPROVAL_MAX_BYTES > 0 && analysis.sizeInBytes != null && analysis.sizeInBytes > APPROVAL_MAX_BYTES) {
+    return `Estimated data size ${analysis.sizeLabel || analysis.sizeInBytes + " B"} exceeds the ${(APPROVAL_MAX_BYTES / 1024 ** 2).toFixed(0)} MB limit.`;
+  }
+  if (APPROVAL_MAX_ROWS > 0 && analysis.rowCount != null && analysis.rowCount > APPROVAL_MAX_ROWS) {
+    return `Estimated ${Math.round(analysis.rowCount).toLocaleString()} rows exceeds the ${APPROVAL_MAX_ROWS.toLocaleString()} row limit.`;
+  }
+  const c = analysis.cost;
+  const worst = c && !c.error ? (c.usdHigh ?? c.usd) : null;
+  if (APPROVAL_MAX_COST_USD > 0 && worst != null && worst > APPROVAL_MAX_COST_USD) {
+    return `Estimated compute cost up to $${worst.toFixed(2)} exceeds the $${APPROVAL_MAX_COST_USD.toFixed(2)} limit.`;
+  }
+  return null;
+}
+
+// rawSql: the user typed "! <sql>" in the UI. The SQL skips the LLM (and
+// the knowledge/embedding step) but goes through everything else: the
+// SELECT-only validator, the cost guard, and execution. No LLM repair loop,
+// since silently rewriting SQL the user wrote by hand would be surprising.
+async function runPipeline(question, { rawSql = null } = {}) {
   // Every line here is timestamped (see logger.js) specifically so
   // end-to-end text-to-SQL latency — and where it's actually going, LLM
   // call vs. query execution vs. repair loop — can be read straight off
@@ -362,8 +403,8 @@ async function runPipeline(question) {
   const engineInfo = sqlEngine.describe();
   log(`[ask] start "${question}" -> ${engineInfo.type} (${engineInfo.location})`);
 
-  let schema, knowledgeText;
-  try {
+  let schema = {}, knowledgeText = "";
+  if (!rawSql) try {
     schema = await getSchema();
     const knowledge = buildMergedKnowledge();
     // Selected once per request and reused for every repair attempt — the
@@ -391,15 +432,17 @@ async function runPipeline(question) {
     repairAttempts: 0,
     analysis: null,
     status: null,
+    approvalReason: null,
   };
 
   try {
     const systemPrompt = getSystemPrompt();
-    const raw = await callLlm(systemPrompt, buildUserPrompt(question, schema, knowledgeText));
-    const parsed = parseSqlResponse(raw);
+    const parsed = rawSql
+      ? { sql: rawSql.replace(/;+\s*$/, ""), explanation: "Run directly as typed (! mode); no LLM was used." }
+      : parseSqlResponse(await callLlm(systemPrompt, buildUserPrompt(question, schema, knowledgeText)));
     output.sql = parsed.sql;
     output.explanation = parsed.explanation;
-    log(`[ask] sql generated: ${parsed.sql || "(empty)"}`);
+    log(`[ask] ${rawSql ? "raw sql" : "sql generated"}: ${parsed.sql || "(empty)"}`);
 
     const validation = validateSql(parsed.sql);
     output.validation = validation;
@@ -414,22 +457,73 @@ async function runPipeline(question) {
       return output;
     }
 
-    // Analyze only — do not execute until the user accepts via POST /api/execute.
-    if (typeof sqlEngine.analyzeQuery === "function") {
+    // Cost guard: engines that can estimate a query (analyzeQuery) are asked
+    // first. Cheap queries run immediately; expensive or un-estimable ones
+    // stop at status "awaiting_approval" until the user accepts via
+    // POST /api/execute. Engines without analyzeQuery run directly, as before.
+    // A planning error (bad table/column) is fed to the repair loop like an
+    // execution error would be, since the SQL itself is wrong.
+    let currentSql = parsed.sql;
+    let attempts = 0;
+    while (true) {
       try {
-        output.analysis = await sqlEngine.analyzeQuery(parsed.sql);
-        log(
-          `[ask] EXPLAIN COST: size=${output.analysis.sizeLabel ?? "n/a"} ` +
-            `rows=${output.analysis.rowCount ?? "n/a"}`
+        const analyze =
+          typeof sqlEngine.analyzeQuery === "function" &&
+          (APPROVAL_ALWAYS || COST_ANALYSIS === "always" || needsCostAnalysis(currentSql, { skipLimit: ANALYZE_SKIP_LIMIT }));
+        if (typeof sqlEngine.analyzeQuery === "function" && !analyze) {
+          output.analysis = null;
+          log("[ask] cost analysis skipped (bounded result: small LIMIT or single-row aggregate)");
+        }
+        if (analyze) {
+          try {
+            output.analysis = await sqlEngine.analyzeQuery(currentSql);
+          } catch (analyzeErr) {
+            if (analyzeErr?.planningError) throw analyzeErr;
+            output.analysis = { error: describeError(analyzeErr), rawPlan: null };
+            warn(`[ask] EXPLAIN COST failed (non-fatal): ${output.analysis.error}`);
+          }
+          const reason = approvalReason(output.analysis);
+          log(
+            `[ask] EXPLAIN COST: size=${output.analysis.sizeLabel ?? "n/a"} ` +
+              `rows=${output.analysis.rowCount ?? "n/a"} -> ${reason ? "needs approval" : "auto-run"}`
+          );
+          if (reason) {
+            output.sql = currentSql;
+            output.status = "awaiting_approval";
+            output.approvalReason = reason;
+            log(`[ask] done (awaiting approval: ${reason}) — SQL not executed yet`);
+            return output;
+          }
+        }
+        const { columns, rows } = await runQuery(currentSql);
+        output.columns = columns;
+        output.rows = rows;
+        output.sql = currentSql;
+        output.status = "complete";
+        log(`[ask] done, ${rows.length} row(s) returned (${attempts} repair attempt(s))`);
+        break;
+      } catch (dbErr) {
+        if (attempts >= (rawSql ? 0 : MAX_REPAIR_ATTEMPTS)) throw dbErr;
+        attempts += 1;
+        log(`[ask] query failed, starting repair attempt ${attempts}: ${String(dbErr.message || dbErr)}`);
+        const repairRaw = await callLlm(
+          systemPrompt,
+          buildRepairPrompt(question, schema, currentSql, String(dbErr.message || dbErr), knowledgeText)
         );
-      } catch (analyzeErr) {
-        output.analysis = { error: describeError(analyzeErr), rawPlan: null };
-        warn(`[ask] EXPLAIN COST failed (non-fatal): ${output.analysis.error}`);
+        const repaired = parseSqlResponse(repairRaw);
+        const repairValidation = validateSql(repaired.sql);
+        output.sql = repaired.sql;
+        output.explanation = repaired.explanation;
+        output.repairAttempts = attempts;
+        log(`[ask] repair attempt ${attempts} sql: ${repaired.sql || "(empty)"}`);
+        if (!repairValidation.isSafe) {
+          output.validation = repairValidation;
+          log(`[ask] done (repair rejected by safety validation: ${repairValidation.reason})`);
+          return output;
+        }
+        currentSql = repaired.sql;
       }
     }
-
-    output.status = "awaiting_approval";
-    log(`[ask] done (awaiting approval) — SQL not executed yet`);
   } catch (exc) {
     output.error = describeError(exc);
     log(`[ask] done (error: ${output.error})`);
@@ -590,15 +684,79 @@ app.post("/api/sql-connection", async (req, res) => {
 
 app.post("/api/ask", async (req, res) => {
   const question = (req.body?.question || "").trim();
-  if (!question) return res.status(400).json({ error: "question is required" });
+  const rawSql = String(req.body?.sql || "").trim() || null;
+  if (!question && !rawSql) return res.status(400).json({ error: "question is required" });
 
   try {
-    const output = await runPipeline(question);
-    // Memory is written after the user accepts and /api/execute succeeds —
-    // storing pre-approval SQL would record queries that were never run.
+    const output = await runPipeline(question || `! ${rawSql}`, { rawSql });
+    // Pending-approval SQL is never written to memory (it hasn't run); that
+    // happens in /api/execute. Auto-run results are written here.
     res.json(output);
+    if (!rawSql && output.status !== "awaiting_approval") {
+      void writeMemory(llm, output, MEMORY).catch((err) => {
+        warn(`[memory] write failed: ${err?.message || err}`);
+      });
+    }
   } catch (exc) {
     res.status(500).json({ error: describeError(exc) });
+  }
+});
+
+// ── CSV export ───────────────────────────────────────────────────────────────
+// Streams the full result set to the browser as a file, so large results
+// never need to render in the UI (or, on engines with streamRows, fit in
+// memory). Same safety validation as /api/execute.
+function csvCell(v) {
+  if (v === null || v === undefined) return "";
+  let str = typeof v === "object" ? JSON.stringify(v) : String(v);
+  // Neutralize spreadsheet formula injection in text values (not plain numbers).
+  if (typeof v === "string" && /^[=+\-@\t\r]/.test(str) && Number.isNaN(Number(str))) str = "'" + str;
+  return /[",\n\r]/.test(str) ? `"${str.replaceAll('"', '""')}"` : str;
+}
+const csvLine = (cells) => cells.map(csvCell).join(",") + "\r\n";
+
+app.post("/api/export", async (req, res) => {
+  const sql = String(req.body?.sql || "").trim();
+  if (!sql) return res.status(400).json({ error: "sql is required" });
+  const validation = validateSql(sql);
+  if (!validation.isSafe) return res.status(400).json({ error: validation.reason, validation });
+
+  let started = false;
+  const write = (chunk) =>
+    res.write(chunk) ? Promise.resolve() : new Promise((r) => res.once("drain", r));
+  const begin = () => {
+    started = true;
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="query-${new Date().toISOString().replace(/[:.]/g, "-")}.csv"`
+    );
+  };
+  try {
+    let total = 0;
+    let wroteHeader = false;
+    const onBatch = async (columns, rows) => {
+      if (!started) begin();
+      if (!wroteHeader) {
+        await write("\ufeff" + csvLine(columns));
+        wroteHeader = true;
+      }
+      for (const row of rows) await write(csvLine(columns.map((c) => row[c])));
+      total += rows.length;
+    };
+    if (typeof sqlEngine.streamRows === "function") {
+      await sqlEngine.streamRows(sql, onBatch);
+    } else {
+      const { columns, rows } = await runQuery(sql);
+      await onBatch(columns, rows);
+    }
+    log(`[export] done, ${total} row(s) streamed`);
+    res.end();
+  } catch (exc) {
+    const error = describeError(exc);
+    log(`[export] error: ${error}`);
+    if (!started) return res.status(500).json({ error });
+    res.destroy(); // headers already sent: abort so the browser sees a failed download, not a truncated "success"
   }
 });
 
