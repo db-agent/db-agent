@@ -63,6 +63,20 @@ function parseSizeToBytes(value, unit) {
   return Math.round(n * mult);
 }
 
+// Serverless / Pro SQL warehouse DBU per hour per cluster, by size. From
+// Databricks' published SQL warehouse sizing table (not exposed in a system
+// table). Cross-checked against system.billing.usage: no hourly total for
+// a 2X-Small warehouse here exceeds 4 DBU.
+const DBU_PER_HOUR = {
+  "2X_SMALL": 4, X_SMALL: 6, SMALL: 12, MEDIUM: 24, LARGE: 40,
+  X_LARGE: 80, "2X_LARGE": 144, "3X_LARGE": 272, "4X_LARGE": 528,
+};
+const PROFILE_TTL_MS = 15 * 60 * 1000;
+const PROFILE_FAIL_TTL_MS = 60 * 1000;
+// Used only when system.query.history has too few comparable queries.
+const FALLBACK_ROWS_PER_MS = 2000;
+const MIN_HISTORY_SAMPLES = 5;
+
 export function parseExplainCost(planText) {
   const text = String(planText || "");
   // Data consumption ≈ largest sizeInBytes in the plan (typically a Relation
@@ -80,12 +94,20 @@ export function parseExplainCost(planText) {
   }
   // Result-row estimate: last (outermost) rowCount in the plan.
   let rowCount = null;
+  // Rows the plan has to read: the largest rowCount anywhere in the plan
+  // (a base-table Relation), as opposed to rowCount above, which is the
+  // outermost node, i.e. the RESULT size. Drives the cost estimate.
+  let scanRows = null;
   ROWS_RE.lastIndex = 0;
   while ((m = ROWS_RE.exec(text)) !== null) {
     const n = Number(m[1]);
-    if (Number.isFinite(n)) rowCount = n;
+    if (Number.isFinite(n)) {
+      rowCount = n;
+      if (scanRows == null || n > scanRows) scanRows = n;
+    }
   }
   return {
+    scanRows,
     sizeInBytes,
     sizeLabel,
     rowCount,
@@ -159,6 +181,34 @@ export class DatabricksSqlEngine {
     }
   }
 
+  // Streams the FULL result in batches (no maxRows cap) for CSV export, so
+  // a large result never has to fit in memory. onBatch(columns, rows) is
+  // awaited per batch, which gives the HTTP response backpressure.
+  async streamRows(sql, onBatch, batchSize = 10000) {
+    const session = await this.getSession();
+    let op;
+    try {
+      op = await session.executeStatement(sql, { runAsync: true, maxRows: batchSize });
+      let columns = [];
+      try {
+        columns = ((await op.getSchema())?.columns || []).map((c) => c.columnName);
+      } catch {
+        // fall back to the first batch's keys below
+      }
+      let total = 0;
+      do {
+        const chunk = await op.fetchChunk({ maxRows: batchSize });
+        if (!columns.length && chunk.length) columns = Object.keys(chunk[0]);
+        const rows = chunk.map((r) => Object.fromEntries(columns.map((c) => [c, normalizeValue(r[c])])));
+        await onBatch(columns, rows);
+        total += rows.length;
+      } while (await op.hasMoreRows());
+      return total;
+    } finally {
+      await op?.close().catch(() => {});
+    }
+  }
+
   async getSchema() {
     const { rows } = await this.execute(
       `SELECT table_name, column_name, data_type
@@ -183,6 +233,117 @@ export class DatabricksSqlEngine {
     return { columns, rows: capped.map((r) => Object.fromEntries(columns.map((c) => [c, normalizeValue(r[c])]))) };
   }
 
+  get warehouseId() {
+    return String(this.httpPath).split("/").filter(Boolean).pop();
+  }
+
+  async safeRows(sql) {
+    try {
+      return (await this.execute(sql)).rows;
+    } catch (exc) {
+      return { error: String(exc?.message || exc).split("\n")[0].slice(0, 200) };
+    }
+  }
+
+  // Everything the estimate needs from system tables, cached because it
+  // changes slowly (warehouse config, list price, historical throughput).
+  async getCostProfile() {
+    const now = Date.now();
+    if (this.costProfile && now < this.costProfile.expires) return this.costProfile.value;
+
+    const wh = `'${this.warehouseId.replaceAll("'", "''")}'`;
+    const [warehouse, usage, tput, small] = await Promise.all([
+      this.safeRows(`SELECT warehouse_type, warehouse_size, min_clusters, max_clusters
+        FROM system.compute.warehouses WHERE warehouse_id = ${wh} ORDER BY change_time DESC LIMIT 1`),
+      this.safeRows(`SELECT sku_name FROM system.billing.usage
+        WHERE usage_metadata.warehouse_id = ${wh} ORDER BY usage_start_time DESC LIMIT 1`),
+      this.safeRows(`SELECT COUNT(*) AS n,
+          percentile(read_rows / execution_duration_ms, 0.25) AS p25,
+          percentile(read_rows / execution_duration_ms, 0.5) AS p50,
+          percentile(read_rows / execution_duration_ms, 0.75) AS p75
+        FROM system.query.history
+        WHERE compute.warehouse_id = ${wh} AND statement_type = 'SELECT' AND execution_status = 'FINISHED'
+          AND NOT from_result_cache AND read_rows >= 100000 AND execution_duration_ms > 0
+          AND start_time > current_timestamp() - INTERVAL 30 DAYS`),
+      this.safeRows(`SELECT COUNT(*) AS n, percentile(execution_duration_ms, 0.5) AS med_ms
+        FROM system.query.history
+        WHERE compute.warehouse_id = ${wh} AND statement_type = 'SELECT' AND execution_status = 'FINISHED'
+          AND NOT from_result_cache AND read_rows < 100000
+          AND start_time > current_timestamp() - INTERVAL 30 DAYS`),
+    ]);
+
+    const value = { notes: [] };
+    const w = Array.isArray(warehouse) ? warehouse[0] : null;
+    if (!w) value.notes.push(`Warehouse config unavailable (${warehouse?.error || "no row"}).`);
+    value.size = w?.warehouse_size || null;
+    value.type = w?.warehouse_type || null;
+    value.dbuPerHour = DBU_PER_HOUR[value.size] ?? null;
+
+    let sku = Array.isArray(usage) ? usage[0]?.sku_name : null;
+    if (!sku) value.notes.push("No billing history for this warehouse yet, so the price SKU could not be confirmed.");
+    if (!sku && value.type) {
+      sku = value.type === "SERVERLESS" ? "PREMIUM_SERVERLESS_SQL_COMPUTE" : value.type === "PRO" ? "PREMIUM_SQL_PRO_COMPUTE" : null;
+      if (sku) value.skuGuessed = true;
+    }
+    value.sku = sku || null;
+    if (sku) {
+      const p = await this.safeRows(`SELECT pricing.default AS price FROM system.billing.list_prices
+        WHERE sku_name = '${sku.replaceAll("'", "''")}' AND price_end_time IS NULL LIMIT 1`);
+      value.pricePerDbu = Array.isArray(p) && p[0] ? Number(p[0].price) : null;
+      if (value.pricePerDbu == null) value.notes.push(`List price lookup failed (${p?.error || "no row"}).`);
+    }
+
+    const t = Array.isArray(tput) ? tput[0] : null;
+    const nT = Number(t?.n || 0);
+    if (nT >= MIN_HISTORY_SAMPLES && Number(t.p50) > 0) {
+      value.rowsPerMs = { p25: Number(t.p25), p50: Number(t.p50), p75: Number(t.p75) };
+      value.samples = nT;
+    } else {
+      value.rowsPerMs = { p25: FALLBACK_ROWS_PER_MS / 2, p50: FALLBACK_ROWS_PER_MS, p75: FALLBACK_ROWS_PER_MS * 2 };
+      value.samples = nT;
+      value.assumedThroughput = true;
+      value.notes.push(`Only ${nT} comparable past queries in system.query.history; assumed ${FALLBACK_ROWS_PER_MS} rows/ms.`);
+    }
+    const sm = Array.isArray(small) ? small[0] : null;
+    value.overheadMs = Number(sm?.med_ms) > 0 && Number(sm?.n) >= MIN_HISTORY_SAMPLES ? Number(sm.med_ms) : 300;
+
+    const ok = value.dbuPerHour != null && value.pricePerDbu != null;
+    this.costProfile = { value, expires: now + (ok ? PROFILE_TTL_MS : PROFILE_FAIL_TTL_MS) };
+    return value;
+  }
+
+  // Marginal compute cost = predicted runtime x warehouse DBU rate x list
+  // price. Runtime = typical small-query overhead + rows scanned / observed
+  // throughput (p25..p75 of this warehouse's own past queries gives the range).
+  // This is an estimate of the query's share of warehouse time, NOT what
+  // appears on the bill: serverless bills the warehouse while it is running,
+  // including startup and idle time before auto-stop.
+  async estimateCost(plan) {
+    const p = await this.getCostProfile();
+    const base = { warehouseSize: p.size, warehouseType: p.type, sku: p.sku, dbuPerHour: p.dbuPerHour,
+      pricePerDbu: p.pricePerDbu, historySamples: p.samples, notes: [...p.notes] };
+    if (p.dbuPerHour == null || p.pricePerDbu == null) {
+      return { ...base, error: "Not enough system-table data to price this query." };
+    }
+    if (plan.scanRows == null) {
+      return { ...base, error: "Optimizer gave no row estimate (table statistics missing), so runtime can't be predicted." };
+    }
+    const msFor = (rowsPerMs) => p.overheadMs + plan.scanRows / rowsPerMs;
+    const usd = (ms) => (ms / 3_600_000) * p.dbuPerHour * p.pricePerDbu;
+    const durationMs = msFor(p.rowsPerMs.p50);
+    const lowMs = msFor(p.rowsPerMs.p75);
+    const highMs = msFor(p.rowsPerMs.p25);
+    if (p.skuGuessed) base.notes.push(`Price SKU assumed to be ${p.sku} (region unknown).`);
+    return {
+      ...base,
+      usd: usd(durationMs), usdLow: usd(lowMs), usdHigh: usd(highMs),
+      dbu: (durationMs / 3_600_000) * p.dbuPerHour,
+      durationMs: Math.round(durationMs),
+      scanRows: plan.scanRows,
+      confidence: p.assumedThroughput || p.skuGuessed ? "low" : p.samples >= 20 ? "moderate" : "low",
+    };
+  }
+
   // Uses Databricks/Spark EXPLAIN COST — no custom cost model. Estimates
   // sizeInBytes / rowCount from the plan text when the optimizer has stats.
   async analyzeQuery(sql) {
@@ -194,7 +355,20 @@ export class DatabricksSqlEngine {
     const planText = rows
       .map((r) => Object.values(r).map((v) => (v == null ? "" : String(v))).join(" "))
       .join("\n");
-    return parseExplainCost(planText);
+    // Databricks reports planning failures (missing table/column) as plan
+    // text, not an exception. Surface it so the repair loop can fix the SQL.
+    if (/Error occurred during query planning|\[[A-Z_]+\] .*SQLSTATE/.test(planText)) {
+      const err = new Error(planText.split("\n").slice(0, 4).join(" ").trim());
+      err.planningError = true;
+      throw err;
+    }
+    const plan = parseExplainCost(planText);
+    try {
+      plan.cost = await this.estimateCost(plan);
+    } catch (exc) {
+      plan.cost = { error: String(exc?.message || exc).split("\n")[0].slice(0, 200) };
+    }
+    return plan;
   }
 
   describe() {

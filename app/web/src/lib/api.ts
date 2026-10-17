@@ -38,11 +38,11 @@ export async function fetchSchema(): Promise<Schema> {
   return res.json();
 }
 
-export async function ask(question: string): Promise<PipelineOutput> {
+export async function ask(question: string, sql?: string): Promise<PipelineOutput> {
   const res = await fetch("/api/ask", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, sql }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -72,6 +72,32 @@ export async function executeSql(
     throw new Error(body.error || `Request failed (${res.status})`);
   }
   return body;
+}
+
+export async function exportCsv(sql: string): Promise<{ name: string; bytes: number }> {
+  const res = await fetch("/api/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sql }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Export failed (${res.status})`);
+  }
+  const name =
+    /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "")?.[1] ?? "query.csv";
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  // Must be in the DOM for Firefox, and the URL must outlive the click:
+  // revoking it synchronously can make the browser save an empty file.
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return { name, bytes: blob.size };
 }
 
 export async function fetchMemories(tables: string[]): Promise<MemoryRecord[]> {

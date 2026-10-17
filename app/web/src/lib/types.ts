@@ -11,7 +11,27 @@ export interface Validation {
   reason: string;
 }
 
+export interface CostEstimate {
+  usd?: number;
+  usdLow?: number;
+  usdHigh?: number;
+  dbu?: number;
+  durationMs?: number;
+  scanRows?: number;
+  dbuPerHour?: number | null;
+  pricePerDbu?: number | null;
+  warehouseSize?: string | null;
+  warehouseType?: string | null;
+  sku?: string | null;
+  historySamples?: number;
+  confidence?: "low" | "moderate";
+  notes?: string[];
+  error?: string;
+}
+
 export interface QueryAnalysis {
+  cost?: CostEstimate | null;
+  scanRows?: number | null;
   sizeInBytes?: number | null;
   sizeLabel?: string | null;
   rowCount?: number | null;
@@ -33,6 +53,7 @@ export interface PipelineOutput {
   repairAttempts: number;
   analysis?: QueryAnalysis | null;
   status?: PipelineStatus | null;
+  approvalReason?: string | null;
 }
 
 export interface SqlEngineInfo {

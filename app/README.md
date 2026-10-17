@@ -204,6 +204,18 @@ the GitHub Actions workflow does). `server.js` also defensively `.trim()`s
     warehouse and `SELECT` only on the schema. **Unit-tested with a stubbed
     driver only, not yet verified against a live warehouse.** For Lakebase
     use `postgres` below instead.
+    **Cost guard and cost estimate** (`databricks-sql` only): before running
+    any query that may return a large result (not a small `LIMIT` or a
+    single-row aggregate; see `queryShape.js`, `COST_ANALYSIS=always` to
+    override), the engine runs `EXPLAIN COST` and prices the query from system tables
+    (`system.compute.warehouses` for size, `system.billing.usage` +
+    `system.billing.list_prices` for the $/DBU, `system.query.history` for
+    this warehouse's observed rows/ms). Estimate = overhead + rows scanned /
+    throughput, x DBU/h x price, shown as a range. Needs `SELECT` on those
+    system tables; without it the UI says the estimate is unavailable and
+    asks for approval. Limits: `APPROVAL_MAX_BYTES`, `APPROVAL_MAX_ROWS`,
+    `APPROVAL_MAX_COST_USD` (see `.env.example`). It is the query's share of
+    warehouse time, not the bill (serverless also bills startup and idle).
   - `postgres` — any standard Postgres database, via [`pg`](https://node-postgres.com)
     (node-postgres). Covers **Databricks Lakebase directly** — Lakebase
     speaks the standard Postgres wire protocol, so this engine has no
