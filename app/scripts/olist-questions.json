@@ -1,0 +1,62 @@
+[
+  {
+    "question": "show me all sales",
+    "sql": "SELECT * FROM order_items",
+    "flagged": true,
+    "flaggedWithIndexes": true
+  },
+  {
+    "question": "list every order",
+    "sql": "SELECT * FROM orders",
+    "flagged": true,
+    "flaggedWithIndexes": true
+  },
+  {
+    "question": "show all customers",
+    "sql": "SELECT * FROM customers",
+    "flagged": true,
+    "flaggedWithIndexes": true
+  },
+  {
+    "question": "show me a few sales",
+    "sql": "SELECT * FROM order_items LIMIT 10",
+    "flagged": false,
+    "flaggedWithIndexes": false
+  },
+  {
+    "question": "show me order 171184ac668fe7412b3b2773a680d1d7",
+    "sql": "SELECT * FROM orders WHERE order_id = '171184ac668fe7412b3b2773a680d1d7'",
+    "flagged": false,
+    "flaggedWithIndexes": false
+  },
+  {
+    "question": "what shipped on 30 August 2018",
+    "sql": "SELECT * FROM order_items WHERE shipping_limit_date >= '2018-08-30' AND shipping_limit_date < '2018-08-31'",
+    "flagged": true,
+    "flaggedWithIndexes": false
+  },
+  {
+    "question": "customers in Amazonas",
+    "sql": "SELECT * FROM customers WHERE customer_state = 'AM'",
+    "flagged": true,
+    "flaggedWithIndexes": false
+  },
+  {
+    "question": "who are the top 10 customers by spend",
+    "sql": "SELECT o.customer_id, SUM(p.payment_value) AS total_spend FROM orders o JOIN order_payments p ON p.order_id = o.order_id GROUP BY o.customer_id ORDER BY total_spend DESC LIMIT 10",
+    "flagged": true,
+    "flaggedWithIndexes": true
+  },
+  {
+    "question": "average review score by state",
+    "sql": "SELECT c.customer_state, AVG(r.review_score) AS avg_score FROM order_reviews r JOIN orders o ON o.order_id = r.order_id JOIN customers c ON c.customer_id = o.customer_id GROUP BY c.customer_state",
+    "flagged": true,
+    "flaggedWithIndexes": true
+  },
+  {
+    "question": "monthly revenue",
+    "sql": "SELECT date_trunc('month', o.order_purchase_timestamp) AS month, SUM(p.payment_value) AS revenue FROM orders o JOIN order_payments p ON p.order_id = o.order_id GROUP BY 1 ORDER BY 1",
+    "flagged": true,
+    "flaggedWithIndexes": true
+  }
+]

@@ -5,7 +5,7 @@
 #
 #   cp .env.example .env   # set DATABRICKS_* then:
 #   ./run_local.sh
-#   ./run_local.sh qwen2.5-coder:0.5b
+#   ./run_local.sh qwen2.5-coder:7b
 #
 #   Both chat and embeddings on a remote endpoint (skips Ollama entirely):
 #     LLM_BASE_URL=https://.../ai-gateway/mlflow/v1 LLM_API_KEY=$TOKEN \
@@ -22,7 +22,7 @@ if [ -f .env ]; then
 fi
 
 if [ -z "${LLM_BASE_URL:-}" ]; then
-    MODEL="${1:-qwen2.5-coder:7b}"
+    MODEL="${1:-qwen2.5-coder:0.5b}"
 
     if ! command -v ollama >/dev/null 2>&1; then
         echo "ollama not found on PATH — install it from https://ollama.com" >&2

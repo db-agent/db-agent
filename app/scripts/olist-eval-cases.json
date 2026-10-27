@@ -1,0 +1,102 @@
+[
+  {
+    "difficulty": "easy",
+    "question": "How many orders are there?",
+    "groundTruthSql": "SELECT count(*) FROM orders"
+  },
+  {
+    "difficulty": "easy",
+    "question": "How many sellers are there?",
+    "groundTruthSql": "SELECT count(*) FROM sellers"
+  },
+  {
+    "difficulty": "easy",
+    "question": "How many orders were canceled?",
+    "groundTruthSql": "SELECT count(*) FROM orders WHERE order_status = 'canceled'"
+  },
+  {
+    "difficulty": "easy",
+    "question": "What is the average price of an order item?",
+    "groundTruthSql": "SELECT round(avg(price), 2) FROM order_items"
+  },
+  {
+    "difficulty": "easy",
+    "question": "What is the highest freight value?",
+    "groundTruthSql": "SELECT max(freight_value) FROM order_items"
+  },
+  {
+    "difficulty": "easy",
+    "question": "How many reviews gave a score of 1?",
+    "groundTruthSql": "SELECT count(*) FROM order_reviews WHERE review_score = 1"
+  },
+  {
+    "difficulty": "easy",
+    "question": "What is the average review score?",
+    "groundTruthSql": "SELECT round(avg(review_score), 2) FROM order_reviews"
+  },
+  {
+    "difficulty": "easy",
+    "question": "How many different product categories are there?",
+    "groundTruthSql": "SELECT count(DISTINCT product_category_name) FROM products"
+  },
+  {
+    "difficulty": "medium",
+    "question": "How many customers are in the state of SP?",
+    "groundTruthSql": "SELECT count(*) FROM customers WHERE customer_state = 'SP'"
+  },
+  {
+    "difficulty": "medium",
+    "question": "How many orders are there for each order status?",
+    "groundTruthSql": "SELECT order_status, count(*) FROM orders GROUP BY order_status"
+  },
+  {
+    "difficulty": "medium",
+    "question": "What is the total payment value for each payment type?",
+    "groundTruthSql": "SELECT payment_type, round(sum(payment_value), 2) FROM order_payments GROUP BY payment_type"
+  },
+  {
+    "difficulty": "medium",
+    "question": "Which 5 product categories have the most products?",
+    "groundTruthSql": "SELECT product_category_name FROM products GROUP BY product_category_name ORDER BY count(*) DESC LIMIT 5"
+  },
+  {
+    "difficulty": "medium",
+    "question": "Which state has the most customers?",
+    "groundTruthSql": "SELECT customer_state FROM customers GROUP BY customer_state ORDER BY count(*) DESC LIMIT 1"
+  },
+  {
+    "difficulty": "medium",
+    "question": "How many orders were placed in 2017?",
+    "groundTruthSql": "SELECT count(*) FROM orders WHERE extract(year FROM order_purchase_timestamp) = 2017"
+  },
+  {
+    "difficulty": "medium",
+    "question": "What is the total value of items whose shipping limit date is in 2018?",
+    "groundTruthSql": "SELECT round(sum(price), 2) FROM order_items WHERE extract(year FROM shipping_limit_date) = 2018"
+  },
+  {
+    "difficulty": "hard",
+    "question": "How many items are in order 171184ac668fe7412b3b2773a680d1d7?",
+    "groundTruthSql": "SELECT count(*) FROM order_items WHERE order_id = '171184ac668fe7412b3b2773a680d1d7'"
+  },
+  {
+    "difficulty": "hard",
+    "question": "What is the total payment value of order 171184ac668fe7412b3b2773a680d1d7?",
+    "groundTruthSql": "SELECT round(sum(payment_value), 2) FROM order_payments WHERE order_id = '171184ac668fe7412b3b2773a680d1d7'"
+  },
+  {
+    "difficulty": "hard",
+    "question": "In which city does the customer of order 171184ac668fe7412b3b2773a680d1d7 live?",
+    "groundTruthSql": "SELECT c.customer_city FROM orders o JOIN customers c ON c.customer_id = o.customer_id WHERE o.order_id = '171184ac668fe7412b3b2773a680d1d7'"
+  },
+  {
+    "difficulty": "hard",
+    "question": "How many orders purchased in January 2018 have a review score of 5?",
+    "groundTruthSql": "SELECT count(*) FROM orders o JOIN order_reviews r ON r.order_id = o.order_id WHERE o.order_purchase_timestamp >= '2018-01-01' AND o.order_purchase_timestamp < '2018-02-01' AND r.review_score = 5"
+  },
+  {
+    "difficulty": "hard",
+    "question": "What is the average payment value of credit card payments in orders that were delivered?",
+    "groundTruthSql": "SELECT round(avg(p.payment_value), 2) FROM order_payments p JOIN orders o ON o.order_id = p.order_id WHERE p.payment_type = 'credit_card' AND o.order_status = 'delivered'"
+  }
+]

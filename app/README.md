@@ -13,8 +13,9 @@ The SQL layer itself is pluggable (`sqlEngines/`, same registry pattern as
 the memory backends): `databricks-sql` (default — Unity Catalog warehouse),
 `sqlite` (optional local file), `minio-duckdb` (Parquet in MinIO via DuckDB),
 or `postgres` (any standard Postgres / Lakebase) — see Notes below.
-Generated queries are analyzed with Databricks `EXPLAIN COST` to estimate
-data consumption before results are shown.
+Generated queries are planned before they run (Databricks `EXPLAIN COST`,
+Postgres `EXPLAIN`) to estimate rows and data consumption, and large or
+un-estimable ones wait for approval.
 
 Two parts:
 - `server.js` / `memory.js` — Express API (`/api/schema`, `/api/config`,
@@ -26,7 +27,7 @@ Two parts:
 **Quick start** (Databricks warehouse + local Ollama):
 
 ```bash
-ollama pull qwen2.5-coder:7b   # or any model you prefer
+ollama pull qwen2.5-coder:0.5b   # small and fast; use a larger model (e.g. :7b) for better SQL
 cd app
 cp .env.example .env           # set DATABRICKS_HOST / HTTP_PATH / TOKEN / CATALOG / SCHEMA
 ./run_local.sh
@@ -35,7 +36,7 @@ cp .env.example .env           # set DATABRICKS_HOST / HTTP_PATH / TOKEN / CATAL
 Checks Ollama is installed, the model is pulled, and Databricks env vars
 are present before starting. Builds the frontend automatically on first run
 if `web/dist` doesn't exist yet. Pass a different model as `$1`:
-`./run_local.sh qwen2.5-coder:0.5b`.
+`./run_local.sh qwen2.5-coder:7b`.
 
 You can also edit the warehouse connection from the sidebar (Connection info)
 without restarting the process.
@@ -67,6 +68,29 @@ docker compose up --build
 ```
 
 On Mac with host Ollama (Metal): `docker compose --profile host-ollama up --build db-agent-host`.
+
+## Docker demo (Postgres, no cloud account)
+
+```bash
+cd app
+docker compose up --build        # Postgres + ~300k-row Olist-shaped data + the app
+open http://localhost:3001
+```
+
+Starts Postgres, loads the dataset into an empty database (a one-shot `seed`
+job), and runs the app against it as a **read-only** role. The LLM defaults to
+Ollama on the host; for any OpenAI-compatible endpoint (OpenAI, Bedrock's
+OpenAI-compatible API, Groq) export `DEMO_LLM_BASE_URL`, `DEMO_LLM_API_KEY`
+and `DEMO_LLM_MODEL` first. `SEED_ORDER_ITEMS=15000000 docker compose up`
+loads workshop scale (several GB, several minutes). To see a flagged query
+turn into an index scan:
+
+1. Ask "what shipped on 30 August 2018". The plan shows a sequential scan on
+   `order_items` with a warning.
+2. `docker compose run --rm seed node scripts/seed-olist-postgres.js add-indexes --yes`
+3. Ask again: an index scan, no warning.
+
+`docker compose down -v` removes the data.
 
 ## Databricks Apps
 
@@ -144,6 +168,15 @@ the GitHub Actions workflow does). `server.js` also defensively `.trim()`s
   - `sqlite` (default) — Node's built-in `node:sqlite` module (stable in
     Node ≥ 22.5) against `DB_PATH` (a local file, `./data/demo.db` by
     default) — no native build step, unlike `better-sqlite3`.
+  - **Few-shot examples and small models.** Verified benchmark cases are added to the
+    prompt as examples, but only those whose tables and columns exist in the connected
+    schema (`exampleFit.js`). Examples written for another database make small models
+    invent columns: on the Olist data this cost `qwen2.5-coder:1.5b` 30 points of accuracy
+    (55% vs 85%) and `0.5b` 25. Dropped examples are logged.
+    Model output is capped at `LLM_MAX_TOKENS` (default 1024) so a model stuck in a
+    repetition loop cannot hang a request. Measure your own model with
+    `scripts/eval-olist-text2sql.js` (20 questions with ground-truth SQL, scored on result
+    sets, per model, with and without the benchmark examples).
   - `minio-duckdb` — Parquet objects in MinIO (or any S3-compatible object
     store), queried through [DuckDB](https://duckdb.org)'s `httpfs`
     extension. MinIO holds no live database here, just Parquet files under
@@ -223,6 +256,22 @@ the GitHub Actions workflow does). `server.js` also defensively `.trim()`s
     end-to-end against a real Lakebase instance** (a Kaggle Olist e-commerce
     dataset, 12 tables) — schema introspection and a live query both
     confirmed working, local Ollama generating the SQL.
+    **Query plan and scan flags** (issue #63): every query is planned with
+    `EXPLAIN (FORMAT JSON)` in a read-only transaction before it runs (the
+    query is not executed). The plan is reduced to the estimated result
+    rows, the bytes the plan has to read (table pages for sequential scans),
+    the scan type per table, and warnings: `no_filter_large_table` (seq scan
+    with no filter), `seq_scan_large_table` (the filter cannot use an index),
+    `full_index_scan_large_table`, `unbounded_join` (join with no condition)
+    and `no_table_stats` (run `ANALYZE`). "Large" is `PG_LARGE_TABLE_ROWS`
+    (default 100000). A scan under a plain `LIMIT` is not flagged. The same
+    `APPROVAL_MAX_BYTES` / `APPROVAL_MAX_ROWS` limits as Databricks apply
+    (there is no $ estimate for Postgres); warnings alone do not block a
+    query. After a query runs, the actual row count is shown next to the
+    estimate. Results are capped at `PG_MAX_ROWS` (default 1000) through a
+    cursor, and CSV export streams the full result. Planner estimates are
+    only as good as table statistics: run `ANALYZE` after bulk loads.
+    Try it on realistic data with `scripts/seed-olist-postgres.md`.
 
     Either a full connection string (`DB_URL`) or individual
     `PG_HOST`/`PG_PORT`/`PG_DATABASE`/`PG_USER`/`PG_PASSWORD` fields (see

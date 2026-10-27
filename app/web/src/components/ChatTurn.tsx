@@ -16,7 +16,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { exportCsv, sendFeedback } from "@/lib/api";
 import type { QueryAnalysis, Turn } from "@/lib/types";
-import { Check, CheckCircle2, Download, Loader2, ThumbsDown, ThumbsUp, Wrench, X, XCircle } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, Download, Loader2, ThumbsDown, ThumbsUp, Wrench, X, XCircle } from "lucide-react";
 
 function formatBytes(n: number | null | undefined): string | null {
   if (n == null || !Number.isFinite(n)) return null;
@@ -74,7 +74,7 @@ function QueryAnalysisPanel({ analysis }: { analysis: QueryAnalysis }) {
   if (analysis.error) {
     return (
       <p className="text-sm text-muted-foreground">
-        EXPLAIN COST unavailable — {analysis.error}
+        Query plan estimate unavailable: {analysis.error}
       </p>
     );
   }
@@ -85,8 +85,20 @@ function QueryAnalysisPanel({ analysis }: { analysis: QueryAnalysis }) {
       ? analysis.rowCount.toLocaleString(undefined, { maximumFractionDigits: 0 })
       : "n/a";
 
+  const isPostgres = analysis.engine === "postgres";
+  const actual = analysis.actualRows;
+
   return (
     <div className="flex flex-col gap-3">
+      {analysis.warnings?.map((w) => (
+        <div
+          key={`${w.code}-${w.table ?? ""}`}
+          className="flex gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400"
+        >
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <span>{w.message}</span>
+        </div>
+      ))}
       <div className="grid grid-cols-2 gap-2 text-sm">
         <div className="rounded-md bg-muted p-3">
           <div className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
@@ -98,12 +110,56 @@ function QueryAnalysisPanel({ analysis }: { analysis: QueryAnalysis }) {
           <div className="text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
             Estimated rows
           </div>
-          <div className="mt-1 font-medium">{rowsText}</div>
+          <div className="mt-1 font-medium">
+            {rowsText}
+            {actual != null && (
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                actual {actual.toLocaleString()}
+              </span>
+            )}
+          </div>
         </div>
       </div>
+      {analysis.scans && analysis.scans.length > 0 && (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Table</TableHead>
+              <TableHead>Scan</TableHead>
+              <TableHead>Filter</TableHead>
+              <TableHead className="text-right">Table rows</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {analysis.scans.map((s, i) => (
+              <TableRow key={`${s.table}-${i}`}>
+                <TableCell className="font-mono text-xs">{s.table}</TableCell>
+                <TableCell className="text-xs">
+                  {s.scanType}
+                  {s.indexName ? ` (${s.indexName})` : ""}
+                  {s.bounded ? ", LIMIT" : ""}
+                </TableCell>
+                <TableCell className="text-xs">{s.filtered ? "yes" : "no"}</TableCell>
+                <TableCell className="text-right text-xs">
+                  {s.tableRows != null ? s.tableRows.toLocaleString() : "n/a"}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
       {analysis.cost && <CostPanel cost={analysis.cost} />}
       <p className="text-[11px] text-muted-foreground">
-        From Databricks <code>EXPLAIN COST</code> (optimizer estimates; not billed usage).
+        {isPostgres ? (
+          <>
+            From Postgres <code>EXPLAIN</code> (planner estimates; the query was not executed to produce
+            them{analysis.totalCost != null ? `; planner cost ${Math.round(analysis.totalCost).toLocaleString()}` : ""}).
+          </>
+        ) : (
+          <>
+            From Databricks <code>EXPLAIN COST</code> (optimizer estimates; not billed usage).
+          </>
+        )}
       </p>
       {analysis.rawPlan && (
         <details>

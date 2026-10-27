@@ -29,7 +29,29 @@ export interface CostEstimate {
   error?: string;
 }
 
+export interface PlanScan {
+  table: string;
+  scanType: string;
+  indexName?: string | null;
+  filtered: boolean;
+  tableRows?: number | null;
+  estimatedRows?: number | null;
+  bounded?: boolean;
+}
+
+export interface PlanWarning {
+  code: string;
+  table?: string | null;
+  message: string;
+}
+
 export interface QueryAnalysis {
+  engine?: string;
+  scans?: PlanScan[];
+  warnings?: PlanWarning[];
+  totalCost?: number | null;
+  /** Rows the query actually returned, when the result was not cut off by the row cap. */
+  actualRows?: number | null;
   cost?: CostEstimate | null;
   scanRows?: number | null;
   sizeInBytes?: number | null;
