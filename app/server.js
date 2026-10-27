@@ -18,6 +18,7 @@ import { createSqlEngine, listSqlEngines } from "./sqlEngines/index.js";
 import { formatKnowledge, loadKnowledge, selectRelevantKnowledge } from "./knowledge.js";
 import { validateSql } from "./sqlSafety.js";
 import { needsCostAnalysis } from "./queryShape.js";
+import { sqlFitsSchema } from "./exampleFit.js";
 import { benchmarkStore } from "./benchmarks.js";
 import { describeError, log, warn } from "./logger.js";
 
@@ -225,10 +226,16 @@ Fix the SQL so it runs successfully against this schema and database. Return onl
 
 // ── LLM call + JSON parsing (mirrors ../core/llm.py) ─────────────────────────
 
+// A SQL answer plus one sentence is a few hundred tokens. Without a cap, a small model that falls
+// into a repetition loop (seen with qwen2.5-coder:0.5b on repair prompts) generates until the
+// context is full and the request hangs for minutes. LLM_MAX_TOKENS overrides.
+const LLM_MAX_TOKENS = Number(process.env.LLM_MAX_TOKENS) || 1024;
+
 async function callLlm(systemPrompt, userPrompt) {
   const response = await llm.chat.completions.create({
     model: LLM_MODEL,
     temperature: 0,
+    max_tokens: LLM_MAX_TOKENS,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
@@ -338,12 +345,26 @@ async function runQuery(sql) {
 // the hard way: an unverified case with deliberately-wrong ground truth got
 // selected as a top-similarity example for its own question and the model
 // copied it verbatim.
-function buildMergedKnowledge() {
+let lastSkippedLogKey = null;
+function logSkippedExamples(schema, skipped) {
+  const key = `${schemaSignature(schema || {})}:${skipped}`;
+  if (skipped > 0 && key !== lastSkippedLogKey) {
+    log(`[knowledge] ${skipped} benchmark example(s) left out of the prompt: they reference tables/columns missing from the connected schema`);
+  }
+  lastSkippedLogKey = key;
+}
+
+function buildMergedKnowledge(schema) {
   const rawKnowledge = loadKnowledge(KNOWLEDGE_PATH);
-  const benchmarkExamples = benchmarkStore
+  const passing = benchmarkStore
     .listCases()
     .filter((c) => c.source === "seed" || c.lastRun?.status === "pass")
     .map((c) => ({ question: c.question, sql: c.groundTruthSql }));
+  // Benchmark cases are written for one database (the bundled demo.db, or whatever a user
+  // added). Against a different schema they reference tables/columns that do not exist, and
+  // small models copy them. Keep only examples that fit the connected schema.
+  const benchmarkExamples = schema ? passing.filter((e) => sqlFitsSchema(e.sql, schema)) : passing;
+  logSkippedExamples(schema, passing.length - benchmarkExamples.length);
 
   if (!rawKnowledge && benchmarkExamples.length === 0) return null;
   return {
@@ -406,7 +427,7 @@ async function runPipeline(question, { rawSql = null } = {}) {
   let schema = {}, knowledgeText = "";
   if (!rawSql) try {
     schema = await getSchema();
-    const knowledge = buildMergedKnowledge();
+    const knowledge = buildMergedKnowledge(schema);
     // Selected once per request and reused for every repair attempt — the
     // relevant subset doesn't change mid-request, so there's no reason to
     // re-embed on every repair loop iteration.
@@ -469,7 +490,11 @@ async function runPipeline(question, { rawSql = null } = {}) {
       try {
         const analyze =
           typeof sqlEngine.analyzeQuery === "function" &&
-          (APPROVAL_ALWAYS || COST_ANALYSIS === "always" || needsCostAnalysis(currentSql, { skipLimit: ANALYZE_SKIP_LIMIT }));
+          (APPROVAL_ALWAYS ||
+            COST_ANALYSIS === "always" ||
+            // Engines where planning is cheap (Postgres EXPLAIN) analyze every query.
+            sqlEngine.cheapAnalysis ||
+            needsCostAnalysis(currentSql, { skipLimit: ANALYZE_SKIP_LIMIT }));
         if (typeof sqlEngine.analyzeQuery === "function" && !analyze) {
           output.analysis = null;
           log("[ask] cost analysis skipped (bounded result: small LIMIT or single-row aggregate)");
@@ -485,7 +510,9 @@ async function runPipeline(question, { rawSql = null } = {}) {
           const reason = approvalReason(output.analysis);
           log(
             `[ask] EXPLAIN COST: size=${output.analysis.sizeLabel ?? "n/a"} ` +
-              `rows=${output.analysis.rowCount ?? "n/a"} -> ${reason ? "needs approval" : "auto-run"}`
+              `rows=${output.analysis.rowCount ?? "n/a"}` +
+              `${output.analysis.warnings?.length ? ` warnings=[${output.analysis.warnings.map((w) => w.code).join(",")}]` : ""} ` +
+              `-> ${reason ? "needs approval" : "auto-run"}`
           );
           if (reason) {
             output.sql = currentSql;
@@ -500,6 +527,11 @@ async function runPipeline(question, { rawSql = null } = {}) {
         output.rows = rows;
         output.sql = currentSql;
         output.status = "complete";
+        // Estimate vs actual, so users can see how far to trust the plan. Only
+        // when the result was not cut off by the engine's row cap.
+        if (output.analysis?.rowCount != null && rows.length < (sqlEngine.maxRows ?? Infinity)) {
+          output.analysis.actualRows = rows.length;
+        }
         log(`[ask] done, ${rows.length} row(s) returned (${attempts} repair attempt(s))`);
         break;
       } catch (dbErr) {

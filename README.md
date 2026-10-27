@@ -54,7 +54,7 @@ DB Agent is a minimal **natural-language-to-SQL system**. A user asks a question
 ```bash
 cd app
 cp .env.example .env    # set DATABRICKS_* warehouse credentials
-ollama pull qwen2.5-coder:7b
+ollama pull qwen2.5-coder:0.5b
 ./run_local.sh
 ```
 

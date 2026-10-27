@@ -66,6 +66,8 @@ const REGISTRY = {
         password: env.PG_PASSWORD,
         ssl: env.PG_SSL || "default",
         schema: env.PG_SCHEMA || "public",
+        maxRows: env.PG_MAX_ROWS,
+        largeTableRows: env.PG_LARGE_TABLE_ROWS,
       });
     },
   },

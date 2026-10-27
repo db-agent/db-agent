@@ -9,7 +9,8 @@
   "scripts": {
     "build": "cd web && npm install && npm run build",
     "start": "node server.js",
-    "benchmark": "node benchmark.js"
+    "benchmark": "node benchmark.js",
+    "test": "node --test"
   },
   "dependencies": {
     "@aws-sdk/client-s3vectors": "^3.1095.0",

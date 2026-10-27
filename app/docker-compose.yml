@@ -1,0 +1,65 @@
+# Self-contained demo: Postgres + Olist-shaped seed data + db-agent with the query-plan
+# cost guard (EXPLAIN before execute). No cloud account needed, only an OpenAI-compatible LLM.
+#
+#   docker compose up --build                       # ~300k order_items, ready in about a minute
+#   SEED_ORDER_ITEMS=15000000 docker compose up     # workshop scale (several GB, several minutes)
+#   open http://localhost:3001
+#
+# LLM: defaults to Ollama on the host (host.docker.internal). For any OpenAI-compatible endpoint
+# (OpenAI, Bedrock's OpenAI-compatible API, Groq, ...) export:
+#   DEMO_LLM_BASE_URL=https://api.openai.com/v1 DEMO_LLM_API_KEY=sk-... DEMO_LLM_MODEL=gpt-4o-mini
+# The DEMO_ prefix is deliberate: compose substitutes variables from app/.env, and a developer's
+# LLM_BASE_URL=http://localhost:11434 would point at the container itself, not the host.
+#
+# Demo flow: ask "show me all sales" (flagged: full scan, needs approval), then
+#   docker compose run --rm seed node scripts/seed-olist-postgres.js add-indexes --yes
+# and ask "what shipped on 30 August 2018" again (flagged before, an index scan after).
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: olist
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init-readonly-role.sql:/docker-entrypoint-initdb.d/10-readonly-role.sql:ro
+    ports:
+      - "${DB_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d olist"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # One-shot job: loads the dataset if the database is empty, then exits.
+  seed:
+    build: .
+    command: ["node", "scripts/seed-olist-postgres.js", "ensure", "--yes"]
+    environment:
+      SEED_DB_URL: postgresql://postgres:postgres@db:5432/olist
+      SEED_ORDER_ITEMS: ${SEED_ORDER_ITEMS:-300000}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    build: .
+    ports:
+      - "${APP_PORT:-3001}:3001"
+    environment:
+      SQL_ENGINE: postgres
+      DB_URL: postgresql://dbagent_ro:dbagent_ro@db:5432/olist
+      PG_SSL: "false"
+      LLM_BASE_URL: ${DEMO_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      LLM_API_KEY: ${DEMO_LLM_API_KEY:-ollama}
+      LLM_MODEL: ${DEMO_LLM_MODEL:-qwen2.5-coder:0.5b}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
