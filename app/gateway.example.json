@@ -5,5 +5,14 @@
     { "keySha256": "0000000000000000000000000000000000000000000000000000000000000000", "user": "bob", "team": "finance", "tool": "ci-bot", "allowTables": ["orders", "products"] }
   ],
   "tables": { "deny": ["customers"] },
-  "limits": { "maxRows": 200 }
+  "limits": { "maxRows": 200 },
+  "pricing": {
+    "models": { "gpt-4o-mini": { "inputPer1M": 0.15, "outputPer1M": 0.6 } },
+    "engines": { "postgres": { "perGbScanned": 0.0 } }
+  },
+  "budgets": [
+    { "scope": "team", "name": "analytics", "metric": "llm_usd", "period": "month", "limit": 50, "action": "approval" },
+    { "scope": "user", "name": "*", "metric": "tokens", "period": "day", "limit": 500000, "action": "warn" },
+    { "scope": "tool", "name": "ci-bot", "metric": "warehouse_usd", "period": "day", "limit": 5, "action": "block" }
+  ]
 }

@@ -152,3 +152,40 @@ API keys are never stored.
 - The web UI's own Run/Approve buttons are separate and are not in this log yet.
 - `explain_cost` takes SQL only, not a question.
 - Row caps: the AI tool gets at most `limits.maxRows` rows, and the engine may cap earlier (Postgres `PG_MAX_ROWS`, default 1000), without saying so in the reply.
+
+## Costs, budgets and the spend report
+
+Every request is logged with its tokens and two cost estimates. **These are estimates, not bills.** LLM cost is
+`tokens x your price`; warehouse cost is the optimizer's estimate (Databricks: the compute-cost estimate;
+other engines: estimated bytes scanned x `perGbScanned`, which defaults to 0).
+
+```json
+"pricing": {
+  "models":  { "gpt-4o-mini": { "inputPer1M": 0.15, "outputPer1M": 0.6 } },
+  "engines": { "postgres": { "perGbScanned": 0.005 } }
+},
+"budgets": [
+  { "scope": "team", "name": "analytics", "metric": "llm_usd",       "period": "month", "limit": 50, "action": "approval" },
+  { "scope": "user", "name": "*",         "metric": "tokens",        "period": "day",   "limit": 500000, "action": "warn" },
+  { "scope": "tool", "name": "ci-bot",    "metric": "warehouse_usd", "period": "day",   "limit": 5, "action": "block" }
+]
+```
+
+- `scope`: `user`, `team` or `tool`. `name` is one value, or `*` to give each user, team or tool its own allowance.
+- `metric`: `tokens`, `llm_usd` or `warehouse_usd` (tokens and `llm_usd` apply to `ask`; `warehouse_usd` to `ask` and `run_sql`).
+- `period`: `day` or `month`, both UTC.
+- `action`: `warn` (runs, with a warning), `approval` (held for `db-agent approve`, then runs once) or `block`.
+- A budget is checked against what was already spent, so the request that crosses the limit completes and the next one gets the action.
+- A model with no entry in `pricing.models` has no LLM cost in the totals, and the report says so. Local models: price them at 0.
+- Each `ask` and `run_sql` answer includes a `usage` block: tokens, the two estimates, and what is left of each budget.
+- Tokens count SQL generation and repair calls. Embedding calls (example selection) are not counted. If the model server does not report usage, tokens show as unreported rather than zero.
+
+```bash
+db-agent report --period week            # day | week | month (rolling), prints Markdown, writes .md and .csv to ./db-agent-reports
+http://localhost:3001/api/report?format=html&period=week   # the same report as tables in a browser (web server)
+```
+
+The report covers spend by team, tool, user and model, the 10 most expensive questions, and blocked / held counts.
+Web UI requests are logged too (tool `web-ui`, no user or team, so they appear under `(none)` by team). Budgets apply to MCP callers only,
+because the web UI has no identity. The web page has no login; do not expose it beyond people who may see every question.
+Cache savings show "not available" until the result cache (#73) exists.

@@ -21,6 +21,9 @@ import { needsCostAnalysis } from "./queryShape.js";
 import { sqlFitsSchema } from "./exampleFit.js";
 import { benchmarkStore } from "./benchmarks.js";
 import { describeError, log, warn } from "./logger.js";
+import { openStore } from "./gateway/store.js";
+import { estimateCosts, loadPricing } from "./gateway/costs.js";
+import { buildReport, renderHtml, REPORT_PERIODS } from "./gateway/report.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -112,6 +115,40 @@ async function replaceSqlEngine(name, envOverrides = {}) {
     if (v != null) process.env[k] = String(v);
   }
   process.env.SQL_ENGINE = name;
+}
+
+// ── Request log and cost estimates ───────────────────────────────────────────
+// Web requests are written to the same store as MCP calls (gateway/store.js), so one report covers
+// both. Failure to open the store (read-only filesystem, say) turns logging off; it never breaks answers.
+const GATEWAY_DB = process.env.GATEWAY_DB || path.join(DATA_DIR, "gateway.db");
+const GATEWAY_CONFIG = process.env.GATEWAY_CONFIG || path.join(__dirname, "gateway.json");
+let requestStore = null;
+try {
+  requestStore = openStore(GATEWAY_DB);
+} catch (exc) {
+  warn(`[requests] request log disabled (${GATEWAY_DB}): ${describeError(exc)}`);
+}
+const pricing = loadPricing(GATEWAY_CONFIG);
+
+function costsFor(out) {
+  return estimateCosts({ usage: out.usage, analysis: out.analysis, engineType: sqlEngine.describe().type, pricing });
+}
+
+function logWebRequest(mcpTool, out, { question = null, durationMs = null } = {}) {
+  if (!requestStore) return;
+  try {
+    const status = out.validation?.isSafe === false ? "blocked" : out.error ? "error" : out.status === "awaiting_approval" ? "needs_approval" : out.rows ? "ok" : "error";
+    const costs = costsFor(out);
+    requestStore.logRequest({
+      channel: "web", tool: "web-ui", mcpTool, question, sql: out.sql, status,
+      reason: out.validation?.isSafe === false ? out.validation.reason : out.error || out.approvalReason || null,
+      estBytes: out.analysis?.sizeInBytes, estRows: out.analysis?.rowCount, rowsReturned: out.rows?.length, durationMs,
+      model: out.usage?.calls ? out.usage.model : null, inputTokens: out.usage?.inputTokens, outputTokens: out.usage?.outputTokens,
+      llmUsd: costs.llmUsd, warehouseUsd: status === "ok" ? costs.warehouseUsd : 0,
+    });
+  } catch (exc) {
+    warn(`[requests] could not log request: ${describeError(exc)}`);
+  }
 }
 
 const llm = new OpenAI({ baseURL: LLM_BASE_URL, apiKey: LLM_API_KEY });
@@ -231,7 +268,9 @@ Fix the SQL so it runs successfully against this schema and database. Return onl
 // context is full and the request hangs for minutes. LLM_MAX_TOKENS overrides.
 const LLM_MAX_TOKENS = Number(process.env.LLM_MAX_TOKENS) || 1024;
 
-async function callLlm(systemPrompt, userPrompt) {
+// usage (optional): a counter the caller owns; token counts from the API response are added to it.
+// Servers that do not report usage leave `missing` > 0 so the numbers are not mistaken for zero.
+async function callLlm(systemPrompt, userPrompt, usage = null) {
   const response = await llm.chat.completions.create({
     model: LLM_MODEL,
     temperature: 0,
@@ -241,6 +280,15 @@ async function callLlm(systemPrompt, userPrompt) {
       { role: "user", content: userPrompt },
     ],
   });
+  if (usage) {
+    usage.calls += 1;
+    if (response.usage) {
+      usage.inputTokens += response.usage.prompt_tokens || 0;
+      usage.outputTokens += response.usage.completion_tokens || 0;
+    } else {
+      usage.missing += 1;
+    }
+  }
   return response.choices[0].message.content || "";
 }
 
@@ -459,13 +507,15 @@ async function runPipeline(question, { rawSql = null, allowTable = null, guardSq
     analysis: null,
     status: null,
     approvalReason: null,
+    // Tokens spent on this answer (SQL generation and repairs; embeddings for example selection are not counted).
+    usage: { model: LLM_MODEL, calls: 0, inputTokens: 0, outputTokens: 0, missing: 0 },
   };
 
   try {
     const systemPrompt = getSystemPrompt();
     const parsed = rawSql
       ? { sql: rawSql.replace(/;+\s*$/, ""), explanation: "Run directly as typed (! mode); no LLM was used." }
-      : parseSqlResponse(await callLlm(systemPrompt, buildUserPrompt(question, schema, knowledgeText)));
+      : parseSqlResponse(await callLlm(systemPrompt, buildUserPrompt(question, schema, knowledgeText), output.usage));
     output.sql = parsed.sql;
     output.explanation = parsed.explanation;
     log(`[ask] ${rawSql ? "raw sql" : "sql generated"}: ${parsed.sql || "(empty)"}`);
@@ -552,7 +602,8 @@ async function runPipeline(question, { rawSql = null, allowTable = null, guardSq
         log(`[ask] query failed, starting repair attempt ${attempts}: ${String(dbErr.message || dbErr)}`);
         const repairRaw = await callLlm(
           systemPrompt,
-          buildRepairPrompt(question, schema, currentSql, String(dbErr.message || dbErr), knowledgeText)
+          buildRepairPrompt(question, schema, currentSql, String(dbErr.message || dbErr), knowledgeText),
+          output.usage
         );
         const repaired = parseSqlResponse(repairRaw);
         const repairValidation = validateSql(repaired.sql);
@@ -738,7 +789,11 @@ app.post("/api/ask", async (req, res) => {
   if (!question && !rawSql) return res.status(400).json({ error: "question is required" });
 
   try {
+    const started = Date.now();
     const output = await runPipeline(question || `! ${rawSql}`, { rawSql });
+    const costs = costsFor(output);
+    output.usage = { ...output.usage, llmUsdEstimate: costs.llmUsd, warehouseUsdEstimate: costs.warehouseUsd };
+    logWebRequest(rawSql ? "raw_sql" : "ask", output, { question: rawSql ? null : question, durationMs: Date.now() - started });
     // Pending-approval SQL is never written to memory (it hasn't run); that
     // happens in /api/execute. Auto-run results are written here.
     res.json(output);
@@ -816,7 +871,9 @@ app.post("/api/execute", async (req, res) => {
   if (!sql) return res.status(400).json({ error: "sql is required" });
 
   try {
+    const started = Date.now();
     const result = await executeApprovedSql(sql);
+    logWebRequest("execute", result, { question: question || null, durationMs: Date.now() - started });
     if (result.validation && !result.validation.isSafe) {
       return res.status(400).json(result);
     }
@@ -842,6 +899,15 @@ app.post("/api/execute", async (req, res) => {
   } catch (exc) {
     res.status(500).json({ error: describeError(exc) });
   }
+});
+
+// Spend and activity report from the request log. Estimates only. JSON, or ?format=html for a page.
+app.get("/api/report", (req, res) => {
+  if (!requestStore) return res.status(503).json({ error: "request log is not available" });
+  const period = REPORT_PERIODS[req.query.period] ? String(req.query.period) : "week";
+  const report = buildReport(requestStore, { period });
+  if (req.query.format === "html") return res.type("html").send(renderHtml(report));
+  res.json(report);
 });
 
 app.get("/api/memories", async (req, res) => {
@@ -958,4 +1024,5 @@ export const pipeline = {
   getKnowledge: () => loadKnowledge(KNOWLEDGE_PATH),
   analyzeQuery: (sql) => (typeof sqlEngine.analyzeQuery === "function" ? sqlEngine.analyzeQuery(sql) : null),
   describeEngine: () => sqlEngine.describe(),
+  llmModel: LLM_MODEL,
 };

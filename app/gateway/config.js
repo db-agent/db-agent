@@ -6,6 +6,7 @@
 
 import crypto from "node:crypto";
 import fs from "node:fs";
+import { parseBudgets, parsePricing } from "./costs.js";
 
 const MIN_KEY_LENGTH = 16;
 
@@ -66,6 +67,8 @@ export function parseGatewayConfig(data, { warn = (m) => console.error(m) } = {}
     callers,
     tables: { allow: lowerList(data.tables?.allow), deny: lowerList(data.tables?.deny) || [] },
     maxRows: Number(data.limits?.maxRows) > 0 ? Number(data.limits.maxRows) : 200,
+    pricing: parsePricing(data.pricing),
+    budgets: parseBudgets(data.budgets),
   };
 }
 
