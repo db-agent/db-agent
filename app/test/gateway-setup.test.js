@@ -93,3 +93,14 @@ test("mergeGatewayCallers replaces only the same user and tool", () => {
   );
   assert.deepEqual(merged.callers.map((c) => c.keySha256).sort(), ["2", "3"]);
 });
+
+test("an invalid existing caller stops setup before anything is written and names the entry", async () => {
+  const s = sandbox();
+  const gw = path.join(s.appDir, "gateway.json");
+  fs.writeFileSync(gw, JSON.stringify({ callers: [{ keySha256: "abc123", user: "alice", tool: "vscode-copilot" }] }));
+  const { results, ok } = await runSetup(base(s, { clients: ["claude-desktop"] }));
+  assert.equal(ok, false);
+  assert.match(results.at(-1).detail, /alice\/vscode-copilot.*64 hex/);
+  assert.equal(JSON.parse(fs.readFileSync(gw, "utf8")).callers.length, 1);
+  assert.ok(!fs.existsSync(path.join(s.home, "Library", "Application Support", "Claude", "claude_desktop_config.json")));
+});

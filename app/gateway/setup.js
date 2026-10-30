@@ -10,7 +10,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { sha256 } from "./config.js";
+import { parseGatewayConfig, sha256 } from "./config.js";
 
 export const CLIENTS = ["claude-desktop", "vscode", "claude-code"];
 const SERVER_NAME = "db-agent";
@@ -112,6 +112,13 @@ export async function runSetup({
   const gwFile = gatewayPath || path.join(appDir, "gateway.json");
   let gateway;
   try { gateway = readJson(gwFile); } catch (exc) { return { results: [...results, { client: "gateway.json", status: "failed", detail: exc.message }], ok: false }; }
+  try {
+    parseGatewayConfig(gateway, { warn() {} }); // is the file we are about to extend already valid?
+  } catch (exc) {
+    if (!/no caller|needs a non-empty/.test(exc.message)) {
+      return { results: [...results, { client: "gateway.json", status: "failed", detail: `${exc.message}. Fix or remove that entry in ${gwFile}, then run setup again (nothing was changed).` }], ok: false };
+    }
+  }
   gateway = mergeGatewayCallers(gateway, active.map((client) => ({ keySha256: sha256(keys[client]), user, ...(team ? { team } : {}), tool: client })));
 
   if (dryRun) {

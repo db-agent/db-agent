@@ -32,6 +32,10 @@ const lowerList = (v) => (Array.isArray(v) ? v.map((t) => String(t).toLowerCase(
 
 // A caller whose "env:NAME" key is not set cannot authenticate, so it is skipped with a warning
 // (a client launched by an AI tool only sees the env that tool passes it). Only an empty result is an error.
+function describeEntry(entry, i) {
+  return `callers[${i}] (${entry?.user || "?"}/${entry?.tool || "?"})`;
+}
+
 export function parseGatewayConfig(data, { warn = (m) => console.error(m) } = {}) {
   if (!data || !Array.isArray(data.callers) || data.callers.length === 0) {
     throw new Error('gateway config needs a non-empty "callers" array');
@@ -41,7 +45,8 @@ export function parseGatewayConfig(data, { warn = (m) => console.error(m) } = {}
     for (const field of ["user", "tool"]) {
       if (!entry[field] || typeof entry[field] !== "string") throw new Error(`callers[${i}] needs "${field}"`);
     }
-    const keyHash = resolveKey(entry, i);
+    let keyHash;
+    try { keyHash = resolveKey(entry, i); } catch (exc) { throw new Error(exc.message.replace(`callers[${i}]`, describeEntry(entry, i))); }
     if (keyHash.missingEnv) {
       warn(`db-agent: skipping caller ${entry.user}/${entry.tool}: env var ${keyHash.missingEnv} is not set`);
       return null;
