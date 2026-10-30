@@ -11,7 +11,7 @@ import express from "express";
 import OpenAI from "openai";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { fetchRelevantMemories, invalidateFollowup, writeMemory } from "./memory.js";
 import { createMemoryBackend, listMemoryBackends } from "./memoryBackends/index.js";
 import { createSqlEngine, listSqlEngines } from "./sqlEngines/index.js";
@@ -415,7 +415,11 @@ function approvalReason(analysis) {
 // the knowledge/embedding step) but goes through everything else: the
 // SELECT-only validator, the cost guard, and execution. No LLM repair loop,
 // since silently rewriting SQL the user wrote by hand would be surprising.
-async function runPipeline(question, { rawSql = null } = {}) {
+//
+// Gateway hooks (used by gateway/, never by the web routes):
+//   allowTable(name) -> bool   tables the caller may see; others are dropped from the prompt schema
+//   guardSql(sql)    -> string | null   a reason to block this SQL before it is analyzed or run
+async function runPipeline(question, { rawSql = null, allowTable = null, guardSql = null } = {}) {
   // Every line here is timestamped (see logger.js) specifically so
   // end-to-end text-to-SQL latency — and where it's actually going, LLM
   // call vs. query execution vs. repair loop — can be read straight off
@@ -427,6 +431,7 @@ async function runPipeline(question, { rawSql = null } = {}) {
   let schema = {}, knowledgeText = "";
   if (!rawSql) try {
     schema = await getSchema();
+    if (allowTable) schema = Object.fromEntries(Object.entries(schema).filter(([t]) => allowTable(t)));
     const knowledge = buildMergedKnowledge(schema);
     // Selected once per request and reused for every repair attempt — the
     // relevant subset doesn't change mid-request, so there's no reason to
@@ -475,6 +480,13 @@ async function runPipeline(question, { rawSql = null } = {}) {
     if (!parsed.sql) {
       output.validation = { isSafe: false, reason: "The LLM could not generate a query for this question." };
       log(`[ask] done (no SQL generated)`);
+      return output;
+    }
+
+    const blocked = guardSql?.(parsed.sql);
+    if (blocked) {
+      output.validation = { isSafe: false, reason: blocked };
+      log(`[ask] done (blocked by policy: ${blocked})`);
       return output;
     }
 
@@ -551,6 +563,12 @@ async function runPipeline(question, { rawSql = null } = {}) {
         if (!repairValidation.isSafe) {
           output.validation = repairValidation;
           log(`[ask] done (repair rejected by safety validation: ${repairValidation.reason})`);
+          return output;
+        }
+        const repairBlocked = guardSql?.(repaired.sql);
+        if (repairBlocked) {
+          output.validation = { isSafe: false, reason: repairBlocked };
+          log(`[ask] done (repair blocked by policy: ${repairBlocked})`);
           return output;
         }
         currentSql = repaired.sql;
@@ -919,7 +937,9 @@ app.post("/api/memories/invalidate", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+// Imported by the CLI (bin/db-agent.js) for the MCP gateway: only listen when run directly.
+const runDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (runDirectly) app.listen(PORT, () => {
   const engineInfo = sqlEngine.describe();
   log(`DB Agent (Node) running at http://localhost:${PORT}`);
   log(
@@ -928,3 +948,14 @@ app.listen(PORT, () => {
   );
   log(`LLM: ${LLM_BASE_URL} (${LLM_MODEL})`);
 });
+
+// The pipeline pieces the MCP gateway reuses, so the web UI and MCP share one code path.
+export const pipeline = {
+  runPipeline,
+  executeApprovedSql,
+  approvalReason,
+  getSchema,
+  getKnowledge: () => loadKnowledge(KNOWLEDGE_PATH),
+  analyzeQuery: (sql) => (typeof sqlEngine.analyzeQuery === "function" ? sqlEngine.analyzeQuery(sql) : null),
+  describeEngine: () => sqlEngine.describe(),
+};

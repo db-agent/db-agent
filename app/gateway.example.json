@@ -1,0 +1,9 @@
+{
+  "callers": [
+    { "key": "env:DB_AGENT_KEY_CLAUDE", "user": "alice", "team": "analytics", "tool": "claude-desktop" },
+    { "key": "env:DB_AGENT_KEY_COPILOT", "user": "alice", "team": "analytics", "tool": "vscode-copilot" },
+    { "keySha256": "0000000000000000000000000000000000000000000000000000000000000000", "user": "bob", "team": "finance", "tool": "ci-bot", "allowTables": ["orders", "products"] }
+  ],
+  "tables": { "deny": ["customers"] },
+  "limits": { "maxRows": 200 }
+}
