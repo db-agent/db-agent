@@ -189,3 +189,17 @@ The report covers spend by team, tool, user and model, the 10 most expensive que
 Web UI requests are logged too (tool `web-ui`, no user or team, so they appear under `(none)` by team). Budgets apply to MCP callers only,
 because the web UI has no identity. The web page has no login; do not expose it beyond people who may see every question.
 Cache savings show "not available" until the result cache (#73) exists.
+
+### Demo data for the report
+
+The prices in `gateway.example.json` for the local Qwen models are **illustrative** (a rough stand-in for what
+hosting them would cost), not real bills. Replace them with your own.
+
+`scripts/demo-traffic.js` fills a separate request log with real traffic: four MCP callers on different teams, tools and
+models (0.5b, 1.5b, 7b) asking the Olist questions, web UI requests, blocked writes and bad keys. It never touches your real log:
+
+```bash
+SEED_DB_URL=postgresql://postgres:pw@localhost:5456/olist SEED_ORDER_ITEMS=500000 node scripts/seed-olist-postgres.js seed --yes
+DB_URL=postgresql://postgres:pw@localhost:5456/olist PG_SSL=false node scripts/demo-traffic.js     # about 3 minutes
+GATEWAY_DB=data/gateway-demo.db GATEWAY_CONFIG=data/gateway-demo.json node server.js              # then open /api/report?format=html
+```

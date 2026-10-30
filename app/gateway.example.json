@@ -1,18 +1,85 @@
 {
   "callers": [
-    { "key": "env:DB_AGENT_KEY_CLAUDE", "user": "alice", "team": "analytics", "tool": "claude-desktop" },
-    { "key": "env:DB_AGENT_KEY_COPILOT", "user": "alice", "team": "analytics", "tool": "vscode-copilot" },
-    { "keySha256": "0000000000000000000000000000000000000000000000000000000000000000", "user": "bob", "team": "finance", "tool": "ci-bot", "allowTables": ["orders", "products"] }
+    {
+      "key": "env:DB_AGENT_KEY_CLAUDE",
+      "user": "alice",
+      "team": "analytics",
+      "tool": "claude-desktop"
+    },
+    {
+      "key": "env:DB_AGENT_KEY_COPILOT",
+      "user": "alice",
+      "team": "analytics",
+      "tool": "vscode-copilot"
+    },
+    {
+      "keySha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "user": "bob",
+      "team": "finance",
+      "tool": "ci-bot",
+      "allowTables": [
+        "orders",
+        "products"
+      ]
+    }
   ],
-  "tables": { "deny": ["customers"] },
-  "limits": { "maxRows": 200 },
+  "tables": {
+    "deny": [
+      "customers"
+    ]
+  },
+  "limits": {
+    "maxRows": 200
+  },
   "pricing": {
-    "models": { "gpt-4o-mini": { "inputPer1M": 0.15, "outputPer1M": 0.6 } },
-    "engines": { "postgres": { "perGbScanned": 0.0 } }
+    "models": {
+      "gpt-4o-mini": {
+        "inputPer1M": 0.15,
+        "outputPer1M": 0.6
+      },
+      "qwen2.5-coder:0.5b": {
+        "inputPer1M": 0.02,
+        "outputPer1M": 0.04
+      },
+      "qwen2.5-coder:1.5b": {
+        "inputPer1M": 0.05,
+        "outputPer1M": 0.1
+      },
+      "qwen2.5-coder:7b": {
+        "inputPer1M": 0.2,
+        "outputPer1M": 0.4
+      }
+    },
+    "engines": {
+      "postgres": {
+        "perGbScanned": 0.25
+      }
+    }
   },
   "budgets": [
-    { "scope": "team", "name": "analytics", "metric": "llm_usd", "period": "month", "limit": 50, "action": "approval" },
-    { "scope": "user", "name": "*", "metric": "tokens", "period": "day", "limit": 500000, "action": "warn" },
-    { "scope": "tool", "name": "ci-bot", "metric": "warehouse_usd", "period": "day", "limit": 5, "action": "block" }
+    {
+      "scope": "team",
+      "name": "analytics",
+      "metric": "llm_usd",
+      "period": "month",
+      "limit": 50,
+      "action": "approval"
+    },
+    {
+      "scope": "user",
+      "name": "*",
+      "metric": "tokens",
+      "period": "day",
+      "limit": 500000,
+      "action": "warn"
+    },
+    {
+      "scope": "tool",
+      "name": "ci-bot",
+      "metric": "warehouse_usd",
+      "period": "day",
+      "limit": 5,
+      "action": "block"
+    }
   ]
 }
