@@ -126,22 +126,60 @@ export function renderCsv(r) {
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 function htmlTable(title, buckets, label) {
-  const rows = buckets.map((b) => `<tr><td>${esc(b.key)}</td><td>${b.requests}</td><td>${b.ok}</td><td>${b.blocked}</td><td>${b.needsApproval}</td><td>${b.tokens}</td><td>${usd(b.llmUsd)}</td><td>${usd(b.warehouseUsd)}</td><td>${usd(b.totalUsd)}</td></tr>`).join("");
-  return `<h2>${esc(title)}</h2>${buckets.length ? `<table><thead><tr><th>${esc(label)}</th><th>Requests</th><th>OK</th><th>Blocked</th><th>Needs approval</th><th>Tokens</th><th>LLM (est.)</th><th>Warehouse (est.)</th><th>Total (est.)</th></tr></thead><tbody>${rows}</tbody></table>` : "<p>No data.</p>"}`;
+  const rows = buckets.map((b) => `<tr><td>${esc(b.key)}</td><td>${b.requests}</td><td>${b.ok}</td><td>${b.blocked}</td><td>${b.needsApproval}</td><td>${b.tokens.toLocaleString("en-US")}</td><td>${usd(b.llmUsd)}</td><td>${usd(b.warehouseUsd)}</td><td>${usd(b.totalUsd)}</td></tr>`).join("");
+  return `<h2>${esc(title)}</h2>${buckets.length ? `<div class="scroll"><table><thead><tr><th>${esc(label)}</th><th>Requests</th><th>OK</th><th>Blocked</th><th>Needs approval</th><th>Tokens</th><th>LLM (est.)</th><th>Warehouse (est.)</th><th>Total (est.)</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="muted">No data.</p>'}`;
+}
+
+// Brand colors: azure blue primary, blood orange secondary. Light and dark themes.
+const REPORT_CSS = `
+:root{--azure:#0078d4;--azure-dark:#005a9e;--azure-tint:#e8f3fc;--orange:#d9480f;--orange-tint:#fdeee6;--bg:#f6f9fc;--card:#fff;--text:#14212e;--muted:#5a6b7b;--line:#d6e2ee;--on-azure:#fff}
+@media (prefers-color-scheme:dark){:root{--azure:#4aa8f0;--azure-dark:#0b3a5e;--azure-tint:#10283d;--orange:#ff7a45;--orange-tint:#3a2216;--bg:#0e151c;--card:#16212c;--text:#e4edf5;--muted:#93a5b6;--line:#2a3a4a;--on-azure:#06243d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{background:linear-gradient(135deg,#005a9e,#0078d4 60%,#2b95e6);color:#fff;padding:1.6rem 1rem 1.3rem;border-bottom:4px solid var(--orange)}
+header .in,main{max-width:1040px;margin:0 auto;padding:0 1rem}
+header h1{margin:0 0 .25rem;font-size:1.5rem}header p{margin:0;opacity:.9}
+.tabs{margin-top:.9rem;display:flex;gap:.4rem}
+.tabs a,.tabs b{padding:.25rem .8rem;border-radius:999px;font-size:.85rem;text-decoration:none;border:1px solid rgba(255,255,255,.5);color:#fff}
+.tabs b{background:var(--orange);border-color:var(--orange)}
+.tabs a:hover{background:rgba(255,255,255,.18)}
+main{padding-top:1.2rem;padding-bottom:3rem}
+.note{background:var(--orange-tint);border-left:4px solid var(--orange);padding:.6rem .9rem;border-radius:4px;margin:.8rem 0}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.7rem;margin:1rem 0}
+.card{background:var(--card);border:1px solid var(--line);border-top:3px solid var(--azure);border-radius:6px;padding:.7rem .9rem}
+.card.total{border-top-color:var(--orange)}
+.card .v{font-size:1.35rem;font-weight:650}.card.total .v{color:var(--orange)}
+.card .l{font-size:.78rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+h2{margin:1.8rem 0 .5rem;font-size:1.1rem;color:var(--azure);padding-bottom:.25rem;border-bottom:2px solid var(--line)}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;background:var(--card);border:1px solid var(--line);border-radius:6px;overflow:hidden}
+th,td{padding:.4rem .7rem;text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{background:var(--azure);color:var(--on-azure);border-bottom:2px solid var(--orange);font-weight:600;font-size:.82rem}
+tbody tr:nth-child(even){background:var(--azure-tint)}
+td:last-child{font-weight:650;color:var(--orange)}
+th.q,td.q{text-align:left;white-space:normal;max-width:420px}
+.muted{color:var(--muted)}
+`;
+
+function card(label, value, extra = "") {
+  return `<div class="card ${extra}"><div class="v">${value}</div><div class="l">${esc(label)}</div></div>`;
 }
 
 export function renderHtml(r) {
   const t = r.totals;
-  const top = r.topQuestions.map((q) => `<tr><td>${esc(q.ts)}</td><td>${esc(q.user)}</td><td>${esc(q.tool)}</td><td>${esc((q.question || q.sql || "").slice(0, 120))}</td><td>${usd(q.totalUsd)}</td></tr>`).join("");
-  const tabs = Object.keys(REPORT_PERIODS).map((p) => (p === r.period ? `<b>${p}</b>` : `<a href="?format=html&amp;period=${p}">${p}</a>`)).join(" | ");
+  const top = r.topQuestions.map((q) => `<tr><td>${esc(q.ts)}</td><td>${esc(q.user)}</td><td>${esc(q.tool)}</td><td class="q">${esc((q.question || q.sql || "").slice(0, 120))}</td><td>${usd(q.totalUsd)}</td></tr>`).join("");
+  const tabs = Object.keys(REPORT_PERIODS).map((p) => (p === r.period ? `<b>${p}</b>` : `<a href="?format=html&amp;period=${p}">${p}</a>`)).join("");
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>db-agent spend report</title>
-<style>body{font:15px/1.5 system-ui,sans-serif;max-width:1000px;margin:2rem auto;padding:0 1rem;color:#1a1a1a}table{border-collapse:collapse;width:100%;margin:.5rem 0 1.5rem}th,td{border:1px solid #ccc;padding:.35rem .6rem;text-align:right}th:first-child,td:first-child{text-align:left}th{background:#f3f3f3}.note{background:#fff7e0;padding:.6rem .8rem;border-radius:4px}@media (prefers-color-scheme:dark){body{background:#161616;color:#e6e6e6}th{background:#262626}td,th{border-color:#444}.note{background:#3a3220}}</style></head><body>
-<h1>db-agent spend report, last ${esc(r.period)}</h1><p>${tabs}</p>
+<title>db-agent spend report</title><style>${REPORT_CSS}</style></head><body>
+<header><div class="in"><h1>db-agent spend report</h1><p>Last ${esc(r.period)}: ${esc(r.since)} to ${esc(r.until)}</p><div class="tabs">${tabs}</div></div></header>
+<main>
 <p class="note">All costs are <b>estimates</b>, not billed amounts. LLM cost uses the price table in gateway.json; warehouse cost uses the optimizer's estimate.</p>
-<p><b>Total:</b> ${t.requests} requests, ${t.tokens} tokens, LLM ${usd(t.llmUsd)}, warehouse ${usd(t.warehouseUsd)}, total ${usd(t.totalUsd)} (all est.). ${t.ok} ok, ${t.blocked} blocked, ${t.needsApproval} held, ${t.rejected} rejected keys, ${t.errors} errors.</p>
+<div class="cards">${card("Requests", t.requests)}${card("Tokens", t.tokens.toLocaleString("en-US"))}${card("LLM (est.)", usd(t.llmUsd))}${card("Warehouse (est.)", usd(t.warehouseUsd))}${card("Total (est.)", usd(t.totalUsd), "total")}${card("Blocked / held", `${t.blocked} / ${t.needsApproval}`)}</div>
+<p class="muted">${t.ok} ok, ${t.blocked} blocked, ${t.needsApproval} held for approval, ${t.rejected} rejected keys, ${t.errors} errors.</p>
 ${r.unpricedModels.length ? `<p class="note">No price is configured for: ${esc(r.unpricedModels.join(", "))}. Their token cost is missing from the totals.</p>` : ""}
 ${htmlTable("By team", r.byTeam, "Team")}${htmlTable("By tool", r.byTool, "Tool")}${htmlTable("By user", r.byUser, "User")}${htmlTable("By model", r.byModel, "Model")}
-<h2>Most expensive questions (estimates)</h2>${top ? `<table><thead><tr><th>When</th><th>Who</th><th>Tool</th><th>Question or SQL</th><th>Total (est.)</th></tr></thead><tbody>${top}</tbody></table>` : "<p>None with a cost above zero.</p>"}
-<h2>Cache savings</h2><p>Not available yet (the result cache is feature 3).</p></body></html>`;
+<h2>Most expensive questions (estimates)</h2>${top ? `<div class="scroll"><table><thead><tr><th>When</th><th>Who</th><th>Tool</th><th class="q">Question or SQL</th><th>Total (est.)</th></tr></thead><tbody>${top}</tbody></table></div>` : '<p class="muted">None with a cost above zero.</p>'}
+<h2>Cache savings</h2><p class="muted">Not available yet (the result cache is feature 3).</p>
+</main></body></html>`;
 }
