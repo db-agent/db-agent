@@ -77,6 +77,18 @@ test("config: keys are matched by hash, unknown keys are rejected, env: and keyS
   assert.ok(!JSON.stringify(cfg).includes("env-key-0123456789abcdef"), "plain keys are not kept");
 });
 
+test("config: a caller with an unset env key is skipped with a warning; none left is an error", () => {
+  delete process.env.GW_UNSET_KEY;
+  const warnings = [];
+  const cfg = parseGatewayConfig({ callers: [
+    { key: "env:GW_UNSET_KEY", user: "u1", tool: "t1" },
+    { key: KEY_A, user: "u2", tool: "t2" },
+  ] }, { warn: (m) => warnings.push(m) });
+  assert.equal(cfg.callers.length, 1);
+  assert.match(warnings[0], /GW_UNSET_KEY/);
+  assert.throws(() => parseGatewayConfig({ callers: [{ key: "env:GW_UNSET_KEY", user: "u1", tool: "t1" }] }, { warn() {} }), /no caller/);
+});
+
 test("config: weak or duplicate keys and missing fields are refused", () => {
   assert.throws(() => parseGatewayConfig({ callers: [{ key: "short", user: "a", tool: "b" }] }), /at least 16/);
   assert.throws(() => parseGatewayConfig({ callers: [{ key: KEY_A, tool: "b" }] }), /"user"/);

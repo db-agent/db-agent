@@ -33,7 +33,7 @@ Both `ask` and `run_sql` use the same pipeline as the web UI: SELECT-only valida
 }
 ```
 
-- `key`: at least 16 characters, or `env:NAME` to read it from the environment. `keySha256` stores only the hash
+- `key`: at least 16 characters, or `env:NAME` to read it from the environment. A caller whose variable is not set is skipped with a warning. Use `keySha256` for stdio clients: an AI tool only passes the server the `env` block in its own config, so `env:` keys are not visible there. `keySha256` stores only the hash
   (`printf '%s' "$KEY" | shasum -a 256`). Keys are compared by hash and are never logged.
 - `tables.deny` / `tables.allow`: global table policy. A caller's `allowTables` narrows it further. SQL that mentions a
   hidden table anywhere is blocked, and hidden tables are left out of the prompt and out of `list_tables`.

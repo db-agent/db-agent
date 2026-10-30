@@ -20,7 +20,7 @@ function resolveKey(entry, index) {
   if (typeof key === "string" && key.startsWith("env:")) {
     const name = key.slice(4);
     key = process.env[name];
-    if (!key) throw new Error(`callers[${index}].key refers to env var ${name}, which is not set`);
+    if (!key) return { missingEnv: name };
   }
   if (typeof key !== "string" || key.length < MIN_KEY_LENGTH) {
     throw new Error(`callers[${index}] needs "key" (at least ${MIN_KEY_LENGTH} characters, or "env:NAME") or "keySha256"`);
@@ -30,7 +30,9 @@ function resolveKey(entry, index) {
 
 const lowerList = (v) => (Array.isArray(v) ? v.map((t) => String(t).toLowerCase()) : null);
 
-export function parseGatewayConfig(data) {
+// A caller whose "env:NAME" key is not set cannot authenticate, so it is skipped with a warning
+// (a client launched by an AI tool only sees the env that tool passes it). Only an empty result is an error.
+export function parseGatewayConfig(data, { warn = (m) => console.error(m) } = {}) {
   if (!data || !Array.isArray(data.callers) || data.callers.length === 0) {
     throw new Error('gateway config needs a non-empty "callers" array');
   }
@@ -40,6 +42,10 @@ export function parseGatewayConfig(data) {
       if (!entry[field] || typeof entry[field] !== "string") throw new Error(`callers[${i}] needs "${field}"`);
     }
     const keyHash = resolveKey(entry, i);
+    if (keyHash.missingEnv) {
+      warn(`db-agent: skipping caller ${entry.user}/${entry.tool}: env var ${keyHash.missingEnv} is not set`);
+      return null;
+    }
     if (seen.has(keyHash)) throw new Error(`callers[${i}] reuses another caller's key`);
     seen.add(keyHash);
     return {
@@ -49,7 +55,8 @@ export function parseGatewayConfig(data) {
       tool: entry.tool,
       allowTables: lowerList(entry.allowTables),
     };
-  });
+  }).filter(Boolean);
+  if (callers.length === 0) throw new Error("no caller in the gateway config has a usable key (set the env vars named by env: keys, or use keySha256)");
   return {
     callers,
     tables: { allow: lowerList(data.tables?.allow), deny: lowerList(data.tables?.deny) || [] },
