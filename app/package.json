@@ -1,8 +1,11 @@
 {
   "name": "db-agent-node",
   "version": "0.1.0",
-  "description": "DB Agent \u2014 Node.js/Express prototype of the same text-to-SQL agent as the Streamlit app, for UI comparison.",
+  "description": "DB Agent — Node.js/Express prototype of the same text-to-SQL agent as the Streamlit app, for UI comparison.",
   "type": "module",
+  "bin": {
+    "db-agent": "bin/db-agent.js"
+  },
   "engines": {
     "node": ">=22.5.0"
   },
@@ -16,11 +19,13 @@
     "@aws-sdk/client-s3vectors": "^3.1095.0",
     "@databricks/sql": "^2.2.0",
     "@duckdb/node-api": "^1.5.5-r.2",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@zilliz/milvus2-sdk-node": "^3.0.3",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
     "openai": "^4.67.0",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "zod": "^3.25.76"
   },
   "overrides": {
     "get-uri": {

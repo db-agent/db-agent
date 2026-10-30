@@ -92,6 +92,12 @@ turn into an index scan:
 
 `docker compose down -v` removes the data.
 
+## MCP gateway
+
+Claude Desktop, GitHub Copilot and any MCP client can query the database through db-agent with per-caller API keys,
+the same read-only and cost rules as the web UI, an approval step for expensive queries, and one request log.
+`node bin/db-agent.js mcp serve --stdio` (or `--http`). Setup and client configs: [docs/mcp-gateway.md](docs/mcp-gateway.md).
+
 ## Databricks Apps
 
 This still fits the Databricks Apps Node.js runtime (React + Express are both

@@ -23,5 +23,7 @@ COPY sqlEngines ./sqlEngines
 COPY memoryBackends ./memoryBackends
 COPY data ./data
 COPY scripts ./scripts
+COPY gateway ./gateway
+COPY bin ./bin
 EXPOSE 3001
 CMD ["node", "server.js"]

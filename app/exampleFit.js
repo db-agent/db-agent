@@ -22,7 +22,7 @@ const NOT_ALIAS = new Set(["on", "using", "join", "inner", "left", "right", "ful
 // FROM inside these functions is part of their syntax, not a table clause.
 const FROM_IN_FUNCTION = new Set(["extract", "trim", "substring", "overlay", "position"]);
 
-function tokenize(sql) {
+export function tokenize(sql) {
   const text = String(sql || "")
     .replace(/--[^\n]*/g, " ")
     .replace(/\/\*[\s\S]*?\*\//g, " ")
