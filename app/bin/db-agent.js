@@ -2,6 +2,7 @@
 // db-agent CLI.
 //
 //   db-agent mcp serve [--stdio | --http] [--port 3002] [--host 127.0.0.1]
+//   db-agent mcp setup [--client claude-desktop,vscode,claude-code] [--workspace] [--dry-run] [--no-check]
 //   db-agent approvals [--all]       list held queries waiting for a decision
 //   db-agent approve <id>            let the caller run the held query once
 //   db-agent deny <id>
@@ -37,6 +38,7 @@ function usage() {
   console.error(
     "Usage:\n" +
       "  db-agent mcp serve [--stdio | --http] [--port 3002] [--host 127.0.0.1]\n" +
+      "  db-agent mcp setup [--client claude-desktop,vscode,claude-code] [--workspace] [--dry-run] [--no-check]\n" +
       "  db-agent approvals [--all]\n" +
       "  db-agent approve <id>\n" +
       "  db-agent deny <id>\n" +
@@ -88,6 +90,30 @@ async function main() {
     } finally {
       store.close();
     }
+    return;
+  }
+
+  if (cmd === "mcp" && sub === "setup") {
+    const { runSetup, verifyConnection, CLIENTS } = await import("../gateway/setup.js");
+    const clients = option("client", CLIENTS.join(",")).split(",").map((c) => c.trim()).filter(Boolean);
+    const unknown = clients.filter((c) => !CLIENTS.includes(c));
+    if (unknown.length) fail(`Unknown client: ${unknown.join(", ")}. Choose from ${CLIENTS.join(", ")}.`);
+    const binPath = path.join(appDir, "bin", "db-agent.js");
+    const { results, ok, dryRun } = await runSetup({
+      appDir, clients, workspace: flag("workspace"), dryRun: flag("dry-run"), check: !flag("no-check"),
+      verify: (key) => verifyConnection({ binPath, key }),
+    });
+    for (const r of results) {
+      const mark = { ok: "ok     ", skipped: "skipped", failed: "FAILED " }[r.status];
+      console.log(`${mark} ${r.client.padEnd(15)} ${r.detail}`);
+      if (r.check) console.log(`        ${"".padEnd(15)} connection check: ${r.check.ok ? "passed, " : "FAILED, "}${r.check.detail}`);
+    }
+    if (!dryRun && results.some((r) => r.status === "ok" && r.client !== "gateway.json")) {
+      console.log("\nNext: restart Claude Desktop / reload VS Code (Claude Code picks it up in new sessions), then ask:");
+      console.log('  "Use db-agent to list the tables"');
+      console.log("Each tool has its own key, so `db-agent log` shows which tool asked.");
+    }
+    if (!ok) process.exit(1);
     return;
   }
 

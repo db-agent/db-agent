@@ -17,6 +17,21 @@ see who asked what, and expensive queries wait for a human to approve them.
 Both `ask` and `run_sql` use the same pipeline as the web UI: SELECT-only validator, cost guard
 (`APPROVAL_MAX_BYTES`, `APPROVAL_MAX_ROWS`, `APPROVAL_MAX_COST_USD`), then execution. MCP calls do not write to the memory store.
 
+## Quick setup
+
+```bash
+db-agent mcp setup                       # Claude Desktop, VS Code and Claude Code, whichever are installed
+db-agent mcp setup --client vscode       # just one
+db-agent mcp setup --dry-run             # show what would change
+```
+
+For each tool it makes a key, adds the key's hash to `gateway.json`, writes the tool's MCP config (merged into any
+existing file, with a `.bak-<time>` copy first), and connects once as that tool to check it works. Then restart
+Claude Desktop or reload VS Code. VS Code gets the user-level `mcp.json`; use `--workspace` to write `.vscode/mcp.json`
+in the current folder instead. Re-running makes new keys for the tools you name. A config file with comments is left
+alone and reported. The key sits in plain text in each tool's own config file, because those tools have nowhere else to keep it.
+The manual steps below do the same thing by hand.
+
 ## Set up
 
 1. Copy `gateway.example.json` to `gateway.json` (ignored by git) and list your callers. One key per AI tool:
