@@ -74,4 +74,4 @@ The ontology answers also used fewer tokens in total (111k against 154k), becaus
 attempts. One run each, 17 questions, and the hand-written file defines concepts several questions ask about, so
 read it as what a good ontology can do, not as the gain on questions nobody anticipated. The scan found 89 tables and
 views, 50% of columns described, 93 declared joins and 12 sensitive-looking columns. Load the data with
-`scripts/adventureworks/load.sh` (see `docs/adventureworks-spike.md` when that page is merged).
+`scripts/adventureworks/load.sh` (earlier measurements: `docs/adventureworks-spike.md`).

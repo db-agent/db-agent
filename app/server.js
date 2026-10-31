@@ -22,6 +22,7 @@ import { sqlFitsSchema } from "./exampleFit.js";
 import { createAbRunner } from "./abTest.js";
 import { readMetadata, scanMetadata } from "./ontology/scan.js";
 import { mergeDraft, renderSkill, saveKnowledge, validateKnowledge } from "./ontology/knowledgeFile.js";
+import { selectTables } from "./tableSelect.js";
 import { benchmarkStore } from "./benchmarks.js";
 import { describeError, log, warn } from "./logger.js";
 import { openStore } from "./gateway/store.js";
@@ -212,6 +213,20 @@ const SQLITE_DIALECT_RULE =
   "- The database is SQLite — use SQLite date/string functions (date('now','-1 month')),\n" +
   "  not MySQL/Postgres equivalents.";
 
+// LLM_OUTPUT=sql asks for the bare statement, for SQL-tuned models (sqlcoder) that copy a JSON template
+// into their SQL instead of following it. The default is JSON with a one-sentence explanation.
+const BARE_SQL = (process.env.LLM_OUTPUT || "json").toLowerCase() === "sql";
+const ANSWER_FORMAT = BARE_SQL
+  ? "Respond with the SQL statement only: no JSON, no explanation, no markdown. If the question cannot be answered from the schema, respond with nothing."
+  : `Always respond with valid JSON in this exact format:
+{
+  "sql": "<your SELECT statement or empty string>",
+  "explanation": "<one sentence explaining what the query does>"
+}
+
+Do not include any text outside the JSON object.`;
+const REPLY_HINT = BARE_SQL ? "Return only the SQL statement." : "Return only the JSON object described above.";
+
 function getSystemPrompt() {
   const dialect = DIALECT_RULES[activeSqlEngineName] || SQLITE_DIALECT_RULE;
   return `You are a SQL assistant. Your only job is to generate a single, safe, read-only \
@@ -233,13 +248,7 @@ ${dialect}
 - If the question cannot be answered from the schema, say so in the explanation
   and set sql to an empty string.
 
-Always respond with valid JSON in this exact format:
-{
-  "sql": "<your SELECT statement or empty string>",
-  "explanation": "<one sentence explaining what the query does>"
-}
-
-Do not include any text outside the JSON object.`;
+${ANSWER_FORMAT}`;
 }
 
 function buildUserPrompt(question, schema, knowledgeText) {
@@ -249,7 +258,7 @@ ${knowledgeText}
 
 User question: ${question}
 
-Return only the JSON object described above.`;
+${REPLY_HINT}`;
 }
 
 function buildRepairPrompt(question, schema, failedSql, error, knowledgeText) {
@@ -265,7 +274,7 @@ ${failedSql}
 Database error:
 ${error}
 
-Fix the SQL so it runs successfully against this schema and database. Return only the JSON object described above.`;
+Fix the SQL so it runs successfully against this schema and database. ${REPLY_HINT}`;
 }
 
 // ── LLM call + JSON parsing (mirrors ../core/llm.py) ─────────────────────────
@@ -368,7 +377,12 @@ function parseSqlResponse(raw) {
     return { sql: (data.sql || "").trim(), explanation: (data.explanation || "").trim() };
   } catch {
     const match = text.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error(`No JSON object found in LLM response:\n${raw}`);
+    if (!match) {
+      // SQL-tuned models (sqlcoder) answer with the bare statement instead of JSON.
+      const bare = text.match(/\b(?:select|with)\b[\s\S]*/i);
+      if (bare) return { sql: bare[0].trim().replace(/;+\s*$/, ""), explanation: "" };
+      throw new Error(`No JSON object found in LLM response:\n${raw}`);
+    }
     const data = JSON.parse(match[0]);
     return { sql: (data.sql || "").trim(), explanation: (data.explanation || "").trim() };
   }
@@ -491,12 +505,17 @@ async function runPipeline(question, { rawSql = null, allowTable = null, guardSq
   if (!rawSql) try {
     schema = await getSchema();
     if (allowTable) schema = Object.fromEntries(Object.entries(schema).filter(([t]) => allowTable(t)));
+    // Big schemas: show only the tables that look relevant to this question (off unless SCHEMA_PRUNE_ABOVE is set).
+    const picked = selectTables(question, schema, loadKnowledge(KNOWLEDGE_PATH));
+    schema = picked.schema;
     // Selected once per request and reused for every repair attempt — the
     // relevant subset doesn't change mid-request, so there's no reason to
     // re-embed on every repair loop iteration.
     if (knowledgeMode !== "none") {
       const knowledge = buildMergedKnowledge(schema, { includeBenchmarks: knowledgeMode !== "file" });
-      const selectedKnowledge = await selectRelevantKnowledge(knowledge, question, embeddingClient, MEMORY.embeddingModel);
+      const selectedKnowledge = await selectRelevantKnowledge(knowledge, question, embeddingClient, MEMORY.embeddingModel, {
+        relevantTables: picked.pruned ? picked.tables : null,
+      });
       knowledgeText = formatKnowledge(selectedKnowledge);
     }
   } catch (exc) {
@@ -1114,6 +1133,7 @@ if (runDirectly) app.listen(PORT, () => {
 });
 
 // The pipeline pieces the MCP gateway reuses, so the web UI and MCP share one code path.
+export { parseSqlResponse };
 export const pipeline = {
   readMetadata: () => readMetadata(sqlEngine),
   runPipeline,
