@@ -46,6 +46,26 @@ Average answer time with the 7b model: 6.6 s (clean), 5.2 s (comments), 4.1 s (c
   table's name (`knowledge.js`, `filterByKeywordMatch`). "Orders" does not select `salesorderheader`. Expressions
   and instructions do not have this problem. This needs fixing for the ontology feature.
 
+## Round 2: table selection and a SQL-tuned model
+
+Same 17 questions, 7b model unless noted. "Pruned" = `SCHEMA_PRUNE_ABOVE=20`, which shows only the tables that look
+relevant to the question (`tableSelect.js`) and keeps the notes of those tables.
+
+| Model | clean | comments | curated |
+|---|---|---|---|
+| qwen2.5-coder:7b, all tables | 7/17 | 8/17 | 14/17 |
+| qwen2.5-coder:7b, pruned | 8/17 | 9/17 | 12/17 |
+| sqlcoder-7b-2 (Q5_K_M), JSON answers | 8/17 | 8/17 | 2/17 |
+| sqlcoder-7b-2 (Q5_K_M), bare SQL (`LLM_OUTPUT=sql`) | 9/17 | 8/17 | 8/17 |
+
+- Table selection made no clear difference for the 7b model (one question either way is noise at this sample size),
+  so it stays off by default. The 1.5b pruned run was stopped early and is not reported.
+- sqlcoder matches qwen 7b with no ontology but does not use one: 9, 8 and 8. It is also slower (about 7 to 20 s per
+  answer against 4 to 8 s). With our JSON answer format it copied the template into its SQL (`SELECT '...' AS sql`),
+  which is why `LLM_OUTPUT=sql` exists. For the ontology demo, use qwen2.5-coder:7b.
+- Each cell is one run. Some questions changed result between runs that differ only in the prompt (for example the
+  customer count), so read differences of one or two questions as noise.
+
 ## Reproduce
 
 ```bash

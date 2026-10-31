@@ -75,11 +75,16 @@ function mentionsWord(text, word) {
 // embeddings needed. A description for "customers.email" only earns its
 // place in the prompt if the question actually mentions "customers" (or
 // "email"); same idea for expression names like "revenue".
-function filterByKeywordMatch(entries, question) {
+// relevantTables: tables already chosen for this question (see tableSelect.js). Their notes are kept even when
+// the question never says the table's name ("orders" does not contain "salesorderheader").
+function filterByKeywordMatch(entries, question, relevantTables = null) {
   return Object.fromEntries(
     Object.entries(entries).filter(([key]) => {
       const table = key.split(".")[0];
-      return mentionsWord(question, table) || mentionsWord(question, key);
+      if (mentionsWord(question, table) || mentionsWord(question, key)) return true;
+      if (!relevantTables) return false;
+      const parts = key.toLowerCase().split(".");
+      return (parts.length === 3 ? [parts[1]] : parts.slice(0, 2)).some((p) => relevantTables.has(p));
     })
   );
 }
@@ -125,11 +130,12 @@ export async function selectRelevantKnowledge(
   question,
   embeddingClient,
   embeddingModel,
-  { maxExamples = DEFAULT_MAX_EXAMPLES } = {}
+  { maxExamples = DEFAULT_MAX_EXAMPLES, relevantTables = null } = {}
 ) {
   if (!knowledge) return null;
 
-  const descriptions = filterByKeywordMatch(knowledge.descriptions, question);
+  const relevant = relevantTables ? new Set([...relevantTables].map((t) => String(t).toLowerCase().split(".").pop())) : null;
+  const descriptions = filterByKeywordMatch(knowledge.descriptions, question, relevant);
   const expressions = filterByKeywordMatch(knowledge.expressions, question);
   const examples = await selectRelevantExamples(
     knowledge.examples,

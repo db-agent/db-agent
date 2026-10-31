@@ -97,7 +97,7 @@ async function startServer({ model, condition, port }) {
   const env = {
     PATH: process.env.PATH, HOME: process.env.HOME,
     PORT: String(port), SQL_ENGINE: "postgres", DB_URL: process.env.DB_URL,
-    PG_SSL: process.env.PG_SSL || "default", PG_SCHEMA: process.env.PG_SCHEMA || "public",
+    PG_SSL: process.env.PG_SSL || "default", PG_SCHEMA: process.env.PG_SCHEMA || "public", ...(process.env.LLM_OUTPUT ? { LLM_OUTPUT: process.env.LLM_OUTPUT } : {}),
     LLM_BASE_URL, LLM_API_KEY, LLM_MODEL: model,
     MEMORY_ENABLED: "false", MEMORY_BACKEND: "local",
     ...(condition === "clean" || condition.startsWith("kb=") ? { BENCHMARKS_FILE: emptyBench, BENCHMARK_CASES_STORE_PATH: emptyBench } : {}),
