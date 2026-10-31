@@ -107,7 +107,7 @@ export function renderMarkdown(r) {
 }
 
 // Spreadsheets run text starting with = + - @ as a formula: neutralize keys that come from config or users.
-const csvCell = (v) => {
+export const csvCell = (v) => {
   let s = String(v ?? "");
   if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[",\n\r]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
