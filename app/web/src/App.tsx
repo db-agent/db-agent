@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { BenchmarksPanel } from "@/components/BenchmarksPanel";
+import { OntologyWorkspace } from "@/components/OntologyWorkspace";
 import { ChatTurn } from "@/components/ChatTurn";
 import { Sidebar } from "@/components/Sidebar";
 import { Suggestions } from "@/components/Suggestions";
 import { Button } from "@/components/ui/button";
 import { ask, executeSql, fetchConfig, fetchSchema } from "@/lib/api";
 import type { AppConfig, Conversation, Schema, Turn } from "@/lib/types";
-import { ArrowUp, BarChart3, FlaskConical, Lightbulb, X } from "lucide-react";
+import { ArrowUp, BarChart3, BookOpen, FlaskConical, Lightbulb, X } from "lucide-react";
 
 const CONVERSATIONS_KEY = "dbagent.conversations";
 
@@ -68,6 +69,7 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [showSuggestionsPanel, setShowSuggestionsPanel] = useState(false);
   const [showBenchmarksPanel, setShowBenchmarksPanel] = useState(false);
+  const [showOntology, setShowOntology] = useState(() => window.location.hash.startsWith("#ontology"));
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const activeConversation = conversations.find((c) => c.id === activeId) ?? null;
@@ -275,6 +277,15 @@ useEffect(() => {
             <FlaskConical className="size-3.5 text-[var(--brand-azure)]" />
             Benchmarks
           </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowOntology(true)}
+            className="gap-1.5 text-xs text-muted-foreground"
+          >
+            <BookOpen className="size-3.5 text-[var(--brand-azure)]" />
+            Ontology
+          </Button>
           {/* Server-rendered spend report (estimates), opens in a new tab. */}
           <Button
             variant="ghost"
@@ -353,6 +364,7 @@ useEffect(() => {
       )}
 
       {showBenchmarksPanel && <BenchmarksPanel onClose={() => setShowBenchmarksPanel(false)} />}
+      {showOntology && <OntologyWorkspace initialTab={window.location.hash === "#ontology/accuracy" ? "accuracy" : "build"} onClose={() => setShowOntology(false)} />}
     </div>
   );
 }

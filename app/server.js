@@ -19,6 +19,9 @@ import { formatKnowledge, loadKnowledge, selectRelevantKnowledge } from "./knowl
 import { validateSql } from "./sqlSafety.js";
 import { needsCostAnalysis } from "./queryShape.js";
 import { sqlFitsSchema } from "./exampleFit.js";
+import { createAbRunner } from "./abTest.js";
+import { readMetadata, scanMetadata } from "./ontology/scan.js";
+import { mergeDraft, renderSkill, saveKnowledge, validateKnowledge } from "./ontology/knowledgeFile.js";
 import { benchmarkStore } from "./benchmarks.js";
 import { describeError, log, warn } from "./logger.js";
 import { openStore } from "./gateway/store.js";
@@ -406,9 +409,10 @@ function logSkippedExamples(schema, skipped) {
   lastSkippedLogKey = key;
 }
 
-function buildMergedKnowledge(schema) {
+// includeBenchmarks=false: the knowledge file only (the accuracy test must not hand the model the answer).
+function buildMergedKnowledge(schema, { includeBenchmarks = true } = {}) {
   const rawKnowledge = loadKnowledge(KNOWLEDGE_PATH);
-  const passing = benchmarkStore
+  const passing = !includeBenchmarks ? [] : benchmarkStore
     .listCases()
     .filter((c) => c.source === "seed" || c.lastRun?.status === "pass")
     .map((c) => ({ question: c.question, sql: c.groundTruthSql }));
@@ -468,10 +472,13 @@ function approvalReason(analysis) {
 // SELECT-only validator, the cost guard, and execution. No LLM repair loop,
 // since silently rewriting SQL the user wrote by hand would be surprising.
 //
+// knowledgeMode (accuracy test only): "default" = knowledge file plus passing benchmark examples;
+// "file" = the knowledge file alone; "none" = no knowledge at all, the schema only.
+//
 // Gateway hooks (used by gateway/, never by the web routes):
 //   allowTable(name) -> bool   tables the caller may see; others are dropped from the prompt schema
 //   guardSql(sql)    -> string | null   a reason to block this SQL before it is analyzed or run
-async function runPipeline(question, { rawSql = null, allowTable = null, guardSql = null } = {}) {
+async function runPipeline(question, { rawSql = null, allowTable = null, guardSql = null, knowledgeMode = "default" } = {}) {
   // Every line here is timestamped (see logger.js) specifically so
   // end-to-end text-to-SQL latency — and where it's actually going, LLM
   // call vs. query execution vs. repair loop — can be read straight off
@@ -484,12 +491,14 @@ async function runPipeline(question, { rawSql = null, allowTable = null, guardSq
   if (!rawSql) try {
     schema = await getSchema();
     if (allowTable) schema = Object.fromEntries(Object.entries(schema).filter(([t]) => allowTable(t)));
-    const knowledge = buildMergedKnowledge(schema);
     // Selected once per request and reused for every repair attempt — the
     // relevant subset doesn't change mid-request, so there's no reason to
     // re-embed on every repair loop iteration.
-    const selectedKnowledge = await selectRelevantKnowledge(knowledge, question, embeddingClient, MEMORY.embeddingModel);
-    knowledgeText = formatKnowledge(selectedKnowledge);
+    if (knowledgeMode !== "none") {
+      const knowledge = buildMergedKnowledge(schema, { includeBenchmarks: knowledgeMode !== "file" });
+      const selectedKnowledge = await selectRelevantKnowledge(knowledge, question, embeddingClient, MEMORY.embeddingModel);
+      knowledgeText = formatKnowledge(selectedKnowledge);
+    }
   } catch (exc) {
     // Rethrown as-is (same behavior as before this log line was added) —
     // just makes sure a failure this early still gets a "done" timestamp
@@ -960,6 +969,91 @@ app.post("/api/feedback", (req, res) => {
   }
 });
 
+// ── Ontology (the knowledge file): scan, edit, export, and the with/without accuracy test ────────────────
+// The knowledge file is shared: every caller (web, API, MCP) reads the same file on its next question.
+const emptyKnowledge = () => ({ descriptions: {}, expressions: {}, examples: [], instructions: [] });
+let lastScan = null;
+
+app.get("/api/ontology", (req, res) => {
+  try {
+    const current = loadKnowledge(KNOWLEDGE_PATH);
+    res.json({
+      path: path.relative(__dirname, KNOWLEDGE_PATH).startsWith("..") ? path.basename(KNOWLEDGE_PATH) : path.relative(__dirname, KNOWLEDGE_PATH),
+      exists: current !== null,
+      knowledge: current || emptyKnowledge(),
+      lastScan: lastScan ? { at: lastScan.at, summary: lastScan.scan.summary } : null,
+    });
+  } catch (exc) {
+    res.status(500).json({ error: describeError(exc) });
+  }
+});
+
+// Reads metadata only (names, types, comments, declared keys); never table rows.
+app.post("/api/ontology/scan", async (req, res) => {
+  try {
+    const scan = scanMetadata(await readMetadata(sqlEngine), { schemaName: sqlEngine.describe().location });
+    lastScan = { at: new Date().toISOString(), scan };
+    // "merged": the current file with the scan's draft added underneath it. Nothing is saved until the person saves.
+    const merged = mergeDraft(loadKnowledge(KNOWLEDGE_PATH) || emptyKnowledge(), scan.draft);
+    res.json({ at: lastScan.at, scan, merged });
+  } catch (exc) {
+    res.status(500).json({ error: describeError(exc) });
+  }
+});
+
+app.put("/api/ontology", (req, res) => {
+  const checked = validateKnowledge(req.body);
+  if (!checked.ok) return res.status(400).json({ error: checked.error });
+  try {
+    const { backup } = saveKnowledge(KNOWLEDGE_PATH, checked.value);
+    log(`[ontology] saved ${Object.keys(checked.value.descriptions).length} descriptions, ${Object.keys(checked.value.expressions).length} expressions, ${checked.value.examples.length} examples`);
+    res.json({ ok: true, backup: backup ? path.basename(backup) : null, knowledge: checked.value });
+  } catch (exc) {
+    res.status(500).json({ error: describeError(exc) });
+  }
+});
+
+app.get("/api/ontology/export", (req, res) => {
+  const knowledge = loadKnowledge(KNOWLEDGE_PATH) || emptyKnowledge();
+  if (req.query.format === "skill") {
+    const info = sqlEngine.describe();
+    res.type("text/markdown").set("Content-Disposition", 'attachment; filename="SKILL.md"').send(renderSkill(knowledge, { name: `${info.type}-data-guide`, engine: info.type }));
+  } else {
+    res.type("application/json").set("Content-Disposition", 'attachment; filename="knowledge.json"').send(JSON.stringify(knowledge, null, 2) + "\n");
+  }
+});
+
+const abRunner = createAbRunner({
+  listCases: () => benchmarkStore.listCases(),
+  getSchema: () => getSchema(),
+  sqlFits: sqlFitsSchema,
+  runPipeline: (question, opts) => runPipeline(question, opts),
+  runQuery: (sql) => runQuery(sql),
+  model: LLM_MODEL,
+});
+
+app.get("/api/ab/status", (req, res) => res.json(abRunner.status()));
+app.get("/api/ab/cases", async (req, res) => {
+  try {
+    const cases = await abRunner.eligibleCases();
+    res.json({ model: LLM_MODEL, total: benchmarkStore.listCases().length, eligible: cases.map((c) => ({ id: c.id, question: c.question })) });
+  } catch (exc) {
+    res.status(500).json({ error: describeError(exc) });
+  }
+});
+app.post("/api/ab/start", async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : null;
+    res.status(202).json(await abRunner.start({ ids }));
+  } catch (exc) {
+    res.status(409).json({ error: describeError(exc) });
+  }
+});
+app.post("/api/ab/cancel", (req, res) => {
+  abRunner.cancel();
+  res.json({ ok: true });
+});
+
 // ── Benchmarks (question + ground-truth SQL, scored by benchmark.js) ────────
 // See benchmarks.js for the seed/user/feedback source model.
 
@@ -1021,6 +1115,7 @@ if (runDirectly) app.listen(PORT, () => {
 
 // The pipeline pieces the MCP gateway reuses, so the web UI and MCP share one code path.
 export const pipeline = {
+  readMetadata: () => readMetadata(sqlEngine),
   runPipeline,
   executeApprovedSql,
   approvalReason,

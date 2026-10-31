@@ -109,6 +109,27 @@ export class SQLiteEngine {
   // hitting — added after a live test made clear the old startup log line
   // ("DB: <path>") stayed hardcoded to the sqlite default even when a
   // different engine was active, which was actively misleading.
+  // Names, types and declared keys from PRAGMAs; no table is read. SQLite has no comments. Used by `db-agent scan`.
+  getMetadata() {
+    const names = this.db
+      .prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' ORDER BY name")
+      .all()
+      .map((r) => r.name);
+    const tables = {};
+    for (const name of names) {
+      const q = `"${name.replaceAll('"', '""')}"`;
+      const cols = this.db.prepare(`PRAGMA table_info(${q})`).all();
+      const fks = this.db.prepare(`PRAGMA foreign_key_list(${q})`).all();
+      tables[name] = {
+        comment: null,
+        rowEstimate: null,
+        columns: cols.map((c) => ({ name: c.name, type: c.type || "", comment: null, primaryKey: c.pk > 0 })),
+        foreignKeys: fks.map((f) => ({ column: f.from, refTable: f.table, refColumn: f.to })),
+      };
+    }
+    return { tables };
+  }
+
   describe() {
     return { type: "sqlite", location: this.dbPath };
   }

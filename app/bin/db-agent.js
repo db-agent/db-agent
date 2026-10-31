@@ -4,6 +4,8 @@
 //   db-agent mcp serve [--stdio | --http] [--port 3002] [--host 127.0.0.1]
 //   db-agent mcp setup [--client claude-desktop,vscode,claude-code] [--workspace] [--dry-run] [--no-check]
 //   db-agent report [--period day|week|month] [--out DIR] [--no-write]
+//   db-agent scan [--out DIR] [--no-write]        readiness score and a draft knowledge file (metadata only)
+//   db-agent knowledge export [--format skill|json] [--out FILE]   the shared knowledge file as a SKILL.md or JSON
 //   db-agent approvals [--all]       list held queries waiting for a decision
 //   db-agent approve <id>            let the caller run the held query once
 //   db-agent deny <id>
@@ -45,6 +47,8 @@ function usage() {
       "  db-agent mcp serve [--stdio | --http] [--port 3002] [--host 127.0.0.1]\n" +
       "  db-agent mcp setup [--client claude-desktop,vscode,claude-code] [--workspace] [--dry-run] [--no-check]\n" +
       "  db-agent report [--period day|week|month] [--out DIR] [--no-write]\n" +
+      "  db-agent scan [--out DIR] [--no-write]\n" +
+      "  db-agent knowledge export [--format skill|json] [--out FILE]\n" +
       "  db-agent approvals [--all]\n" +
       "  db-agent approve <id>\n" +
       "  db-agent deny <id>\n" +
@@ -131,6 +135,42 @@ async function main() {
       }
     } finally {
       store.close();
+    }
+    return;
+  }
+
+  if (cmd === "scan") {
+    const [{ scanMetadata, renderScanMarkdown }, { pipeline }] = await Promise.all([import("../ontology/scan.js"), import("../server.js")]);
+    const info = pipeline.describeEngine();
+    const scan = scanMetadata(await pipeline.readMetadata(), { schemaName: info.location });
+    const md = renderScanMarkdown(scan);
+    console.log(md);
+    if (!flag("no-write")) {
+      const fs = await import("node:fs");
+      const dir = path.resolve(option("out", "db-agent-scan"));
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "scan-report.md"), md + "\n");
+      fs.writeFileSync(path.join(dir, "knowledge.draft.json"), JSON.stringify(scan.draft, null, 2) + "\n");
+      console.error(`\nWrote ${dir}/scan-report.md and knowledge.draft.json`);
+      console.error("Review the draft, then copy it to knowledge.json (or open Ontology in the web app and save it from there).");
+    }
+    return;
+  }
+
+  if (cmd === "knowledge") {
+    if (sub !== "export") usage();
+    const [{ renderSkill }, { pipeline }] = await Promise.all([import("../ontology/knowledgeFile.js"), import("../server.js")]);
+    const knowledge = pipeline.getKnowledge() || { descriptions: {}, expressions: {}, examples: [], instructions: [] };
+    const format = option("format", "skill");
+    if (format !== "skill" && format !== "json") fail("--format must be skill or json");
+    const engine = pipeline.describeEngine().type;
+    const text = format === "skill" ? renderSkill(knowledge, { name: `${engine}-data-guide`, engine }) : JSON.stringify(knowledge, null, 2) + "\n";
+    const outFile = option("out");
+    if (outFile) {
+      (await import("node:fs")).writeFileSync(outFile, text);
+      console.error(`Wrote ${outFile}`);
+    } else {
+      process.stdout.write(text);
     }
     return;
   }

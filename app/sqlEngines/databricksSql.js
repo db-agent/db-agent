@@ -224,6 +224,45 @@ export class DatabricksSqlEngine {
     return schema;
   }
 
+  // Names, types and comments from Unity Catalog information_schema; no table is read. Used by `db-agent scan`.
+  // Primary and foreign keys are read when the catalog declares them, and skipped otherwise.
+  async getMetadata() {
+    const cat = quoteIdent(this.catalog);
+    const sch = this.schemaName.replaceAll("'", "''");
+    const { rows } = await this.execute(
+      `SELECT c.table_name, c.column_name, c.data_type, c.comment AS column_comment, t.comment AS table_comment
+       FROM ${cat}.information_schema.columns c
+       LEFT JOIN ${cat}.information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+       WHERE c.table_schema = '${sch}'
+       ORDER BY c.table_name, c.ordinal_position`
+    );
+    const tables = {};
+    for (const r of rows) {
+      const t = (tables[r.table_name] ||= { comment: r.table_comment || null, rowEstimate: null, columns: [], foreignKeys: [] });
+      t.columns.push({ name: r.column_name, type: r.data_type, comment: r.column_comment || null, primaryKey: false });
+    }
+    try {
+      const keys = await this.execute(
+        `SELECT tc.constraint_type, k.table_name, k.column_name, r.table_name AS ref_table, r.column_name AS ref_column
+         FROM ${cat}.information_schema.table_constraints tc
+         JOIN ${cat}.information_schema.key_column_usage k ON k.constraint_name = tc.constraint_name AND k.table_schema = tc.table_schema
+         LEFT JOIN ${cat}.information_schema.constraint_column_usage r ON r.constraint_name = tc.constraint_name AND tc.constraint_type = 'FOREIGN KEY'
+         WHERE tc.table_schema = '${sch}' AND tc.constraint_type IN ('PRIMARY KEY', 'FOREIGN KEY')`
+      );
+      for (const r of keys.rows) {
+        const t = tables[r.table_name];
+        if (!t) continue;
+        if (r.constraint_type === "PRIMARY KEY") {
+          const col = t.columns.find((c) => c.name === r.column_name);
+          if (col) col.primaryKey = true;
+        } else if (r.ref_table) t.foreignKeys.push({ column: r.column_name, refTable: r.ref_table, refColumn: r.ref_column });
+      }
+    } catch {
+      // keys are optional metadata
+    }
+    return { tables };
+  }
+
   async runQuery(sql) {
     const { columns, rows } = await this.execute(sql);
     // Cap result size so a runaway SELECT can't flood the response/UI. The
