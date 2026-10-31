@@ -147,6 +147,44 @@ question, SQL, status (`ok`, `blocked`, `needs_approval`, `error`, `rejected_aut
 bytes and rows, rows returned, duration. SQL and questions are stored as typed, so they can contain literal values;
 API keys are never stored.
 
+## Audit trail export
+
+Compliance can see who asked what, which tables the SQL touched, the decision, and who approved it. The export
+joins the request log to the approvals, so a held query that was later approved shows the approver and the time.
+
+Try it in 5 minutes (after a few calls, or on the demo data from the section at the end):
+
+```bash
+db-agent audit export --from 2025-01-01 --to 2025-01-31 --format csv --out january.csv
+db-agent audit export --team finance --decision blocked --format jsonl
+db-agent audit export --table customers --user alice
+db-agent audit export --redact          # no questions, and SQL values replaced by ?
+```
+
+Filters: `--from`, `--to` (a date like `2025-01-31`, which includes that whole day for `--to`, or a full ISO time,
+both in UTC), `--user`, `--team`, `--tool`, `--decision` (`ok`, `blocked`, `needs_approval`, `error`,
+`rejected_auth`) and `--table`. Without `--out` the records go to the terminal and the count to stderr.
+
+Columns: id, ts, channel, user, team, tool, mcp_tool, decision, reason, question, sql, tables, rows_returned,
+duration_ms, model, token counts, llm_usd, warehouse_usd, approval_id, approval_status, approved_by, approved_at.
+CSV cells that start with `=`, `+`, `-` or `@` get a leading quote so a spreadsheet does not run them.
+
+`tables` is read from the SQL text (names after FROM, JOIN, UPDATE, INTO and TABLE). It is a good guide, not a
+parser: a CTE name can appear as a table. `approved_by` is the operating system user who ran `db-agent approve`.
+
+### Retention
+
+Off by default (everything is kept). To keep 90 days, set `AUDIT_RETENTION_DAYS=90` or add this to `gateway.json`
+(the environment variable wins):
+
+```json
+{ "retention": { "days": 90 } }
+```
+
+`db-agent mcp serve` and the web server then purge at start and every 6 hours. Purge by hand with
+`db-agent audit purge --days 90` (add `--dry-run` to count first). It removes requests and finished approvals
+older than the limit and keeps approvals that are still waiting. If you run neither server, run the purge from cron.
+
 ## Limits
 
 - The web UI's own Run/Approve buttons are separate and are not in this log yet.
