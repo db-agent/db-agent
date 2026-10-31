@@ -203,7 +203,14 @@ const stripSemicolon = (sql) => String(sql || "").trim().replace(/;+\s*$/, "");
 
 export class PostgresEngine {
   constructor({ connectionString, host, port, database, user, password, ssl, schema, maxRows, largeTableRows }) {
-    this.schemaName = schema || "public";
+    // PG_SCHEMA may be one schema (default "public"), a comma list ("sales,production"), or "*" for
+    // every user schema. With more than one schema, table names are schema-qualified ("sales.customer")
+    // so two schemas can hold a table of the same name.
+    const wanted = String(schema || "public").split(",").map((x) => x.trim()).filter(Boolean);
+    this.allSchemas = wanted.includes("*");
+    this.schemaNames = this.allSchemas ? [] : wanted.length ? wanted : ["public"];
+    this.schemaName = this.allSchemas ? "*" : this.schemaNames[0];
+    this.qualify = this.allSchemas || this.schemaNames.length > 1;
     this.maxRows = Number(maxRows) || 1000;
     this.largeTableRows = Number(largeTableRows) || 100000;
     // EXPLAIN only plans (milliseconds, no data read), so the server can analyze
@@ -214,7 +221,7 @@ export class PostgresEngine {
       this.displayLocation = redactConnectionString(connectionString);
       this.pool = new Pool({ connectionString, ssl: sslOption(ssl) });
     } else {
-      this.displayLocation = `postgres://${host}:${port}/${database}?schema=${this.schemaName}`;
+      this.displayLocation = `postgres://${host}:${port}/${database}?schema=${this.allSchemas ? "*" : this.schemaNames.join(",")}`;
       this.pool = new Pool({
         host,
         port: Number(port) || 5432,
@@ -228,16 +235,18 @@ export class PostgresEngine {
 
   async getSchema() {
     const { rows } = await this.pool.query(
-      `SELECT table_name, column_name, data_type
+      `SELECT table_schema, table_name, column_name, data_type
        FROM information_schema.columns
-       WHERE table_schema = $1
-       ORDER BY table_name, ordinal_position`,
-      [this.schemaName]
+       WHERE ${this.allSchemas
+         ? "table_schema NOT IN ('pg_catalog', 'information_schema') AND table_schema NOT LIKE 'pg\\_%'"
+         : "table_schema = ANY($1)"}
+       ORDER BY table_schema, table_name, ordinal_position`,
+      this.allSchemas ? [] : [this.schemaNames]
     );
 
     const schema = {};
     for (const row of rows) {
-      const table = row.table_name;
+      const table = this.qualify ? `${row.table_schema}.${row.table_name}` : row.table_name;
       if (!schema[table]) schema[table] = [];
       schema[table].push({ name: row.column_name, type: row.data_type });
     }
@@ -250,6 +259,10 @@ export class PostgresEngine {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN READ ONLY");
+      if (this.schemaNames.length > 0) {
+        // Unqualified names resolve in the configured schemas, in the order given.
+        await client.query(`SET LOCAL search_path = ${this.schemaNames.map((n) => `"${n.replaceAll('"', '""')}"`).join(", ")}`);
+      }
       await client.query(`DECLARE db_agent_cur NO SCROLL CURSOR FOR ${stripSemicolon(sql)}`);
       const result = await client.query(`FETCH ${this.maxRows} FROM db_agent_cur`);
       return { columns: result.fields.map((f) => f.name), rows: result.rows };
@@ -265,6 +278,10 @@ export class PostgresEngine {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN READ ONLY");
+      if (this.schemaNames.length > 0) {
+        // Unqualified names resolve in the configured schemas, in the order given.
+        await client.query(`SET LOCAL search_path = ${this.schemaNames.map((n) => `"${n.replaceAll('"', '""')}"`).join(", ")}`);
+      }
       await client.query(`DECLARE db_agent_export NO SCROLL CURSOR FOR ${stripSemicolon(sql)}`);
       let total = 0;
       let columns = [];

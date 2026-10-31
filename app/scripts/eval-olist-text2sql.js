@@ -19,6 +19,9 @@
 //   LLM_API_KEY        default "ollama"
 //   OUT                path for the JSON results (default ./eval-results.json)
 //   ONLY               only run questions containing this text
+//   CASES              path to a cases file (default olist-eval-cases.json), e.g. adventureworks/cases.json
+//   PG_SCHEMA          schema or comma list for the Postgres engine (default public)
+//   Conditions can also be "kb=<path>": no benchmark examples, and that knowledge file in the prompt.
 //
 // Queries the cost guard would hold for approval are still scored: the harness runs them itself
 // with a statement timeout, and counts them separately as "held by cost guard".
@@ -32,7 +35,7 @@ import pg from "pg";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const appDir = path.join(here, "..");
 const ONLY = process.env.ONLY; // substring filter on the question, for re-running a few cases
-const cases = JSON.parse(fs.readFileSync(path.join(here, "olist-eval-cases.json"), "utf8"))
+const cases = JSON.parse(fs.readFileSync(path.resolve(process.env.CASES || path.join(here, "olist-eval-cases.json")), "utf8"))
   .filter((c) => !ONLY || c.question.includes(ONLY));
 
 if (!process.env.DB_URL) {
@@ -94,10 +97,11 @@ async function startServer({ model, condition, port }) {
   const env = {
     PATH: process.env.PATH, HOME: process.env.HOME,
     PORT: String(port), SQL_ENGINE: "postgres", DB_URL: process.env.DB_URL,
-    PG_SSL: process.env.PG_SSL || "default",
+    PG_SSL: process.env.PG_SSL || "default", PG_SCHEMA: process.env.PG_SCHEMA || "public",
     LLM_BASE_URL, LLM_API_KEY, LLM_MODEL: model,
     MEMORY_ENABLED: "false", MEMORY_BACKEND: "local",
-    ...(condition === "clean" ? { BENCHMARKS_FILE: emptyBench, BENCHMARK_CASES_STORE_PATH: emptyBench } : {}),
+    ...(condition === "clean" || condition.startsWith("kb=") ? { BENCHMARKS_FILE: emptyBench, BENCHMARK_CASES_STORE_PATH: emptyBench } : {}),
+    ...(condition.startsWith("kb=") ? { KNOWLEDGE_FILE: path.resolve(condition.slice(3)) } : {}),
   };
   const child = spawn("node", ["server.js"], { cwd: appDir, env, stdio: ["ignore", "pipe", "pipe"] });
   let log = "";
@@ -121,6 +125,8 @@ async function ask(port, question) {
   return { out, ms: Date.now() - t0 };
 }
 
+const label = (c) => (c.startsWith("kb=") ? path.basename(c.slice(3), ".json") : c);
+
 // ── main ────────────────────────────────────────────────────────────────────
 console.log(`Computing ground truth for ${cases.length} questions...`);
 const truth = [];
@@ -135,7 +141,7 @@ const results = [];
 let port = 3150;
 for (const model of MODELS) {
   for (const condition of CONDITIONS) {
-    console.log(`\n=== ${model} / ${condition} ===`);
+    console.log(`\n=== ${model} / ${label(condition)} ===`);
     const srv = await startServer({ model, condition, port: port++ });
     const rowsOut = [];
     try {
@@ -175,14 +181,14 @@ await pool.end();
 // ── summary ─────────────────────────────────────────────────────────────────
 console.log("\n=== Summary (pass / total) ===");
 const pct = (n, d) => (d ? `${Math.round((100 * n) / d)}%` : "-");
-console.log("model".padEnd(22) + "condition".padEnd(10) + "strict".padEnd(14) + "lenient".padEnd(9) + "easy".padEnd(8) + "medium".padEnd(8) + "hard".padEnd(8) + "held".padEnd(6) + "avg s");
+console.log("model".padEnd(22) + "condition".padEnd(14) + "strict".padEnd(14) + "lenient".padEnd(9) + "easy".padEnd(8) + "medium".padEnd(8) + "hard".padEnd(8) + "held".padEnd(6) + "avg s");
 for (const model of MODELS) {
   for (const condition of CONDITIONS) {
     const rs = results.filter((r) => r.model === model && r.condition === condition);
     const by = (d) => rs.filter((r) => r.difficulty === d);
     const p = (xs) => xs.filter((r) => r.status === "pass").length;
     console.log(
-      model.padEnd(22) + condition.padEnd(10) + `${p(rs)}/${rs.length} ${pct(p(rs), rs.length)}`.padEnd(14) +
+      model.padEnd(22) + label(condition).padEnd(14) + `${p(rs)}/${rs.length} ${pct(p(rs), rs.length)}`.padEnd(14) +
         String(rs.filter((r) => r.lenient).length).padEnd(9) +
         `${p(by("easy"))}/${by("easy").length}`.padEnd(8) + `${p(by("medium"))}/${by("medium").length}`.padEnd(8) +
         `${p(by("hard"))}/${by("hard").length}`.padEnd(8) + String(rs.filter((r) => r.held).length).padEnd(6) +

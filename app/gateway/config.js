@@ -98,11 +98,13 @@ export function authenticate(config, presentedKey) {
 // The tables this caller may see, out of the schema's table names.
 export function allowedTables(config, caller, allTables) {
   const deny = new Set(config.tables.deny);
+  // A schema-qualified table ("sales.customer") matches a list entry by its full name or its last part.
+  const matches = (list, name) => list.includes(name) || list.includes(name.split(".").pop());
   return allTables.filter((t) => {
     const name = t.toLowerCase();
-    if (deny.has(name)) return false;
-    if (config.tables.allow && !config.tables.allow.includes(name)) return false;
-    if (caller.allowTables && !caller.allowTables.includes(name)) return false;
+    if (deny.has(name) || deny.has(name.split(".").pop())) return false;
+    if (config.tables.allow && !matches(config.tables.allow, name)) return false;
+    if (caller.allowTables && !matches(caller.allowTables, name)) return false;
     return true;
   });
 }
