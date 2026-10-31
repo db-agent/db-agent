@@ -1,0 +1,33 @@
+{
+  "descriptions": {
+    "customer": "sales.customer. A customer is either a person (personid set, storeid null) or a store (storeid set). Names live in person.person (join person.person.businessentityid = sales.customer.personid).",
+    "salesperson": "sales.salesperson. businessentityid is the same id as person.person.businessentityid and humanresources.employee.businessentityid; names live in person.person.",
+    "salesorderheader": "One row per order. totaldue = subtotal + taxamt + freight. onlineorderflag is a boolean: true = placed online by a customer, false = placed by a sales person. salespersonid is null for online orders.",
+    "salesorderdetail": "One row per order line (join salesorderid to sales.salesorderheader). There is no linetotal column.",
+    "product": "production.product. Category is two joins away: product.productsubcategoryid -> production.productsubcategory.productsubcategoryid, then productsubcategory.productcategoryid -> production.productcategory.productcategoryid.",
+    "employee": "humanresources.employee. Names live in person.person (join on businessentityid)."
+  },
+  "expressions": {
+    "revenue": "SUM(d.orderqty * d.unitprice * (1 - d.unitpricediscount)) over sales.salesorderdetail d (net of discounts). Use totaldue from sales.salesorderheader only when the question says amount due or total due.",
+    "line total": "orderqty * unitprice * (1 - unitpricediscount)"
+  },
+  "examples": [
+    {
+      "question": "How many vendors are there?",
+      "sql": "SELECT count(*) FROM purchasing.vendor"
+    },
+    {
+      "question": "How many products come in each color?",
+      "sql": "SELECT color, count(*) FROM production.product GROUP BY color ORDER BY count(*) DESC"
+    },
+    {
+      "question": "What is the total freight per ship method?",
+      "sql": "SELECT m.name, sum(h.freight) FROM sales.salesorderheader h JOIN purchasing.shipmethod m ON m.shipmethodid = h.shipmethodid GROUP BY m.name"
+    }
+  ],
+  "instructions": [
+    "Always write table names with their schema, for example sales.salesorderheader or production.product.",
+    "Dates are timestamps: use extract(year from orderdate) for a year.",
+    "Names of people are never in sales or humanresources tables: join person.person on businessentityid."
+  ]
+}
