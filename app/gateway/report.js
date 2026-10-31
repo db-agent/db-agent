@@ -94,7 +94,7 @@ export function renderMarkdown(r) {
   if (r.unpricedModels.length) {
     parts.push(`> No price is configured for: ${r.unpricedModels.join(", ")}. Their token cost is missing from the totals. Add it under \`pricing.models\`.`);
   }
-  parts.push(mdTable("By team", r.byTeam, "Team"), mdTable("By tool", r.byTool, "Tool"), mdTable("By user", r.byUser, "User"), mdTable("By model", r.byModel, "Model"));
+  parts.push(mdTable("By team", r.byTeam, "Team"), mdTable("By model", r.byModel, "Model"), mdTable("By user", r.byUser, "User"), mdTable("By tool", r.byTool, "Tool"));
   parts.push(
     "## Most expensive questions (estimates)\n\n" +
       (r.topQuestions.length
@@ -119,7 +119,7 @@ export function renderCsv(r) {
   const emit = (dimension, b) =>
     lines.push([dimension, b.key, b.requests, b.ok, b.blocked, b.needsApproval, b.rejected, b.errors, b.tokens, b.llmUsd, b.warehouseUsd, b.totalUsd].map(csvCell).join(","));
   emit("total", r.totals);
-  for (const [dim, list] of [["team", r.byTeam], ["tool", r.byTool], ["user", r.byUser], ["model", r.byModel]]) for (const b of list) emit(dim, b);
+  for (const [dim, list] of [["team", r.byTeam], ["model", r.byModel], ["user", r.byUser], ["tool", r.byTool]]) for (const b of list) emit(dim, b);
   return lines.join("\r\n") + "\r\n";
 }
 
@@ -178,7 +178,7 @@ export function renderHtml(r) {
 <div class="cards">${card("Requests", t.requests)}${card("Tokens", t.tokens.toLocaleString("en-US"))}${card("LLM (est.)", usd(t.llmUsd))}${card("Warehouse (est.)", usd(t.warehouseUsd))}${card("Total (est.)", usd(t.totalUsd), "total")}${card("Blocked / held", `${t.blocked} / ${t.needsApproval}`)}</div>
 <p class="muted">${t.ok} ok, ${t.blocked} blocked, ${t.needsApproval} held for approval, ${t.rejected} rejected keys, ${t.errors} errors.</p>
 ${r.unpricedModels.length ? `<p class="note">No price is configured for: ${esc(r.unpricedModels.join(", "))}. Their token cost is missing from the totals.</p>` : ""}
-${htmlTable("By team", r.byTeam, "Team")}${htmlTable("By tool", r.byTool, "Tool")}${htmlTable("By user", r.byUser, "User")}${htmlTable("By model", r.byModel, "Model")}
+${htmlTable("By team", r.byTeam, "Team")}${htmlTable("By model", r.byModel, "Model")}${htmlTable("By user", r.byUser, "User")}${htmlTable("By tool", r.byTool, "Tool")}
 <h2>Most expensive questions (estimates)</h2>${top ? `<div class="scroll"><table><thead><tr><th>When</th><th>Who</th><th>Tool</th><th class="q">Question or SQL</th><th>Total (est.)</th></tr></thead><tbody>${top}</tbody></table></div>` : '<p class="muted">None with a cost above zero.</p>'}
 <h2>Cache savings</h2><p class="muted">Not available yet (the result cache is feature 3).</p>
 </main></body></html>`;
