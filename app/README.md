@@ -98,6 +98,13 @@ Claude Desktop, GitHub Copilot and any MCP client can query the database through
 the same read-only and cost rules as the web UI, an approval step for expensive queries, and one request log.
 `node bin/db-agent.js mcp serve --stdio` (or `--http`). Setup and client configs: [docs/mcp-gateway.md](docs/mcp-gateway.md).
 
+## Ontology
+
+One shared knowledge file says what your tables mean, how they join and how your company defines its terms, and
+every tool that asks db-agent uses it. **Ontology** in the web app scans the database (metadata only), helps you fill in
+what only a person knows, saves it for the team, and runs an accuracy test with and without it.
+`node bin/db-agent.js scan`. Details: [docs/ontology.md](docs/ontology.md).
+
 ## Databricks Apps
 
 This still fits the Databricks Apps Node.js runtime (React + Express are both

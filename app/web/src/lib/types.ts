@@ -157,3 +157,82 @@ export interface BenchmarkCase {
   createdAt: string | null;
   lastRun: BenchmarkRunResult | null;
 }
+
+export interface Knowledge {
+  descriptions: Record<string, string>;
+  expressions: Record<string, string>;
+  examples: { question: string; sql: string }[];
+  instructions: string[];
+}
+
+export interface ScanTable {
+  name: string;
+  key: string;
+  columns: number;
+  described: number;
+  hasPk: boolean;
+  foreignKeys: number;
+  score: number;
+  issues: string[];
+  sensitive: string[];
+}
+
+export interface ScanTodo {
+  kind: "code-meaning" | "table-description" | "sensitive";
+  table: string;
+  column: string | null;
+  ask: string;
+}
+
+export interface ScanResult {
+  summary: {
+    tables: number;
+    columns: number;
+    describedColumns: number;
+    describedShare: number;
+    foreignKeys: number;
+    tablesWithoutPrimaryKey: number;
+    sensitiveColumns: number;
+    overall: number;
+  };
+  tables: ScanTable[];
+  fixes: ScanTable[];
+  todo: ScanTodo[];
+}
+
+export interface OntologyState {
+  path: string;
+  exists: boolean;
+  knowledge: Knowledge;
+  lastScan: { at: string; summary: ScanResult["summary"] } | null;
+}
+
+export interface AbArm {
+  status: "pass" | "wrong" | "error" | "blocked" | "held";
+  sql: string | null;
+  ms: number;
+  tokens: number;
+  repairs?: number;
+  detail?: string;
+}
+
+export interface AbSummaryArm {
+  pass: number;
+  total: number;
+  percent: number;
+  held: number;
+  tokens: number;
+  avgMs: number;
+}
+
+export interface AbStatus {
+  status: "idle" | "running" | "done" | "cancelled" | "error";
+  id?: string;
+  model?: string;
+  total?: number;
+  done?: number;
+  current?: string | null;
+  error?: string;
+  results?: { id: string; question: string; groundTruthSql?: string; off?: AbArm; on?: AbArm; skipped?: string }[];
+  summary?: { off: AbSummaryArm; on: AbSummaryArm; skipped: number };
+}

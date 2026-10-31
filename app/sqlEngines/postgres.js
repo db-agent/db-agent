@@ -253,6 +253,58 @@ export class PostgresEngine {
     return schema;
   }
 
+  // Names, types, comments and declared keys only: no table is read. Used by `db-agent scan`.
+  // Same table naming as getSchema() (schema-qualified when several schemas are configured).
+  async getMetadata() {
+    const schemaFilter = this.allSchemas
+      ? "n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname NOT LIKE 'pg\\_%'"
+      : "n.nspname = ANY($1)";
+    const params = this.allSchemas ? [] : [this.schemaNames];
+    const { rows } = await this.pool.query(
+      `SELECT n.nspname AS table_schema, c.relname AS table_name, a.attname AS column_name,
+              format_type(a.atttypid, a.atttypmod) AS data_type,
+              col_description(c.oid, a.attnum) AS column_comment,
+              obj_description(c.oid, 'pg_class') AS table_comment,
+              c.reltuples::float8 AS row_estimate, c.relkind
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+       WHERE c.relkind IN ('r', 'v', 'm', 'p') AND ${schemaFilter}
+       ORDER BY n.nspname, c.relname, a.attnum`,
+      params
+    );
+    const keyName = (r) => (this.qualify ? `${r.table_schema}.${r.table_name}` : r.table_name);
+    const tables = {};
+    for (const r of rows) {
+      const name = keyName(r);
+      const t = (tables[name] ||= { kind: r.relkind === "v" || r.relkind === "m" ? "view" : "table", comment: r.table_comment || null, rowEstimate: r.row_estimate >= 0 ? Math.round(r.row_estimate) : null, columns: [], foreignKeys: [] });
+      t.columns.push({ name: r.column_name, type: r.data_type, comment: r.column_comment || null, primaryKey: false });
+    }
+    const constraints = await this.pool.query(
+      `SELECT tc.constraint_type, kcu.table_schema, kcu.table_name, kcu.column_name,
+              ccu.table_schema AS ref_schema, ccu.table_name AS ref_table, ccu.column_name AS ref_column
+       FROM information_schema.table_constraints tc
+       JOIN information_schema.key_column_usage kcu
+         ON kcu.constraint_name = tc.constraint_name AND kcu.table_schema = tc.table_schema
+       LEFT JOIN information_schema.constraint_column_usage ccu
+         ON tc.constraint_type = 'FOREIGN KEY' AND ccu.constraint_name = tc.constraint_name AND ccu.constraint_schema = tc.table_schema
+       WHERE tc.constraint_type IN ('PRIMARY KEY', 'FOREIGN KEY') AND ${schemaFilter.replaceAll("n.nspname", "tc.table_schema")}`,
+      params
+    );
+    for (const r of constraints.rows) {
+      const t = tables[keyName(r)];
+      if (!t) continue;
+      if (r.constraint_type === "PRIMARY KEY") {
+        const col = t.columns.find((c) => c.name === r.column_name);
+        if (col) col.primaryKey = true;
+      } else if (r.ref_table) {
+        const refName = this.qualify ? `${r.ref_schema}.${r.ref_table}` : r.ref_table;
+        t.foreignKeys.push({ column: r.column_name, refTable: refName, refColumn: r.ref_column });
+      }
+    }
+    return { tables };
+  }
+
   // Runs inside a transaction through a cursor so a runaway SELECT only ever
   // brings maxRows rows into memory (the database still plans/executes lazily).
   async runQuery(sql) {

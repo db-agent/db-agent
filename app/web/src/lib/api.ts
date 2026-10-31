@@ -1,4 +1,4 @@
-import type { AppConfig, BenchmarkCase, MemoryRecord, PipelineOutput, Schema } from "./types";
+import type { AbStatus, AppConfig, BenchmarkCase, Knowledge, MemoryRecord, OntologyState, PipelineOutput, ScanResult, Schema } from "./types";
 
 export async function fetchConfig(): Promise<AppConfig> {
   const res = await fetch("/api/config");
@@ -151,4 +151,44 @@ export async function deleteBenchmark(id: string): Promise<void> {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Request failed (${res.status})`);
   }
+}
+
+async function json<T>(res: Response): Promise<T> {
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((body as { error?: string }).error || `Request failed (${res.status})`);
+  return body as T;
+}
+
+export async function fetchOntology(): Promise<OntologyState> {
+  return json(await fetch("/api/ontology"));
+}
+
+export async function scanDatabase(): Promise<{ at: string; scan: ScanResult; merged: Knowledge }> {
+  return json(await fetch("/api/ontology/scan", { method: "POST" }));
+}
+
+export async function saveOntology(knowledge: Knowledge): Promise<{ ok: boolean; backup: string | null }> {
+  return json(
+    await fetch("/api/ontology", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(knowledge),
+    })
+  );
+}
+
+export async function fetchAbCases(): Promise<{ model: string; total: number; eligible: { id: string; question: string }[] }> {
+  return json(await fetch("/api/ab/cases"));
+}
+
+export async function startAbTest(): Promise<{ id: string; total: number }> {
+  return json(await fetch("/api/ab/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }));
+}
+
+export async function fetchAbStatus(): Promise<AbStatus> {
+  return json(await fetch("/api/ab/status"));
+}
+
+export async function cancelAbTest(): Promise<void> {
+  await fetch("/api/ab/cancel", { method: "POST" });
 }
