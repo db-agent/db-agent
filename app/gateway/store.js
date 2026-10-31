@@ -42,32 +42,57 @@ export function openStore(dbPath) {
     );
   `);
 
+  // Older stores lack the cost columns: add them in place.
+  const addColumn = (table, name, type) => {
+    if (!db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+  };
+  addColumn("requests", "model", "TEXT");
+  addColumn("requests", "input_tokens", "INTEGER");
+  addColumn("requests", "output_tokens", "INTEGER");
+  addColumn("requests", "llm_usd", "REAL");        // NULL: tokens were used but no price is configured
+  addColumn("requests", "warehouse_usd", "REAL");  // estimate; counted only when the query ran
+  addColumn("approvals", "warehouse_usd", "REAL");
+  addColumn("approvals", "kind", "TEXT"); // "budget" when held for a budget; otherwise a cost hold
+
+  const SPENT_COLUMN = { tokens: "COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0)", llm_usd: "COALESCE(llm_usd, 0)", warehouse_usd: "COALESCE(warehouse_usd, 0)" };
+  const SCOPE_COLUMN = { user: "user", team: "team", tool: "tool" };
+
   const insertRequest = db.prepare(`
     INSERT INTO requests (ts, channel, user, team, tool, mcp_tool, question, sql, status, reason, approval_id,
-                          est_bytes, est_rows, rows_returned, duration_ms)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+                          est_bytes, est_rows, rows_returned, duration_ms,
+                          model, input_tokens, output_tokens, llm_usd, warehouse_usd)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   const insertApproval = db.prepare(`
-    INSERT INTO approvals (id, created_at, expires_at, status, user, team, tool, mcp_tool, question, sql, reason)
-    VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`);
+    INSERT INTO approvals (id, created_at, expires_at, status, user, team, tool, mcp_tool, question, sql, reason, warehouse_usd, kind)
+    VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 
   return {
     logRequest(r) {
       insertRequest.run(
         new Date().toISOString(), r.channel || "mcp", r.user ?? null, r.team ?? null, r.tool ?? null,
         r.mcpTool ?? null, r.question ?? null, r.sql ?? null, r.status, r.reason ?? null, r.approvalId ?? null,
-        r.estBytes ?? null, r.estRows ?? null, r.rowsReturned ?? null, r.durationMs ?? null
+        r.estBytes ?? null, r.estRows ?? null, r.rowsReturned ?? null, r.durationMs ?? null,
+        r.model ?? null, r.inputTokens ?? null, r.outputTokens ?? null, r.llmUsd ?? null, r.warehouseUsd ?? null
       );
+    },
+    requestsSince(sinceIso) {
+      return db.prepare("SELECT * FROM requests WHERE ts >= ? ORDER BY id").all(sinceIso);
+    },
+    // Sum of one metric for one user, team or tool since a time (what the budgets compare against).
+    spent({ scope, value, metric, since }) {
+      const row = db.prepare(`SELECT COALESCE(SUM(${SPENT_COLUMN[metric]}), 0) AS total FROM requests WHERE ${SCOPE_COLUMN[scope]} = ? AND ts >= ?`).get(value, since);
+      return Number(row.total);
     },
     listRequests({ limit = 50 } = {}) {
       return db.prepare("SELECT * FROM requests ORDER BY id DESC LIMIT ?").all(limit);
     },
 
-    createApproval({ caller, mcpTool, question, sql, reason, ttlMinutes }) {
+    createApproval({ caller, mcpTool, question, sql, reason, ttlMinutes, warehouseUsd = null, kind = null }) {
       const id = "apr_" + crypto.randomBytes(5).toString("hex");
       const now = Date.now();
       insertApproval.run(
         id, new Date(now).toISOString(), new Date(now + ttlMinutes * 60_000).toISOString(),
-        caller.user, caller.team ?? null, caller.tool, mcpTool, question ?? null, sql, reason ?? null
+        caller.user, caller.team ?? null, caller.tool, mcpTool, question ?? null, sql, reason ?? null, warehouseUsd, kind
       );
       return id;
     },

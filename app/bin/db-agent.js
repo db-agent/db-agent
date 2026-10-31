@@ -3,6 +3,7 @@
 //
 //   db-agent mcp serve [--stdio | --http] [--port 3002] [--host 127.0.0.1]
 //   db-agent mcp setup [--client claude-desktop,vscode,claude-code] [--workspace] [--dry-run] [--no-check]
+//   db-agent report [--period day|week|month] [--out DIR] [--no-write]
 //   db-agent approvals [--all]       list held queries waiting for a decision
 //   db-agent approve <id>            let the caller run the held query once
 //   db-agent deny <id>
@@ -39,6 +40,7 @@ function usage() {
     "Usage:\n" +
       "  db-agent mcp serve [--stdio | --http] [--port 3002] [--host 127.0.0.1]\n" +
       "  db-agent mcp setup [--client claude-desktop,vscode,claude-code] [--workspace] [--dry-run] [--no-check]\n" +
+      "  db-agent report [--period day|week|month] [--out DIR] [--no-write]\n" +
       "  db-agent approvals [--all]\n" +
       "  db-agent approve <id>\n" +
       "  db-agent deny <id>\n" +
@@ -56,6 +58,31 @@ function table(rows, columns) {
 
 async function main() {
   const [cmd, sub] = args;
+
+  if (cmd === "report") {
+    const { openStore } = await import("../gateway/store.js");
+    const { buildReport, renderMarkdown, renderCsv, REPORT_PERIODS } = await import("../gateway/report.js");
+    const period = option("period", "week");
+    if (!REPORT_PERIODS[period]) fail(`--period must be one of ${Object.keys(REPORT_PERIODS).join(", ")}`);
+    const store = openStore(dbPath);
+    try {
+      const report = buildReport(store, { period });
+      const md = renderMarkdown(report);
+      console.log(md);
+      if (!flag("no-write")) {
+        const fs = await import("node:fs");
+        const dir = path.resolve(option("out", "db-agent-reports"));
+        fs.mkdirSync(dir, { recursive: true });
+        const stamp = new Date().toISOString().slice(0, 10);
+        fs.writeFileSync(path.join(dir, `report-${period}-${stamp}.md`), md + "\n");
+        fs.writeFileSync(path.join(dir, `report-${period}-${stamp}.csv`), renderCsv(report));
+        console.error(`\nWrote ${dir}/report-${period}-${stamp}.md and .csv`);
+      }
+    } finally {
+      store.close();
+    }
+    return;
+  }
 
   if (cmd === "approvals" || cmd === "approve" || cmd === "deny" || cmd === "log") {
     const { openStore } = await import("../gateway/store.js");

@@ -61,6 +61,16 @@ export interface QueryAnalysis {
   error?: string | null;
 }
 
+export interface UsageEstimate {
+  model?: string;
+  calls?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  missing?: number;
+  llmUsdEstimate?: number | null;
+  warehouseUsdEstimate?: number | null;
+}
+
 export type PipelineStatus = "awaiting_approval" | "complete" | "rejected";
 
 export interface PipelineOutput {
@@ -76,6 +86,7 @@ export interface PipelineOutput {
   analysis?: QueryAnalysis | null;
   status?: PipelineStatus | null;
   approvalReason?: string | null;
+  usage?: UsageEstimate | null;
 }
 
 export interface SqlEngineInfo {

@@ -8,6 +8,7 @@ import os from "node:os";
 import { allowedTables, authenticate } from "./config.js";
 import { makeGuard } from "./tablePolicy.js";
 import { validateSql } from "../sqlSafety.js";
+import { estimateCosts, evaluateBudgets } from "./costs.js";
 
 const bigintSafe = (_k, v) => (typeof v === "bigint" ? v.toString() : v);
 
@@ -26,8 +27,48 @@ function costSummary(analysis) {
   };
 }
 
+const METRIC_LABEL = { tokens: "tokens", llm_usd: "USD of LLM cost (estimate)", warehouse_usd: "USD of warehouse cost (estimate)" };
+const fmtAmount = (metric, n) => (metric === "tokens" ? String(Math.round(n)) : n.toFixed(4));
+const ACTION_RANK = { warn: 1, approval: 2, block: 3 };
+
 export function createGateway({ config, store, pipeline, approvalTtlMinutes = 60 }) {
   const result = (isError, text, log = {}) => ({ isError, text, log });
+  const engineType = () => pipeline.describeEngine?.().type;
+
+  // Budgets are checked against what was already logged: the request that crosses a limit completes,
+  // the next one gets the configured action. Day and month are UTC.
+  function checkBudgets(caller, mcpTool) {
+    const rows = evaluateBudgets({
+      budgets: config.budgets || [], caller, mcpTool,
+      spentFor: (q) => store.spent(q),
+    });
+    const hit = rows.filter((b) => b.exceeded).sort((a, b) => ACTION_RANK[b.action] - ACTION_RANK[a.action]);
+    const describe = (b) =>
+      `${b.scope} "${b.value}" has used ${fmtAmount(b.metric, b.spent)} of ${fmtAmount(b.metric, b.limit)} ${METRIC_LABEL[b.metric]} this ${b.period} (UTC).`;
+    return { rows, action: hit[0]?.action || null, message: hit[0] ? describe(hit[0]) : null, warnings: hit.filter((b) => b.action === "warn").map(describe) };
+  }
+
+  // What this answer cost (estimates) and what is left of each budget after it.
+  function usageBlock(out, costs, budgetRows) {
+    const tokens = (out.usage?.inputTokens || 0) + (out.usage?.outputTokens || 0);
+    const spentNow = { tokens, llm_usd: costs.llmUsd || 0, warehouse_usd: costs.warehouseUsd || 0 };
+    return {
+      note: "All costs are estimates, not billed amounts.",
+      tokens,
+      model: out.usage?.calls ? out.usage.model : undefined,
+      tokensReported: out.usage?.missing ? false : undefined,
+      llmUsdEstimate: costs.llmUsd,
+      warehouseUsdEstimate: costs.warehouseUsd,
+      budgets: budgetRows.length
+        ? budgetRows.map((b) => ({
+            budget: `${b.scope}:${b.value} ${b.metric}/${b.period}`,
+            limit: b.limit,
+            remaining: Math.max(0, Math.round((b.limit - b.spent - spentNow[b.metric]) * 1e6) / 1e6),
+            action: b.action,
+          }))
+        : undefined,
+    };
+  }
 
   async function visibleTables(caller) {
     const schema = await pipeline.getSchema();
@@ -36,7 +77,7 @@ export function createGateway({ config, store, pipeline, approvalTtlMinutes = 60
     return { schema, all, allowed: (t) => allowed.has(String(t).toLowerCase()) };
   }
 
-  function formatRows(out, extra = {}) {
+  function formatRows(out, extra = {}, usage = null) {
     const rows = out.rows || [];
     const shown = rows.slice(0, config.maxRows);
     const body = {
@@ -47,13 +88,29 @@ export function createGateway({ config, store, pipeline, approvalTtlMinutes = 60
       columns: out.columns,
       rows: shown,
       cost: costSummary(out.analysis),
+      usage: usage || undefined,
       ...extra,
     };
     return `Query returned ${rows.length} row(s).\n` + JSON.stringify(body, bigintSafe, 2);
   }
 
   // Runs one SQL string or one question through the pipeline and turns the outcome into a tool result.
-  async function runGuarded(caller, mcpTool, { question, sql }) {
+  // skipBudget: this request was already approved past a budget, so only the budget check is skipped.
+  async function runGuarded(caller, mcpTool, { question, sql, skipBudget = false, approvalId = null }) {
+    const budget = skipBudget ? { rows: [], action: null, warnings: [] } : checkBudgets(caller, mcpTool);
+    if (budget.action === "block") {
+      return result(true, `Blocked: budget reached. ${budget.message}`, { status: "blocked", reason: budget.message, sql });
+    }
+    if (budget.action === "approval") {
+      const id = store.createApproval({ caller, mcpTool, question, sql: sql || "", reason: budget.message, ttlMinutes: approvalTtlMinutes, kind: "budget" });
+      return result(
+        false,
+        `Needs approval: budget reached. ${budget.message} Approval id: ${id}. An approver runs "db-agent approve ${id}", ` +
+          `then call ${mcpTool} again with approval_id "${id}".`,
+        { status: "needs_approval", reason: budget.message, sql, approvalId: id }
+      );
+    }
+
     const { all, allowed } = await visibleTables(caller);
     const guardSql = makeGuard(all.filter((t) => !allowed(t)));
     const out = await pipeline.runPipeline(question || `! ${sql}`, {
@@ -62,25 +119,37 @@ export function createGateway({ config, store, pipeline, approvalTtlMinutes = 60
       guardSql,
     });
     const est = { estBytes: out.analysis?.sizeInBytes, estRows: out.analysis?.rowCount };
+    const costs = estimateCosts({ usage: out.usage, analysis: out.analysis, engineType: engineType(), pricing: config.pricing });
+    // Tokens are spent whatever happens next; warehouse cost only counts once the query has run.
+    const spend = (ran) => ({
+      model: out.usage?.calls ? out.usage.model : undefined,
+      inputTokens: out.usage?.inputTokens, outputTokens: out.usage?.outputTokens,
+      llmUsd: costs.llmUsd, warehouseUsd: ran ? costs.warehouseUsd : 0,
+      approvalId: approvalId || undefined,
+    });
+    const warn = budget.warnings.length ? `Budget warning: ${budget.warnings.join(" ")}\n` : "";
 
     if (out.validation && out.validation.isSafe === false) {
       const reason = plainReason(out.validation.reason);
-      return result(true, `Blocked: ${reason}`, { status: "blocked", reason, sql: out.sql });
+      return result(true, `Blocked: ${reason}`, { status: "blocked", reason, sql: out.sql, ...spend(false) });
     }
-    if (out.error) return result(true, `Error: ${out.error}`, { status: "error", reason: out.error, sql: out.sql });
+    if (out.error) return result(true, `Error: ${out.error}`, { status: "error", reason: out.error, sql: out.sql, ...spend(false) });
     if (out.status === "awaiting_approval") {
-      const approvalId = store.createApproval({
+      const id = store.createApproval({
         caller, mcpTool, question, sql: out.sql, reason: out.approvalReason, ttlMinutes: approvalTtlMinutes,
+        warehouseUsd: costs.warehouseUsd,
       });
       return result(
         false,
-        `Needs approval: ${out.approvalReason} Approval id: ${approvalId}. An approver runs "db-agent approve ${approvalId}", ` +
-          `then call ${mcpTool} again with approval_id "${approvalId}". SQL held: ${out.sql}`,
-        { status: "needs_approval", reason: out.approvalReason, sql: out.sql, approvalId, ...est }
+        `${warn}Needs approval: ${out.approvalReason} Approval id: ${id}. An approver runs "db-agent approve ${id}", ` +
+          `then call ${mcpTool} again with approval_id "${id}". SQL held: ${out.sql}`,
+        { status: "needs_approval", reason: out.approvalReason, sql: out.sql, ...est, ...spend(false), approvalId: id }
       );
     }
-    if (!out.rows) return result(true, "Error: the query returned no result.", { status: "error", sql: out.sql });
-    return result(false, formatRows(out), { status: "ok", sql: out.sql, rowsReturned: out.rows.length, ...est });
+    if (!out.rows) return result(true, "Error: the query returned no result.", { status: "error", sql: out.sql, ...spend(false) });
+    return result(false, warn + formatRows(out, {}, usageBlock(out, costs, budget.rows)), {
+      status: "ok", sql: out.sql, rowsReturned: out.rows.length, ...est, ...spend(true),
+    });
   }
 
   // Retry with an approval id: run the SQL that was held, exactly as stored.
@@ -101,6 +170,15 @@ export function createGateway({ config, store, pipeline, approvalTtlMinutes = 60
     if (a.status === "denied") return deny(`denied by ${a.decided_by}.`);
     if (a.consumed_at) return deny("this approval was already used. Ask again for a new one.");
 
+    // Approved past a budget: run it through the normal pipeline (safety, table policy and cost guard
+    // still apply) with only the budget check skipped. An ask holds the question, not SQL.
+    if (a.kind === "budget") {
+      if (!store.consumeApproval(approvalId)) return deny("this approval was just used by another request.");
+      const r = await runGuarded(caller, mcpTool, { question: a.question || undefined, sql: a.sql || undefined, skipBudget: true, approvalId });
+      if (a.question) r.log.question = a.question;
+      return r;
+    }
+
     // Policy may have changed since the SQL was held, and the safety check is cheap: run both again.
     const safety = validateSql(a.sql);
     if (!safety.isSafe) return result(true, `Blocked: ${plainReason(safety.reason)}`, { status: "blocked", reason: safety.reason, sql: a.sql, approvalId });
@@ -113,8 +191,9 @@ export function createGateway({ config, store, pipeline, approvalTtlMinutes = 60
     if (out.error || !out.rows) {
       return result(true, `Error: ${out.error || "no result"}`, { status: "error", reason: out.error, sql: a.sql, approvalId });
     }
-    return result(false, formatRows(out, { approvedBy: a.decided_by }), {
-      status: "ok", sql: a.sql, approvalId, rowsReturned: out.rows.length,
+    const costs = { llmUsd: 0, warehouseUsd: a.warehouse_usd };
+    return result(false, formatRows(out, { approvedBy: a.decided_by }, usageBlock(out, costs, [])), {
+      status: "ok", sql: a.sql, approvalId, rowsReturned: out.rows.length, warehouseUsd: a.warehouse_usd,
     });
   }
 
