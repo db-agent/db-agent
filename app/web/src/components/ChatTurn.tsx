@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { exportCsv, sendFeedback } from "@/lib/api";
-import type { QueryAnalysis, Turn } from "@/lib/types";
+import type { QueryAnalysis, Turn, UsageEstimate } from "@/lib/types";
 import { AlertTriangle, Check, CheckCircle2, Download, Loader2, ThumbsDown, ThumbsUp, Wrench, X, XCircle } from "lucide-react";
 
 function formatBytes(n: number | null | undefined): string | null {
@@ -67,6 +67,21 @@ function CostPanel({ cost }: { cost: NonNullable<QueryAnalysis["cost"]> }) {
         </p>
       ))}
     </div>
+  );
+}
+
+// Tokens and cost for this answer. Always labelled as estimates: prices come from gateway.json
+// and warehouse cost from the optimizer, not from a bill.
+function UsageLine({ usage }: { usage?: UsageEstimate | null }) {
+  if (!usage || !usage.calls) return null;
+  const tokens = (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
+  const usd = (n?: number | null) => (n == null ? "price not set" : `$${n.toFixed(4)}`);
+  return (
+    <p className="text-xs text-muted-foreground">
+      {usage.missing ? "Token count not reported by the model server" : `${tokens.toLocaleString()} tokens`}
+      {" · "}LLM {usd(usage.llmUsdEstimate)} (est.)
+      {usage.warehouseUsdEstimate ? ` · warehouse ${usd(usage.warehouseUsdEstimate)} (est.)` : ""}
+    </p>
   );
 }
 
@@ -365,6 +380,8 @@ export function ChatTurn({
                   {output.repairAttempts !== 1 ? "s" : ""}
                 </div>
               )}
+
+              <UsageLine usage={output.usage} />
 
               <Tabs defaultValue={defaultTab} key={`${turn.id}-${defaultTab}`}>
                 <TabsList>

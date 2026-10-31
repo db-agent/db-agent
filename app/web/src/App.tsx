@@ -6,7 +6,7 @@ import { Suggestions } from "@/components/Suggestions";
 import { Button } from "@/components/ui/button";
 import { ask, executeSql, fetchConfig, fetchSchema } from "@/lib/api";
 import type { AppConfig, Conversation, Schema, Turn } from "@/lib/types";
-import { ArrowUp, FlaskConical, Lightbulb, X } from "lucide-react";
+import { ArrowUp, BarChart3, FlaskConical, Lightbulb, X } from "lucide-react";
 
 const CONVERSATIONS_KEY = "dbagent.conversations";
 
@@ -274,6 +274,16 @@ useEffect(() => {
           >
             <FlaskConical className="size-3.5 text-[var(--brand-azure)]" />
             Benchmarks
+          </Button>
+          {/* Server-rendered spend report (estimates), opens in a new tab. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => window.open("/api/report?format=html&period=week", "_blank", "noopener")}
+            className="gap-1.5 text-xs text-muted-foreground"
+          >
+            <BarChart3 className="size-3.5 text-[var(--brand-orange)]" />
+            Report
           </Button>
         </div>
         <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col overflow-y-auto px-6 pt-2">

@@ -208,3 +208,4 @@ claude_desktop_config.json
 # MCP gateway: caller API keys
 app/gateway.json
 app/gateway.json.bak-*
+app/data/gateway-demo.json
