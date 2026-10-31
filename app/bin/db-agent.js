@@ -8,6 +8,10 @@
 //   db-agent approve <id>            let the caller run the held query once
 //   db-agent deny <id>
 //   db-agent log [--limit 50]        recent gateway requests, newest first
+//   db-agent audit export [--from D] [--to D] [--format csv|jsonl] [--user U] [--team T] [--tool X]
+//                         [--table NAME] [--decision ok|blocked|needs_approval|error|rejected_auth]
+//                         [--redact] [--out FILE]
+//   db-agent audit purge [--days N] [--dry-run]    delete records older than N days (default: retention setting)
 //
 // Config: GATEWAY_CONFIG (default app/gateway.json). Shared store: GATEWAY_DB (default app/data/gateway.db).
 // For stdio the caller's key is DB_AGENT_API_KEY; for HTTP it is the Authorization: Bearer header.
@@ -44,7 +48,9 @@ function usage() {
       "  db-agent approvals [--all]\n" +
       "  db-agent approve <id>\n" +
       "  db-agent deny <id>\n" +
-      "  db-agent log [--limit 50]"
+      "  db-agent log [--limit 50]\n" +
+      "  db-agent audit export [--from D] [--to D] [--format csv|jsonl] [--user U] [--team T] [--tool X] [--table NAME] [--decision S] [--redact] [--out FILE]\n" +
+      "  db-agent audit purge [--days N] [--dry-run]"
   );
   process.exit(2);
 }
@@ -77,6 +83,51 @@ async function main() {
         fs.writeFileSync(path.join(dir, `report-${period}-${stamp}.md`), md + "\n");
         fs.writeFileSync(path.join(dir, `report-${period}-${stamp}.csv`), renderCsv(report));
         console.error(`\nWrote ${dir}/report-${period}-${stamp}.md and .csv`);
+      }
+    } finally {
+      store.close();
+    }
+    return;
+  }
+
+  if (cmd === "audit") {
+    if (sub !== "export" && sub !== "purge") usage();
+    const { openStore } = await import("../gateway/store.js");
+    const audit = await import("../gateway/audit.js");
+    const store = openStore(dbPath);
+    try {
+      if (sub === "export") {
+        const format = option("format", "csv");
+        if (format !== "csv" && format !== "jsonl") fail("--format must be csv or jsonl");
+        let records;
+        try {
+          records = audit.exportAudit(store, {
+            from: option("from"), to: option("to"), user: option("user"), team: option("team"), tool: option("tool"),
+            table: option("table"), decision: option("decision"), redact: flag("redact"),
+          });
+        } catch (exc) {
+          fail(exc.message);
+        }
+        const text = format === "csv" ? audit.renderAuditCsv(records) : audit.renderJsonl(records);
+        const outFile = option("out");
+        if (outFile) {
+          (await import("node:fs")).writeFileSync(outFile, text);
+          console.error(`Wrote ${records.length} record(s) to ${outFile}`);
+        } else {
+          process.stdout.write(text);
+          console.error(`${records.length} record(s)`);
+        }
+      } else {
+        const days = option("days") !== undefined ? Number(option("days")) : audit.retentionDays(configPath);
+        if (!(days > 0)) fail("No retention set. Pass --days N, set AUDIT_RETENTION_DAYS, or add {\"retention\": {\"days\": N}} to the gateway config.");
+        const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+        if (flag("dry-run")) {
+          const n = store.auditRows({ to: cutoff }).length;
+          console.log(`Would remove ${n} request(s) older than ${days} day(s) (before ${cutoff}).`);
+        } else {
+          const r = audit.purgeOlderThan(store, days);
+          console.log(`Removed ${r.requests} request(s) and ${r.approvals} approval(s) older than ${days} day(s).`);
+        }
       }
     } finally {
       store.close();
@@ -163,6 +214,8 @@ async function main() {
       fail(exc.message);
     }
     const store = openStore(dbPath);
+    const { retentionDays, startRetention } = await import("../gateway/audit.js");
+    startRetention(store, retentionDays(configPath), console.error);
     const gateway = createGateway({ config, store, pipeline, approvalTtlMinutes });
 
     if (stdio) {
