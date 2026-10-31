@@ -36,7 +36,11 @@ const isIdent = (t) => t != null && /^[A-Za-z_]/.test(t);
 export function sqlFitsSchema(sql, schema) {
   const known = new Map(); // lowercase table -> Set of lowercase columns, or null (unknown columns, e.g. a CTE)
   for (const [table, cols] of Object.entries(schema || {})) {
-    known.set(table.toLowerCase(), new Set(cols.map((c) => String(c.name).toLowerCase())));
+    // Schema-qualified keys ("sales.customer") match by their last part, as the SQL check below does.
+    const name = table.toLowerCase().split(".").pop();
+    const set = known.get(name) || new Set();
+    for (const c of cols) set.add(String(c.name).toLowerCase());
+    known.set(name, set);
   }
   const toks = tokenize(sql);
   if (toks.length === 0) return false;
