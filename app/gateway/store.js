@@ -83,6 +83,34 @@ export function openStore(dbPath) {
       const row = db.prepare(`SELECT COALESCE(SUM(${SPENT_COLUMN[metric]}), 0) AS total FROM requests WHERE ${SCOPE_COLUMN[scope]} = ? AND ts >= ?`).get(value, since);
       return Number(row.total);
     },
+    // Audit rows: each request with the approval it used or created (who decided, and when).
+    auditRows({ from = null, to = null, user = null, team = null, tool = null, status = null } = {}) {
+      const where = [], params = [];
+      if (from) { where.push("r.ts >= ?"); params.push(from); }
+      if (to) { where.push("r.ts < ?"); params.push(to); }
+      for (const [col, v] of [["user", user], ["team", team], ["tool", tool], ["status", status]]) {
+        if (v) { where.push(`r.${col} = ?`); params.push(v); }
+      }
+      return db.prepare(`
+        SELECT r.*, a.status AS approval_status, a.created_at AS approval_created_at,
+               a.decided_by AS approved_by, a.decided_at AS approved_at
+        FROM requests r LEFT JOIN approvals a ON a.id = r.approval_id
+        ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY r.id`).all(...params);
+    },
+    // Delete requests and finished approvals older than a time. A pending approval that has not
+    // expired yet is kept. Returns what was removed.
+    purgeBefore(iso) {
+      db.exec("BEGIN");
+      try {
+        const requests = db.prepare("DELETE FROM requests WHERE ts < ?").run(iso).changes;
+        const approvals = db.prepare("DELETE FROM approvals WHERE created_at < ? AND (status != 'pending' OR expires_at < ?)").run(iso, iso).changes;
+        db.exec("COMMIT");
+        return { requests: Number(requests), approvals: Number(approvals) };
+      } catch (exc) {
+        db.exec("ROLLBACK");
+        throw exc;
+      }
+    },
     listRequests({ limit = 50 } = {}) {
       return db.prepare("SELECT * FROM requests ORDER BY id DESC LIMIT ?").all(limit);
     },

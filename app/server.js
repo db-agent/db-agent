@@ -23,6 +23,7 @@ import { selectTables } from "./tableSelect.js";
 import { benchmarkStore } from "./benchmarks.js";
 import { describeError, log, warn } from "./logger.js";
 import { openStore } from "./gateway/store.js";
+import { retentionDays, startRetention } from "./gateway/audit.js";
 import { estimateCosts, loadPricing } from "./gateway/costs.js";
 import { buildReport, renderHtml, REPORT_PERIODS } from "./gateway/report.js";
 
@@ -130,6 +131,9 @@ try {
   warn(`[requests] request log disabled (${GATEWAY_DB}): ${describeError(exc)}`);
 }
 const pricing = loadPricing(GATEWAY_CONFIG);
+if (requestStore && process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  startRetention(requestStore, retentionDays(GATEWAY_CONFIG), warn);
+}
 
 function costsFor(out) {
   return estimateCosts({ usage: out.usage, analysis: out.analysis, engineType: sqlEngine.describe().type, pricing });
