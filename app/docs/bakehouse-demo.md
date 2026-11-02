@@ -83,6 +83,26 @@ To redo the demo from the start: `docker compose -f docker-compose.bakehouse.yml
 6. **Shared.** The ontology is one file used by every caller, the web app, the API and MCP clients such as Claude. **SKILL.md**
    exports it for agents that write their own SQL.
 
+## Prompt bank (checked against both instances)
+
+These give a different SQL statement and a different answer with and without the ontology (wrong against right).
+Use the exact wording: a small rewording can change the SQL.
+
+| Type this | Without | With |
+|---|---|---|
+| How many suppliers are approved? | `'Yes'`, 0 | `'Y'`, 27 |
+| How many transactions were paid with visa? | `'Visa'`, 0 | `'visa'`, 1,332,880 |
+| What is the revenue from female customers? | `'F'`, null | `'female'`, 35,881,278 |
+| How many male customers are there? | `'Male'`, 0 | `'male'`, 149 |
+| How many customers live in the United States? | `'United States'`, 0 | `'USA'`, 99 |
+| How many franchises are in the United States? | `'United States'`, 0 | `'US'`, 16 |
+| How many American Express payments were there? | `'American Express'`, 0 | `'amex'`, 1,332,466 |
+
+Ask the two United States prompts back to back: customers say `USA`, franchises say `US`. Only the first three are
+rehearsed as a live edit on 3001. Prompts that make no difference (good if someone asks whether the ontology changes
+everything): how many XXL franchises, the average sale value, the best-selling product, revenue per payment method.
+`node scripts/bakehouse/demo-prompts.js` re-runs the whole check against both instances.
+
 ## If something goes wrong
 
 | Symptom | Fix |

@@ -8,6 +8,7 @@ Most conversations about text-to-SQL accuracy are about the model: a bigger one,
 
 - On AdventureWorks (68 tables, 5 schemas), a 7B model answered **7 of 17** questions correctly from the schema alone. The database's own comments moved that to **8**. A hand-written ontology moved it to **14**.
 - On a Databricks copy of the Bakehouse sample dataset, which has **no comments at all**, the same model went from **14 of 17 to 17 of 17**. The three it got wrong were not hard SQL. They were value conventions the schema does not contain: `'Y'` instead of `'Yes'`, `visa` instead of `Visa`, `female` instead of `F`.
+- In a separate check of 16 hand-picked prompts, 7 gave a different, wrong-versus-right answer with the ontology and 9 made no difference.
 - In the same tests, swapping the model changed the score by about 2 questions. Adding the ontology changed it by 3 to 7.
 - My first Bakehouse run showed **no gain** (10 correct without, 9 with). The ontology was not reaching the model. Writing it was not enough: it also has to be found.
 - The ontology costs tokens: about 520 extra input tokens per question in my run.
@@ -86,6 +87,24 @@ After the ontology was saved, the same scan reads 72 out of 100 and 78% of colum
 
 ![Scan of the instance with the prepared ontology: readiness 72 out of 100, 78% described, database alone 0%](images/scan-with.png)
 
+### Seven more prompts
+
+The accuracy test has a fixed set of questions. To see how widely this reaches, I then typed 16 prompts into two running instances, one without the ontology and one with it, and compared the SQL and the answer. Seven of them came out wrong without the ontology and right with it:
+
+| Prompt | Without the ontology | With the ontology |
+|---|---|---|
+| How many suppliers are approved? | `approved = 'Yes'` returns 0 | `approved = 'Y'` returns 27 |
+| How many transactions were paid with visa? | `paymentMethod = 'Visa'` returns 0 | `paymentMethod = 'visa'` returns 1,332,880 |
+| What is the revenue from female customers? | `gender = 'F'` returns null | `gender = 'female'` returns 35,881,278 |
+| How many male customers are there? | `gender = 'Male'` returns 0 | `gender = 'male'` returns 149 |
+| How many customers live in the United States? | `country = 'United States'` returns 0 | `country = 'USA'` returns 99 |
+| How many franchises are in the United States? | `country = 'United States'` returns 0 | `country = 'US'` returns 16 |
+| How many American Express payments were there? | `paymentMethod = 'American Express'` returns 0 | `paymentMethod = 'amex'` returns 1,332,466 |
+
+The two "United States" rows are the instructive pair. Customers write the country `USA`, franchises write it `US`, in the same database. No model can guess both. A person can say so in one line, and once it is written down the model gets both right.
+
+Nine prompts made no difference to the answer: how many XXL franchises, the average sale value, the best-selling product, revenue per payment method, which suppliers provide cacao, how many suppliers are in North America, how many reviews there are, the largest franchise, and customer emails in Japan. Where the SQL differed it was cosmetic (`LIKE '%cacao%'` against `= 'cacao'`, an extra column). An ontology does not change everything. It matters where the data has conventions that the schema does not show, and in this dataset that was most of the text columns with a fixed set of values.
+
 You can also do this live, in a minute. On an instance with no ontology I typed three one-line notes (the `approved`, `paymentMethod` and `gender` lines in the file above) and saved. All three answers flipped to correct on the next question.
 
 ## The twist: my first run showed nothing
@@ -131,6 +150,7 @@ I would rather you read these than find them.
 - **I fixed the scoring between runs 1 and 2.** One ground-truth query returned an extra revenue column for a question that only asked for names, and I let answers carry extra columns (a model that answers "which product" with the product and its total is still right). Both changes helped the runs without the ontology as well as the ones with it.
 - **I changed two questions after seeing results.** In run 4, one question asked how many franchises have a supplier in the suppliers table. The no-ontology run passed it by coincidence (it counted suppliers, which is also 27) and the ontology run failed it. I judged it a poor test and replaced it. If I had kept it, the final score would have been 14 against 16. I also reworded a month question whose two valid answers (a date or a number) both failed against one ground truth.
 - **I relaxed the cost guard.** db-agent holds expensive queries for approval. Databricks estimated 4,000,000 rows for a `GROUP BY` that returns 6, so with default limits even "revenue per product" waited for approval and the test counted it as not passed. I raised the limits for these runs. That was a fix to the test, and it also shows the estimate was wrong for aggregates on this engine.
+- **The 16 prompts were picked after I read the ontology.** I chose prompts that touch the conventions it describes and added a few that should not change. The 7 out of 16 shows where the ontology matters, not how often it matters on a typical set of questions.
 - **A scan cannot write the ontology for you.** It drafts what the database already says and lists what only a person can answer. On Bakehouse that is nothing and 13 questions. The value is in the human part.
 
 ## What I would do on Monday

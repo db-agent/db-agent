@@ -272,6 +272,9 @@ They were value conventions the schema does not contain:
 <code>&#39;Y&#39;</code> instead of <code>&#39;Yes&#39;</code>, <code>visa</code>
 instead of <code>Visa</code>, <code>female</code> instead of
 <code>F</code>.</li>
+<li>In a separate check of 16 hand-picked prompts, 7 gave a different,
+wrong-versus-right answer with the ontology and 9 made no
+difference.</li>
 <li>In the same tests, swapping the model changed the score by about 2
 questions. Adding the ontology changed it by 3 to 7.</li>
 <li>My first Bakehouse run showed <strong>no gain</strong> (10 correct
@@ -433,6 +436,76 @@ the data, or a person who knows it, says which strings.</p>
 ontology: readiness 72 out of 100, 78% described, database alone
 0%</figcaption>
 </figure>
+<h3 id="seven-more-prompts">Seven more prompts</h3>
+<p>The accuracy test has a fixed set of questions. To see how widely
+this reaches, I then typed 16 prompts into two running instances, one
+without the ontology and one with it, and compared the SQL and the
+answer. Seven of them came out wrong without the ontology and right with
+it:</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Prompt</th>
+<th>Without the ontology</th>
+<th>With the ontology</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>How many suppliers are approved?</td>
+<td><code>approved = &#39;Yes&#39;</code> returns 0</td>
+<td><code>approved = &#39;Y&#39;</code> returns 27</td>
+</tr>
+<tr>
+<td>How many transactions were paid with visa?</td>
+<td><code>paymentMethod = &#39;Visa&#39;</code> returns 0</td>
+<td><code>paymentMethod = &#39;visa&#39;</code> returns 1,332,880</td>
+</tr>
+<tr>
+<td>What is the revenue from female customers?</td>
+<td><code>gender = &#39;F&#39;</code> returns null</td>
+<td><code>gender = &#39;female&#39;</code> returns 35,881,278</td>
+</tr>
+<tr>
+<td>How many male customers are there?</td>
+<td><code>gender = &#39;Male&#39;</code> returns 0</td>
+<td><code>gender = &#39;male&#39;</code> returns 149</td>
+</tr>
+<tr>
+<td>How many customers live in the United States?</td>
+<td><code>country = &#39;United States&#39;</code> returns 0</td>
+<td><code>country = &#39;USA&#39;</code> returns 99</td>
+</tr>
+<tr>
+<td>How many franchises are in the United States?</td>
+<td><code>country = &#39;United States&#39;</code> returns 0</td>
+<td><code>country = &#39;US&#39;</code> returns 16</td>
+</tr>
+<tr>
+<td>How many American Express payments were there?</td>
+<td><code>paymentMethod = &#39;American Express&#39;</code> returns 0</td>
+<td><code>paymentMethod = &#39;amex&#39;</code> returns 1,332,466</td>
+</tr>
+</tbody>
+</table>
+<p>The two “United States” rows are the instructive pair. Customers
+write the country <code>USA</code>, franchises write it <code>US</code>,
+in the same database. No model can guess both. A person can say so in
+one line, and once it is written down the model gets both right.</p>
+<p>Nine prompts made no difference to the answer: how many XXL
+franchises, the average sale value, the best-selling product, revenue
+per payment method, which suppliers provide cacao, how many suppliers
+are in North America, how many reviews there are, the largest franchise,
+and customer emails in Japan. Where the SQL differed it was cosmetic
+(<code>LIKE &#39;%cacao%&#39;</code> against <code>= &#39;cacao&#39;</code>, an extra
+column). An ontology does not change everything. It matters where the
+data has conventions that the schema does not show, and in this dataset
+that was most of the text columns with a fixed set of values.</p>
 <p>You can also do this live, in a minute. On an instance with no
 ontology I typed three one-line notes (the <code>approved</code>,
 <code>paymentMethod</code> and <code>gender</code> lines in the file
@@ -566,6 +639,11 @@ queries for approval. Databricks estimated 4,000,000 rows for a
 passed. I raised the limits for these runs. That was a fix to the test,
 and it also shows the estimate was wrong for aggregates on this
 engine.</li>
+<li><strong>The 16 prompts were picked after I read the
+ontology.</strong> I chose prompts that touch the conventions it
+describes and added a few that should not change. The 7 out of 16 shows
+where the ontology matters, not how often it matters on a typical set of
+questions.</li>
 <li><strong>A scan cannot write the ontology for you.</strong> It drafts
 what the database already says and lists what only a person can answer.
 On Bakehouse that is nothing and 13 questions. The value is in the human

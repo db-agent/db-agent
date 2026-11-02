@@ -7,6 +7,8 @@ With the ontology: 17 of 17.
 
 The three misses were not hard SQL. The model wrote valid queries that returned 0 or null: WHERE approved = 'Yes' (the value is 'Y'), paymentMethod = 'Visa' (it is 'visa'), gender = 'F' (it is 'female'). The schema says "string". It does not say which strings.
 
+I then tried 16 prompts by hand on two running instances. Seven gave a wrong answer without the ontology and a right one with it, for example 'How many customers live in the United States?' (country = 'United States' returns 0; the data says 'USA', and franchises in the same database say 'US'). Nine made no difference.
+
 On AdventureWorks the same pattern: 7 of 17 from the schema, 8 with the database's own comments, 14 with a hand-written ontology. Swapping models moved the score by about 2 questions.
 
 Two things I did not expect:
