@@ -1,7 +1,7 @@
 {
   "name": "db-agent-node",
   "version": "0.1.0",
-  "description": "DB Agent — Node.js/Express prototype of the same text-to-SQL agent as the Streamlit app, for UI comparison.",
+  "description": "DB Agent — text-to-SQL agent with a React UI, cost checks, an ontology (knowledge file) and an MCP gateway.",
   "type": "module",
   "bin": {
     "db-agent": "bin/db-agent.js"

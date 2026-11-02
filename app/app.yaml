@@ -1,5 +1,4 @@
-# Databricks Apps manifest — deploys the Node.js prototype as its own app,
-# separate from the root Streamlit app (db-agent).
+# Databricks Apps manifest — deploys the Node.js app as its own Databricks App.
 #
 # Deploy from this directory:
 #   databricks apps create db-agent-node --description "Node.js/React prototype of DB Agent"
