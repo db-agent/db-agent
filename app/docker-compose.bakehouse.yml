@@ -11,7 +11,7 @@
 # DEMO_BAKEHOUSE_CATALOG and DEMO_BAKEHOUSE_SCHEMA (samples / bakehouse works too: read-only, 3,333 transactions).
 #
 # Model: Ollama on the host by default (pull qwen2.5-coder:7b first). For an OpenAI-compatible endpoint:
-#   DEMO_LLM_BASE_URL=... DEMO_LLM_API_KEY=... DEMO_LLM_MODEL=...
+#   DEMO_LLM_BASE_URL=... DEMO_LLM_API_KEY=... DEMO_LLM_MODEL=... (and DEMO_LLM_MAX_TOKENS=4096 for a reasoning model)
 # Reset the "without" instance after a live demo (drops what you saved):
 #   docker compose -f docker-compose.bakehouse.yml up -d --force-recreate agent-plain
 # Details: docs/bakehouse-demo.md
@@ -31,6 +31,8 @@ x-agent: &agent
     LLM_BASE_URL: ${DEMO_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
     LLM_API_KEY: ${DEMO_LLM_API_KEY:-ollama}
     LLM_MODEL: ${DEMO_LLM_MODEL:-qwen2.5-coder:7b}
+    # Reasoning models (gpt-oss, o-series) spend part of this budget on thinking: raise it (4096) or answers come back empty.
+    LLM_MAX_TOKENS: ${DEMO_LLM_MAX_TOKENS:-1024}
     MEMORY_ENABLED: "false"
     MEMORY_BACKEND: local
     KNOWLEDGE_FILE: /app/data/knowledge.json
