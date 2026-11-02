@@ -79,12 +79,12 @@ databricks apps deploy db-agent-node --source-code-path /Workspace/Users/<you>/d
 
 ## Workshops & Training
 
-Hands-on bootcamps on text-to-SQL agents, ontologies, and Databricks deployment patterns. Private team workshops: contact [BeCloudReady](https://calendly.com/kchandank/30-mins-meeting) (Databricks Registered Partner). Community: [TorontoAI](https://toronto-ai.org/), 10,000+ data and AI practitioners.
+Hands-on bootcamps on text-to-SQL agents, ontologies, and Databricks deployment patterns. Private team workshops: contact [BeCloudReady](https://calendly.com/kchandank/30-mins-meeting) . Community: [TorontoAI](https://toronto-ai.org/), 10,000+ data and AI practitioners.
 
 ---
 
 ## Maintained by
 
-[BeCloudReady](https://becloudready.com/) — Databricks Registered Partner. Organizers of [TorontoAI](https://toronto-ai.org/).
+[BeCloudReady](https://becloudready.com/) . Organizers of [TorontoAI](https://toronto-ai.org/).
 
 [Book a discovery call](https://calendly.com/kchandank/30-mins-meeting) for customized training and consulting.
