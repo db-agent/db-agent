@@ -1,6 +1,6 @@
 # Ontology for AI Database Agents: Why Model Size Matters Less Than You Think
 
-*I gave the same models the same questions with and without a written-down ontology, on AdventureWorks and on a Databricks dataset with no comments at all. For text-to-SQL in an AI database agent, the ontology moved accuracy more than the choice of model did.*
+*I gave the same models the same questions with and without a written-down ontology, on AdventureWorks and on a Databricks dataset with no comments at all. For text-to-SQL in an AI database agent, the ontology moved accuracy more than the choice of model did, and a free local 7B model with an ontology matched a 120B cloud model without one.*
 
 Most conversations about text-to-SQL accuracy are about the model: a bigger one, a SQL-specialist one, a better prompt. I ran a set of tests on [db-agent](https://github.com/db-agent/db-agent), an open-source natural-language-to-SQL layer, and the biggest lever I found was none of those. It was a plain text file that says what the data means.
 
@@ -11,7 +11,9 @@ Most conversations about text-to-SQL accuracy are about the model: a bigger one,
 - In a separate check of 16 hand-picked prompts, 7 gave a different, wrong-versus-right answer with the ontology and 9 made no difference.
 - In the same tests, swapping the model changed the score by about 2 questions. Adding the ontology changed it by 3 to 7.
 - A general 7B model with an ontology (14 of 17) beat a SQL-specialist 7B model that had only the schema (9 of 17) on AdventureWorks.
-- I tested models from 0.5B to 7B. I did not test a frontier model, so this article does not claim a small model beats one.
+- **Free local model against a 120B cloud model:** on the Databricks data, a 7B model running locally in Ollama with an ontology scored **17 of 17**. OpenAI's `gpt-oss-120b` on Groq, with the schema alone, scored **15 of 17**, and still returned 0 rows for one question that depends on a value only the data knows.
+- **Cost:** the local model costs nothing per token. The 120B model cost roughly 0.01 to 0.09 US cents per question at Groq's list price. That is cheap, and it still scales with volume and with the size of the ontology you send.
+- I tested models from 0.5B to 7B locally and one 120B open-weight model in the cloud. I did not test a closed frontier model, so this article does not claim a small model beats one.
 - My first Bakehouse run showed **no gain** (10 correct without, 9 with). The ontology was not reaching the model. Writing it was not enough: it also has to be found.
 - The ontology costs tokens: about 520 extra input tokens per question in my run.
 
@@ -150,20 +152,55 @@ Models are the part everyone tunes, so here are the model comparisons I have, on
 | 7B model, schema only, then the same 7B model with an ontology | 7, then 14 | **+7** |
 | SQL-specialist 7B model, schema only, against the general 7B model with an ontology | 9 against **14** | the general model with the ontology wins |
 | 7B model, schema only, against the 1.5B model with an ontology | 7 against 8 | about equal: the small model with an ontology matched the larger one without |
+| *Bakehouse:* 7B model, schema only, then the 120B model, schema only | 14, then 15 | +1 for about 17 times the total parameters |
+| *Bakehouse:* 7B model, schema only, then the 7B model with an ontology | 14, then 17 | **+3** |
+| *Bakehouse:* the 120B model, schema only, against the 7B model with an ontology | 15 against **17** | the free local model with the ontology matches or beats it |
 
 Every one of these rows is one run on 17 questions, so a difference of one or two questions is noise. What I read from the pattern is that a bigger or better-trained model fixes some errors, and an ontology fixes a different kind: the ones where the answer is a fact about your data, not a skill. A bigger model cannot know that your table stores `'Y'` where it expected `'Yes'`.
 
-What I did not test is a frontier model. A larger model may get more questions right from the schema alone, and may also guess some conventions correctly. Whether a small model with the right ontology can match or beat one is an open question in this article, and the next test I plan to run.
+What I did not test is a closed frontier model. The 120B model I did test is a strong open-weight model, not the best closed model available, and a closed model may do better.
+
+## A free local model against a 120B cloud model
+
+The point I most wanted to check: can a model you run for free get the accuracy of a much larger one you pay for per token? I ran the Bakehouse questions on `gpt-oss-120b` through Groq (120B parameters in total, about 5B active per token, a reasoning model, run at low reasoning effort) and compared it with the local 7B model:
+
+| Model | Schema only | With the ontology |
+|---|---|---|
+| `qwen2.5-coder` 7B, local in Ollama | 14 / 17 | **17 / 17** |
+| `gpt-oss-120b`, Groq | **15 / 17** | 16 / 17 |
+
+Three things stand out:
+
+1. **The 120B model guessed more conventions on its own.** It got the visa question and the female-customers question right without being told, where the 7B wrote `'Visa'` and `'F'`. Bigger models carry better priors about how data is usually stored.
+2. **It still missed the one convention that only your data knows.** For "How many suppliers are approved?" it wrote `approved ILIKE '%yes%'` and got 0. The value is `'Y'`. With the ontology it returned 27. No amount of model size can read that from a schema.
+3. **The ontology helped the small model more.** It added 3 correct answers to the 7B model and 1 to the 120B one. But it helped both.
+
+The 7B model with the ontology scored 17 and the 120B model without it scored 15. I would call that a match, not a win. The 120B model also failed one question ("What is the revenue of the franchises in Japan?") in both runs because it returned a revenue per franchise where my ground truth expects one total. The wording allows either reading. Excluding that question, the 120B model scores 15 of 16 against 16 of 16 for the 7B with the ontology, which is a one-question difference.
 
 ## What it costs
 
-The ontology is text in the prompt. In the final Bakehouse run the 17 questions used 12,461 tokens without it and 21,352 with it, about 520 more input tokens per question. With the illustrative prices I used for the local model, that is a fraction of a cent per question. On AdventureWorks the effect went the other way (fewer tokens, fewer repairs). It depends on how many repairs the model needs without help.
+Two kinds of cost matter: tokens and the effort of writing the ontology.
+
+| Setup (17 questions) | Tokens | Cost at list price |
+|---|---|---|
+| 7B local, schema only | 12,461 | $0, the model runs on your machine |
+| 7B local, with the ontology | 21,352 | $0 |
+| 120B on Groq, schema only | 15,725 | about $0.002 to $0.009 |
+| 120B on Groq, with the ontology | 23,995 | about $0.004 to $0.014 |
+
+Groq lists `gpt-oss-120b` at $0.15 per million input tokens and $0.60 per million output tokens. I did not split the 120B tokens into input and output, so the range runs from all input to all output. For the 120B model that is about 0.01 to 0.06 cents per question without the ontology and 0.02 to 0.08 with it, and its token counts include the model's reasoning tokens.
+
+What I take from this:
+
+- **The ontology is not free on a paid model.** It added about 50 to 70 percent more tokens per question (about 520 more input tokens per question for the 7B). On a local model that extra context costs nothing. On a paid model it multiplies your bill, so keep the file short and put the most-used notes first.
+- **A hosted open model is already cheap.** At these prices, 1,000,000 questions a month would cost on the order of $140 to $850 on the 120B model, depending on the ontology and the token split. The case for local is zero marginal cost, data that never leaves your network, and no per-minute limits (Groq's page lists 8,000 tokens per minute for this model on the base plan, which is why I ran it at low reasoning effort with retries), not that the cloud is expensive. I did not price closed frontier models.
+- **Local is not free.** You pay for the machine and the effort to run it. The saving is the per-token charge.
 
 ## Limits
 
 I would rather you read these than find them.
 
-- **Models from 0.5B to 7B, plus one SQL-specialist model.** No frontier model was tested.
+- **Models from 0.5B to 7B locally, one SQL-specialist model, and one 120B open-weight model in the cloud.** No closed frontier model was tested. The 120B run used low reasoning effort (chosen because of a per-minute token limit) and one run; a higher effort may do better.
 - **17 questions per dataset, one model family.** A difference of one or two questions is noise. The pattern across two datasets and several runs is the evidence, not any single number.
 - **I wrote the questions and the ontology.** The ontology defines concepts several questions ask about. This measures what a good ontology can do, not what an average one does, and not the gain on questions nobody anticipated.
 - **I fixed the scoring between runs 1 and 2.** One ground-truth query returned an extra revenue column for a question that only asked for names, and I let answers carry extra columns (a model that answers "which product" with the product and its total is still right). Both changes helped the runs without the ontology as well as the ones with it.
