@@ -159,7 +159,14 @@ function logWebRequest(mcpTool, out, { question = null, durationMs = null } = {}
   }
 }
 
-const llm = new OpenAI({ baseURL: LLM_BASE_URL, apiKey: LLM_API_KEY });
+// LLM_MAX_RETRIES: how often the client retries a 429 or 5xx (SDK default 2). A hosted free tier with a per-minute token
+// limit (Groq, for one) needs more, since the client waits for the retry-after time between tries.
+const LLM_MAX_RETRIES = Number(process.env.LLM_MAX_RETRIES);
+const llm = new OpenAI({
+  baseURL: LLM_BASE_URL,
+  apiKey: LLM_API_KEY,
+  ...(Number.isInteger(LLM_MAX_RETRIES) && LLM_MAX_RETRIES >= 0 && process.env.LLM_MAX_RETRIES !== "" ? { maxRetries: LLM_MAX_RETRIES } : {}),
+});
 const embeddingClient = new OpenAI({ baseURL: EMBEDDING_BASE_URL, apiKey: EMBEDDING_API_KEY });
 
 const MEMORY = {
@@ -286,11 +293,15 @@ const LLM_MAX_TOKENS = Number(process.env.LLM_MAX_TOKENS) || 1024;
 
 // usage (optional): a counter the caller owns; token counts from the API response are added to it.
 // Servers that do not report usage leave `missing` > 0 so the numbers are not mistaken for zero.
+// LLM_REASONING_EFFORT=low|medium|high is sent as reasoning_effort, for reasoning models (gpt-oss, o-series). Unset: not sent.
+const LLM_REASONING_EFFORT = (process.env.LLM_REASONING_EFFORT || "").trim();
+
 async function callLlm(systemPrompt, userPrompt, usage = null) {
   const response = await llm.chat.completions.create({
     model: LLM_MODEL,
     temperature: 0,
     max_tokens: LLM_MAX_TOKENS,
+    ...(LLM_REASONING_EFFORT ? { reasoning_effort: LLM_REASONING_EFFORT } : {}),
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
@@ -305,7 +316,11 @@ async function callLlm(systemPrompt, userPrompt, usage = null) {
       usage.missing += 1;
     }
   }
-  return response.choices[0].message.content || "";
+  const choice = response.choices[0];
+  if (!choice.message.content && choice.finish_reason === "length") {
+    throw new Error(`The model used its whole ${LLM_MAX_TOKENS}-token budget before answering (a reasoning model thinks first). Raise LLM_MAX_TOKENS or set LLM_REASONING_EFFORT=low.`);
+  }
+  return choice.message.content || "";
 }
 
 // ── Example questions ─────────────────────────────────────────────────────
