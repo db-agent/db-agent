@@ -1010,7 +1010,7 @@ app.get("/api/ontology", (req, res) => {
 // Reads metadata only (names, types, comments, declared keys); never table rows.
 app.post("/api/ontology/scan", async (req, res) => {
   try {
-    const scan = scanMetadata(await readMetadata(sqlEngine), { schemaName: sqlEngine.describe().location });
+    const scan = scanMetadata(await readMetadata(sqlEngine), { schemaName: sqlEngine.describe().location, knowledge: loadKnowledge(KNOWLEDGE_PATH) });
     lastScan = { at: new Date().toISOString(), scan };
     // "merged": the current file with the scan's draft added underneath it. Nothing is saved until the person saves.
     const merged = mergeDraft(loadKnowledge(KNOWLEDGE_PATH) || emptyKnowledge(), scan.draft);

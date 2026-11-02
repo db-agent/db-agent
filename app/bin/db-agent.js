@@ -142,7 +142,7 @@ async function main() {
   if (cmd === "scan") {
     const [{ scanMetadata, renderScanMarkdown }, { pipeline }] = await Promise.all([import("../ontology/scan.js"), import("../server.js")]);
     const info = pipeline.describeEngine();
-    const scan = scanMetadata(await pipeline.readMetadata(), { schemaName: info.location });
+    const scan = scanMetadata(await pipeline.readMetadata(), { schemaName: info.location, knowledge: pipeline.getKnowledge() });
     const md = renderScanMarkdown(scan);
     console.log(md);
     if (!flag("no-write")) {

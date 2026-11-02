@@ -1,0 +1,78 @@
+{
+  "descriptions": {
+    "sales_transactions": "One row per sale: one product bought by one customer at one franchise at one time. There is no separate orders table. Synthetic data from 2023-01-01 to 2025-12-30, millions of rows: filter by dateTime or aggregate, do not select everything.",
+    "sales_transactions.transactionID": "Unique id of the sale.",
+    "sales_transactions.customerID": "The buyer. Joins to sales_customers.customerID.",
+    "sales_transactions.franchiseID": "The franchise (shop) that made the sale. Joins to sales_franchises.franchiseID.",
+    "sales_transactions.dateTime": "When the sale happened (timestamp). Use year(dateTime), month(dateTime) for year and month questions.",
+    "sales_transactions.product": "Name of the cookie sold. Exactly six values: Austin Almond Biscotti, Outback Oatmeal, Tokyo Tidbits, Orchard Oasis, Pearly Pies, Golden Gate Ginger.",
+    "sales_transactions.quantity": "Units in this sale, 1 to 10.",
+    "sales_transactions.unitPrice": "Price of one unit. It is 3 for every product.",
+    "sales_transactions.totalPrice": "quantity * unitPrice: the revenue of this sale. Revenue is SUM(totalPrice).",
+    "sales_transactions.paymentMethod": "Card network, lowercase: visa, mastercard or amex.",
+    "sales_transactions.cardNumber": "The customer's card number. Sensitive: never select it unless the question asks for it. Use paymentMethod for payment questions.",
+    "sales_customers": "One row per customer (300). Customers live in Australia, the USA and Japan.",
+    "sales_customers.customerID": "Unique id of the customer. Joins to sales_transactions.customerID.",
+    "sales_customers.first_name": "Customer first name.",
+    "sales_customers.last_name": "Customer last name.",
+    "sales_customers.email_address": "Sensitive. Do not select unless asked.",
+    "sales_customers.phone_number": "Sensitive. Do not select unless asked.",
+    "sales_customers.address": "Sensitive street address. Do not select unless asked.",
+    "sales_customers.city": "Customer city.",
+    "sales_customers.state": "Customer state or region.",
+    "sales_customers.country": "Country name as written for customers: Australia, USA or Japan. Franchises write the United States as 'US', customers write 'USA'.",
+    "sales_customers.continent": "Customer continent, for example Asia or Oceania.",
+    "sales_customers.postal_zip_code": "Postal or zip code as a number.",
+    "sales_customers.gender": "Lowercase text: female or male.",
+    "sales_franchises": "One row per franchise shop (48). Each franchise sells the cookies and is tied to one supplier.",
+    "sales_franchises.franchiseID": "Unique id of the franchise. Joins to sales_transactions.franchiseID and media_customer_reviews.franchiseID.",
+    "sales_franchises.name": "Name of the shop, for example Tokyo Treats. Use it when a question asks which franchise.",
+    "sales_franchises.city": "City of the shop.",
+    "sales_franchises.district": "District or neighbourhood of the shop.",
+    "sales_franchises.zipcode": "Postal code as text.",
+    "sales_franchises.country": "Country of the shop: Japan, US, Australia, Canada, Netherlands, France, Germany, Italy or Sweden. The United States is 'US' here, not 'USA'.",
+    "sales_franchises.size": "Shop size class as text: S, M, L, XL or XXL.",
+    "sales_franchises.longitude": "Shop longitude.",
+    "sales_franchises.latitude": "Shop latitude.",
+    "sales_franchises.supplierID": "The franchise's supplier. Joins to sales_suppliers.supplierID. Only 27 suppliers exist for 48 franchises, so a join to sales_suppliers keeps only the 27 franchises whose supplier is listed.",
+    "sales_suppliers": "One row per ingredient supplier (27).",
+    "sales_suppliers.supplierID": "Unique id of the supplier. Joins to sales_franchises.supplierID.",
+    "sales_suppliers.name": "Supplier name.",
+    "sales_suppliers.ingredient": "The ingredient supplied: cacao, coconut, almonds, cane sugar, vanilla, pecans, hazelnuts, cinnamon, cashews, maple syrup, pistachios or oats.",
+    "sales_suppliers.continent": "Supplier continent: Asia, Europe, North America, Central America or South America.",
+    "sales_suppliers.size": "Supplier size class as text: S, M, L, XL or XXL.",
+    "sales_suppliers.approved": "'Y' when the supplier is approved. Every supplier is currently 'Y'.",
+    "media_customer_reviews": "One row per written customer review of a franchise: free text in review. Use this table for questions about reviews. Joins to sales_franchises on franchiseID.",
+    "media_customer_reviews.review": "The review text, long free text.",
+    "media_customer_reviews.review_date": "When the review was written.",
+    "media_gold_reviews_chunked": "The reviews cut into chunks for search: one row per chunk of text, so counting rows here does not count reviews. Use media_customer_reviews for review questions."
+  },
+  "expressions": {
+    "revenue": "SUM(totalPrice) over sales_transactions",
+    "units sold": "SUM(quantity) over sales_transactions",
+    "best-selling product": "the product with the highest SUM(quantity) in sales_transactions (rank by revenue only if the question says so)",
+    "average sale value": "AVG(totalPrice) over sales_transactions, since each row is one sale"
+  },
+  "examples": [
+    {
+      "question": "How many suppliers are there on each continent?",
+      "sql": "SELECT continent, count(*) FROM sales_suppliers GROUP BY continent"
+    },
+    {
+      "question": "How many franchises are there in each country?",
+      "sql": "SELECT country, count(*) FROM sales_franchises GROUP BY country"
+    },
+    {
+      "question": "What is the number of units sold per payment method?",
+      "sql": "SELECT paymentMethod, sum(quantity) FROM sales_transactions GROUP BY paymentMethod"
+    }
+  ],
+  "instructions": [
+    "Use Databricks SQL, for example year(dateTime), month(dateTime) and date_trunc. Tables are in the connected schema: use bare table names such as sales_transactions.",
+    "Join sales_transactions to sales_franchises on franchiseID and to sales_customers on customerID. Join sales_franchises to sales_suppliers on supplierID.",
+    "Revenue is SUM(totalPrice). Each row of sales_transactions is one sale of one product, so count rows for the number of sales.",
+    "Country spellings differ between tables: customers use 'USA', franchises use 'US'. Match the spelling of the table you filter on.",
+    "Never select cardNumber, email_address, phone_number or address unless the question asks for them.",
+    "sales_transactions has millions of rows: aggregate it or filter it by dateTime, and never run SELECT * on it."
+  ]
+}

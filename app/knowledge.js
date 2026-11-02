@@ -77,16 +77,40 @@ function mentionsWord(text, word) {
 // "email"); same idea for expression names like "revenue".
 // relevantTables: tables already chosen for this question (see tableSelect.js). Their notes are kept even when
 // the question never says the table's name ("orders" does not contain "salesorderheader").
-function filterByKeywordMatch(entries, question, relevantTables = null) {
-  return Object.fromEntries(
-    Object.entries(entries).filter(([key]) => {
-      const table = key.split(".")[0];
-      if (mentionsWord(question, table) || mentionsWord(question, key)) return true;
-      if (!relevantTables) return false;
-      const parts = key.toLowerCase().split(".");
-      return (parts.length === 3 ? [parts[1]] : parts.slice(0, 2)).some((p) => relevantTables.has(p));
-    })
-  );
+//
+// KNOWLEDGE_MATCH=exact (default): a note is kept only when the question contains the whole table name or the whole key.
+// KNOWLEDGE_MATCH=loose: also keep it when the question uses a word from the table or column name, ignoring plurals:
+// "customers" selects the notes of sales_customers, "approved" selects sales_suppliers.approved. Exact matches come
+// first and at most LOOSE_MAX_NOTES are kept. Use loose when tables have prefixes (sales_, dim_, tbl_), which is
+// most real warehouses.
+const LOOSE_MAX_NOTES = Number(process.env.KNOWLEDGE_MAX_NOTES) || 40;
+const GENERIC_PARTS = new Set(["sales", "media", "data", "info", "table", "type", "name", "date", "time", "code", "flag", "text", "value"]);
+const stem = (w) => w.toLowerCase().replace(/ies$/, "y").replace(/s$/, "");
+
+function looseTerms(key) {
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .split(/[._\s]+/)
+    .filter((p) => p.length >= 5 && !GENERIC_PARTS.has(p))
+    .map(stem);
+}
+
+function filterByKeywordMatch(entries, question, relevantTables = null, { loose = (process.env.KNOWLEDGE_MATCH || "exact").toLowerCase() === "loose" } = {}) {
+  const words = new Set((String(question).match(/[A-Za-z]+/g) || []).map(stem));
+  const exact = [];
+  const fuzzy = [];
+  for (const [key, text] of Object.entries(entries)) {
+    const table = key.split(".")[0];
+    const parts = key.toLowerCase().split(".");
+    if (mentionsWord(question, table) || mentionsWord(question, key) ||
+        (relevantTables && (parts.length === 3 ? [parts[1]] : parts.slice(0, 2)).some((p) => relevantTables.has(p)))) {
+      exact.push([key, text]);
+    } else if (loose && looseTerms(key).some((t) => words.has(t))) {
+      fuzzy.push([key, text]);
+    }
+  }
+  return Object.fromEntries(loose ? [...exact, ...fuzzy].slice(0, LOOSE_MAX_NOTES) : exact);
 }
 
 async function selectRelevantExamples(examples, question, embeddingClient, embeddingModel, maxExamples) {

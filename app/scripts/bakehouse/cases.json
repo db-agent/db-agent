@@ -1,0 +1,19 @@
+[
+  {"difficulty": "easy", "question": "How many customers are there?", "groundTruthSql": "SELECT count(*) FROM sales_customers"},
+  {"difficulty": "easy", "question": "How many franchises are there?", "groundTruthSql": "SELECT count(*) FROM sales_franchises"},
+  {"difficulty": "easy", "question": "How many suppliers are approved?", "groundTruthSql": "SELECT count(*) FROM sales_suppliers WHERE approved = 'Y'"},
+  {"difficulty": "easy", "question": "How many franchises are in Japan?", "groundTruthSql": "SELECT count(*) FROM sales_franchises WHERE country = 'Japan'"},
+  {"difficulty": "easy", "question": "How many customers are in the USA?", "groundTruthSql": "SELECT count(*) FROM sales_customers WHERE country = 'USA'"},
+  {"difficulty": "easy", "question": "How many transactions were paid with visa?", "groundTruthSql": "SELECT count(*) FROM sales_transactions WHERE paymentMethod = 'visa'"},
+  {"difficulty": "medium", "question": "What is the total revenue?", "groundTruthSql": "SELECT sum(totalPrice) FROM sales_transactions"},
+  {"difficulty": "medium", "question": "How many units were sold in 2024?", "groundTruthSql": "SELECT sum(quantity) FROM sales_transactions WHERE year(dateTime) = 2024"},
+  {"difficulty": "medium", "question": "What is the revenue per product?", "groundTruthSql": "SELECT product, sum(totalPrice) FROM sales_transactions GROUP BY product"},
+  {"difficulty": "medium", "question": "Which product sold the most units?", "groundTruthSql": "SELECT product FROM sales_transactions GROUP BY product ORDER BY sum(quantity) DESC LIMIT 1"},
+  {"difficulty": "medium", "question": "How many customers are there per continent?", "groundTruthSql": "SELECT continent, count(*) FROM sales_customers GROUP BY continent"},
+  {"difficulty": "medium", "question": "What is the revenue for each month in 2025? Show the month as a number from 1 to 12.", "groundTruthSql": "SELECT month(dateTime) AS m, sum(totalPrice) FROM sales_transactions WHERE year(dateTime) = 2025 GROUP BY month(dateTime)"},
+  {"difficulty": "hard", "question": "What is the revenue per franchise country?", "groundTruthSql": "SELECT f.country, sum(t.totalPrice) FROM sales_transactions t JOIN sales_franchises f ON f.franchiseID = t.franchiseID GROUP BY f.country"},
+  {"difficulty": "hard", "question": "Which 5 franchises have the highest revenue? Show their names.", "groundTruthSql": "SELECT f.name FROM sales_transactions t JOIN sales_franchises f ON f.franchiseID = t.franchiseID GROUP BY f.franchiseID, f.name ORDER BY sum(t.totalPrice) DESC LIMIT 5"},
+  {"difficulty": "hard", "question": "What is the revenue from female customers?", "groundTruthSql": "SELECT sum(t.totalPrice) FROM sales_transactions t JOIN sales_customers c ON c.customerID = t.customerID WHERE c.gender = 'female'"},
+  {"difficulty": "hard", "question": "Which ingredient is supplied to the franchises in Tokyo?", "groundTruthSql": "SELECT DISTINCT s.ingredient FROM sales_franchises f JOIN sales_suppliers s ON s.supplierID = f.supplierID WHERE f.city = 'Tokyo'"},
+  {"difficulty": "hard", "question": "What is the revenue of the franchises in Japan?", "groundTruthSql": "SELECT sum(t.totalPrice) FROM sales_transactions t JOIN sales_franchises f ON f.franchiseID = t.franchiseID WHERE f.country = 'Japan'"}
+]

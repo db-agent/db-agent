@@ -1,0 +1,62 @@
+# Bakehouse demo: two db-agent instances on the same Databricks schema, one model. One starts with no ontology
+# (so you can show the scan and build it live), the other with a prepared ontology.
+#
+#   docker compose -f docker-compose.bakehouse.yml up --build
+#   open http://localhost:3001    db-agent without the ontology (Ontology > Scan database)
+#   open http://localhost:3002    db-agent with the prepared ontology
+#
+# Needs DATABRICKS_HOST, DATABRICKS_HTTP_PATH and DATABRICKS_TOKEN (read from app/.env or your shell) and a running
+# SQL warehouse. The token is passed to both containers as an environment variable: use a token you can revoke.
+# Default data: main.bakehouse_seed (scripts/seed-bakehouse.js, no comments at all). Override with
+# DEMO_BAKEHOUSE_CATALOG and DEMO_BAKEHOUSE_SCHEMA (samples / bakehouse works too: read-only, 3,333 transactions).
+#
+# Model: Ollama on the host by default (pull qwen2.5-coder:7b first). For an OpenAI-compatible endpoint:
+#   DEMO_LLM_BASE_URL=... DEMO_LLM_API_KEY=... DEMO_LLM_MODEL=...
+# Reset the "without" instance after a live demo (drops what you saved):
+#   docker compose -f docker-compose.bakehouse.yml up -d --force-recreate agent-plain
+# Details: docs/bakehouse-demo.md
+
+name: dbagent-bakehouse
+
+x-agent: &agent
+  build: .
+  entrypoint: ["sh", "docker/bakehouse/agent-entrypoint.sh"]
+  environment: &agent-env
+    SQL_ENGINE: databricks-sql
+    DATABRICKS_HOST: ${DATABRICKS_HOST:?set DATABRICKS_HOST}
+    DATABRICKS_HTTP_PATH: ${DATABRICKS_HTTP_PATH:?set DATABRICKS_HTTP_PATH}
+    DATABRICKS_TOKEN: ${DATABRICKS_TOKEN:?set DATABRICKS_TOKEN}
+    DATABRICKS_CATALOG: ${DEMO_BAKEHOUSE_CATALOG:-main}
+    DATABRICKS_SCHEMA: ${DEMO_BAKEHOUSE_SCHEMA:-bakehouse_seed}
+    LLM_BASE_URL: ${DEMO_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+    LLM_API_KEY: ${DEMO_LLM_API_KEY:-ollama}
+    LLM_MODEL: ${DEMO_LLM_MODEL:-qwen2.5-coder:7b}
+    MEMORY_ENABLED: "false"
+    MEMORY_BACKEND: local
+    KNOWLEDGE_FILE: /app/data/knowledge.json
+    # Illustrative model prices (gateway.example.json) so each answer shows an LLM cost estimate next to the warehouse one.
+    GATEWAY_CONFIG: /app/gateway.example.json
+    # Loose matching finds notes for "customers" in sales_customers.
+    KNOWLEDGE_MATCH: loose
+    # Cost guard relaxed for this demo: Databricks estimates 4,000,000 rows for a GROUP BY that returns 6, so with the
+    # defaults (100 MB, 100,000 rows) even "revenue per product" waits for approval and the accuracy test cannot run it.
+    # The cost-guard demo uses the default limits elsewhere.
+    APPROVAL_MAX_BYTES: "2147483648"
+    APPROVAL_MAX_ROWS: "0"
+    GATEWAY_DB: /app/data/gateway.db
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+
+services:
+  agent-plain:
+    <<: *agent
+    ports:
+      - "${PLAIN_PORT:-3001}:3001"
+
+  agent-curated:
+    <<: *agent
+    environment:
+      <<: *agent-env
+      CURATED: "true"
+    ports:
+      - "${CURATED_PORT:-3002}:3001"

@@ -77,3 +77,17 @@ test("a question whose ground truth fails is skipped and counted", async () => {
 test("summarize of nothing is zeros", () => {
   assert.deepEqual(summarize([]).off, { pass: 0, total: 0, percent: 0, held: 0, tokens: 0, avgMs: 0 });
 });
+
+test("extra columns do not fail an answer, a wrong row set does", async () => {
+  const f = fake();
+  f.deps.runPipeline = async (q) => (q.startsWith("Shipped")
+    ? { sql: "SELECT n, 'x' AS note FROM t", rows: [{ n: 7, note: "x" }], usage: {} }
+    : { sql: "SELECT 1", rows: [{ n: 99 }], usage: {} });
+  const runner = createAbRunner(f.deps);
+  await runner.start();
+  const s = await finished(runner);
+  const shipped = s.results.find((r) => r.question.startsWith("Shipped"));
+  assert.equal(shipped.on.status, "pass");
+  assert.equal(shipped.on.exact, false);
+  assert.equal(s.results.find((r) => r.question.startsWith("How many")).on.status, "wrong");
+});

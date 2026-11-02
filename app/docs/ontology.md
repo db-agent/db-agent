@@ -40,12 +40,23 @@ database has them.
 The scan only drafts what the database already says. What a status code means, or how your company defines revenue,
 is not in the metadata. A person has to write it, and that is the part that moved accuracy in our test.
 
+## Making sure the notes reach the model
+
+By default a note is added to the prompt only when the question contains the whole table name or the whole `table.column`
+key. That misses prefixed tables: the question "How many suppliers are approved?" does not contain `sales_suppliers`, so
+its notes are left out. Set `KNOWLEDGE_MATCH=loose` to also match on words from the table and column names (plurals
+ignored, at most `KNOWLEDGE_MAX_NOTES`, default 40). Use it when your tables have prefixes such as `sales_` or `dim_`.
+In the Bakehouse test this took the ontology from no gain (10 against 9 correct) to 11 against 14.
+
+Scanning again after you save counts a column or table the ontology describes as described, and reports what the
+database alone has separately ("database alone").
+
 ## The accuracy test
 
 Needs benchmark questions: a question plus its correct SQL (Benchmarks panel, or
 `node scripts/adventureworks/import-cases.js` for the AdventureWorks set). Questions whose SQL names tables this
 database does not have are left out. Benchmark examples are removed from both runs so the model never sees the answer.
-A query the cost guard holds for approval counts as not passed and is not run. With fewer than about 20 questions,
+An answer passes when the right columns hold the right rows (extra columns are fine). A query the cost guard holds for approval counts as not passed and is not run. With fewer than about 20 questions,
 a difference of one or two is run-to-run noise.
 
 ## Sharing it with agents that write their own SQL

@@ -60,3 +60,16 @@ test("reads real SQLite metadata without touching rows", async () => {
   assert.ok(scan.todo.some((x) => x.column === "status"));
   assert.match(renderScanMarkdown(scan), /No table rows were read/);
 });
+
+test("a knowledge file counts: scanning again after writing the ontology shows the improvement", () => {
+  const before = scanMetadata(meta);
+  const knowledge = { descriptions: { "orders.status": "5 = shipped", "orders.onlineorderflag": "true = online", customer: "One row per customer.", "customer.email": "Sensitive.", address: "One row per address." } };
+  const after = scanMetadata(meta, { knowledge });
+  assert.ok(after.summary.describedShare > before.summary.describedShare);
+  assert.equal(after.summary.describedInDatabaseShare, before.summary.describedInDatabaseShare, "the database itself did not change");
+  assert.ok(after.summary.overall > before.summary.overall);
+  const asks = after.todo.map((x) => `${x.kind}:${x.table}.${x.column}`);
+  assert.ok(!asks.includes("code-meaning:orders.status"));
+  assert.ok(!asks.includes("table-description:customer.null"));
+  assert.equal(after.draft.descriptions["orders.status"], undefined, "the draft still holds only what the database says");
+});

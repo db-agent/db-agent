@@ -78,7 +78,7 @@ export function AccuracyTest() {
           <h3 className="text-base font-semibold">Does the ontology improve the answers?</h3>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Each benchmark question is answered twice by the same model: once with the schema only, once with the knowledge file.
-            Both answers are run and compared with the correct SQL's result. Benchmark examples are left out of both runs, so the
+            Both answers are run and compared with the correct SQL's result (extra columns are fine). Benchmark examples are left out of both runs, so the
             model never sees the answer.
           </p>
           {cases && (

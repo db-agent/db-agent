@@ -1,0 +1,21 @@
+Most text-to-SQL accuracy talk is about the model. In my tests, the bigger lever was a plain text file.
+
+I gave the same 7B model the same 17 questions on a Databricks dataset with no comments, with and without a written-down ontology (what the columns mean, how tables join, how the company defines revenue).
+
+Schema only: 14 of 17 correct.
+With the ontology: 17 of 17.
+
+The three misses were not hard SQL. The model wrote valid queries that returned 0 or null: WHERE approved = 'Yes' (the value is 'Y'), paymentMethod = 'Visa' (it is 'visa'), gender = 'F' (it is 'female'). The schema says "string". It does not say which strings.
+
+On AdventureWorks the same pattern: 7 of 17 from the schema, 8 with the database's own comments, 14 with a hand-written ontology. Swapping models moved the score by about 2 questions.
+
+Two things I did not expect:
+- My first run showed no gain (10 vs 9). The ontology was not reaching the model: notes were only added when the question contained the exact table name. Writing it down is not enough. It has to be found.
+- A SQL-specialist model (sqlcoder-7b) did not benefit from the ontology.
+
+The limits are in the article: 17 questions, one model family, I wrote both the questions and the ontology, and I changed two questions after seeing results (disclosed, with what the score would have been otherwise).
+
+Full write-up with the numbers, screenshots and everything I tried that did not help: [link]
+Open source, runs locally: https://github.com/db-agent/db-agent
+
+#TextToSQL #Databricks #DataEngineering #LLM #OpenSource

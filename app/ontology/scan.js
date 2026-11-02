@@ -21,7 +21,10 @@ function unclearName(name) {
   return words.some((w) => w.length >= 3 && !/[aeiouy]/.test(w) && !["qty", "pct", "src", "dst", "ytd", "url", "ssn", "sku", "tbl"].includes(w));
 }
 
-export function scanMetadata(meta, { schemaName = null } = {}) {
+// knowledge: the current knowledge file. A column or table the ontology already describes counts as described,
+// so scanning again after writing the ontology shows the improvement. The draft still holds only what the database says.
+export function scanMetadata(meta, { schemaName = null, knowledge = null } = {}) {
+  const notes = knowledge?.descriptions || {};
   const names = Object.keys(meta.tables || {});
   const owners = new Map();
   for (const n of names) owners.set(lastPart(n), (owners.get(lastPart(n)) || 0) + 1);
@@ -39,7 +42,10 @@ export function scanMetadata(meta, { schemaName = null } = {}) {
     const cols = t.columns || [];
     const key = keyOf(name);
     const issues = [];
-    const described = cols.filter((c) => c.comment).length;
+    const noteFor = (c) => c.comment || notes[`${key}.${c.name}`];
+    const tableNote = t.comment || notes[key];
+    const described = cols.filter((c) => noteFor(c)).length;
+    const databaseDescribed = cols.filter((c) => c.comment).length;
     const meaningful = cols.filter((c) => !NOISE.test(c.name));
     const docShare = cols.length ? described / cols.length : 1;
     const unclear = cols.filter((c) => unclearName(c.name)).map((c) => c.name);
@@ -48,15 +54,15 @@ export function scanMetadata(meta, { schemaName = null } = {}) {
     const hasPk = isView || cols.some((c) => c.primaryKey); // a view cannot declare a key
     const fks = t.foreignKeys || [];
 
-    let penalty = 40 * (1 - docShare) + (t.comment ? 0 : 5) + 20 * (cols.length ? unclear.length / cols.length : 0);
+    let penalty = 40 * (1 - docShare) + (tableNote ? 0 : 5) + 20 * (cols.length ? unclear.length / cols.length : 0);
     if (cols.length > WIDE_TABLE) { penalty += 10; issues.push(`very wide table (${cols.length} columns)`); }
     if (!hasPk) { penalty += 15; issues.push("no primary key declared"); }
     if (described < cols.length) issues.push(`${cols.length - described} of ${cols.length} columns have no description`);
-    if (!t.comment) issues.push("table has no description");
+    if (!tableNote) issues.push("table has no description");
     if (unclear.length) issues.push(`unclear column names: ${unclear.slice(0, 6).join(", ")}${unclear.length > 6 ? ", ..." : ""}`);
     if (sensitive.length) issues.push(`looks sensitive, no tag or mask: ${sensitive.join(", ")}`);
     const score = Math.max(0, Math.round(100 - penalty));
-    tables.push({ name, key, columns: cols.length, described, hasPk, foreignKeys: fks.length, score, issues, sensitive, rowEstimate: t.rowEstimate ?? null });
+    tables.push({ name, key, columns: cols.length, described, databaseDescribed, hasPk, foreignKeys: fks.length, score, issues, sensitive, rowEstimate: t.rowEstimate ?? null });
 
     // Draft knowledge: what the database already says, plus where the keys point.
     if (t.comment) draft.descriptions[key] = t.comment;
@@ -71,12 +77,12 @@ export function scanMetadata(meta, { schemaName = null } = {}) {
 
     // Things only a person can supply: what a code means, what a flag counts, which table holds names.
     for (const c of meaningful) {
-      if (!c.comment && CODE_LIKE.test(c.name)) {
+      if (!noteFor(c) && CODE_LIKE.test(c.name)) {
         todo.push({ kind: "code-meaning", table: key, column: c.name, ask: `What do the values of ${key}.${c.name} mean?` });
       }
     }
     for (const c of sensitive) todo.push({ kind: "sensitive", table: key, column: c, ask: `${key}.${c} looks sensitive. Tag or mask it before wider use.` });
-    if (!t.comment && cols.length) todo.push({ kind: "table-description", table: key, column: null, ask: `What is one row of ${key}?` });
+    if (!tableNote && cols.length) todo.push({ kind: "table-description", table: key, column: null, ask: `What is one row of ${key}?` });
   }
 
   // Join paths a person should check: tables nothing points to and that point to nothing are islands.
@@ -88,12 +94,14 @@ export function scanMetadata(meta, { schemaName = null } = {}) {
   const overall = tables.length ? Math.round(tables.reduce((s, t) => s + t.score, 0) / tables.length) : 0;
   const totalCols = tables.reduce((s, t) => s + t.columns, 0);
   const totalDescribed = tables.reduce((s, t) => s + t.described, 0);
+  const totalInDatabase = tables.reduce((s, t) => s + t.databaseDescribed, 0);
   const fixes = [...tables].sort((a, b) => a.score - b.score).filter((t) => t.issues.length).slice(0, 10);
   return {
     schema: schemaName,
     summary: {
       tables: tables.length, columns: totalCols,
       describedColumns: totalDescribed, describedShare: totalCols ? Math.round((100 * totalDescribed) / totalCols) : 0,
+      describedInDatabaseShare: totalCols ? Math.round((100 * totalInDatabase) / totalCols) : 0,
       foreignKeys: tables.reduce((s, t) => s + t.foreignKeys, 0),
       tablesWithoutPrimaryKey: tables.filter((t) => !t.hasPk).length,
       views: names.filter((n) => meta.tables[n].kind === "view").length,

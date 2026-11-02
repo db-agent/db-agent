@@ -18,12 +18,14 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/web/dist ./web/dist
 # All top-level modules by glob: an explicit list silently went stale twice (queryShape.js, exampleFit.js).
-COPY *.js benchmarks.json ./
+COPY *.js benchmarks.json gateway.example.json ./
 COPY sqlEngines ./sqlEngines
 COPY memoryBackends ./memoryBackends
 COPY data ./data
 COPY scripts ./scripts
 COPY gateway ./gateway
+COPY ontology ./ontology
 COPY bin ./bin
+COPY docker ./docker
 EXPOSE 3001
 CMD ["node", "server.js"]

@@ -364,7 +364,7 @@ useEffect(() => {
       )}
 
       {showBenchmarksPanel && <BenchmarksPanel onClose={() => setShowBenchmarksPanel(false)} />}
-      {showOntology && <OntologyWorkspace initialTab={window.location.hash === "#ontology/accuracy" ? "accuracy" : "build"} onClose={() => setShowOntology(false)} />}
+      {showOntology && <OntologyWorkspace initialTab={window.location.hash === "#ontology/accuracy" ? "accuracy" : "build"} autoScan={window.location.hash === "#ontology/scan"} onClose={() => setShowOntology(false)} />}
     </div>
   );
 }

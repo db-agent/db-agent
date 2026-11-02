@@ -46,7 +46,7 @@ function Pairs({
   );
 }
 
-export function OntologyWorkspace({ onClose, initialTab = "build" }: { onClose: () => void; initialTab?: Tab }) {
+export function OntologyWorkspace({ onClose, initialTab = "build", autoScan = false }: { onClose: () => void; initialTab?: Tab; autoScan?: boolean }) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [section, setSection] = useState<Section>("tables");
   const [kb, setKb] = useState<Knowledge | null>(null);
@@ -69,6 +69,8 @@ export function OntologyWorkspace({ onClose, initialTab = "build" }: { onClose: 
       setSchema(s);
       setSelected(Object.keys(s)[0] ?? null);
     }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (autoScan) void runScan();
   }, []);
 
   const dirty = kb !== null && JSON.stringify(kb) !== saved;
@@ -177,7 +179,7 @@ export function OntologyWorkspace({ onClose, initialTab = "build" }: { onClose: 
               <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
                 {[
                   ["Readiness", `${scan.summary.overall} / 100`],
-                  ["Columns described", `${scan.summary.describedShare}%`],
+                  ["Columns described", `${scan.summary.describedShare}% (database alone: ${scan.summary.describedInDatabaseShare}%)`],
                   ["Declared joins", String(scan.summary.foreignKeys)],
                   ["Tables without a key", String(scan.summary.tablesWithoutPrimaryKey)],
                   ["Sensitive-looking columns", String(scan.summary.sensitiveColumns)],

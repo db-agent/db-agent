@@ -29,8 +29,11 @@ export function createAbRunner({ listCases, getSchema, sqlFits, runPipeline, run
     if (out.status === "awaiting_approval") return { ...base, status: "held", detail: out.approvalReason };
     if (out.error) return { ...base, status: "error", detail: String(out.error).slice(0, 200) };
     if (!out.sql) return { ...base, status: "error", detail: "no SQL generated" };
-    const ok = sameResult(rowsOf(out), truth);
-    return { ...base, status: ok ? "pass" : "wrong", lenient: ok || sameResultLenient(rowsOf(out), truth), detail: ok ? "" : `got ${JSON.stringify(rowsOf(out).slice(0, 2))}`.slice(0, 200) };
+    // Extra columns are fine ("which product" answered with the product and its total is still right): the answer
+    // passes when the right columns, in any order, hold the right rows.
+    const exact = sameResult(rowsOf(out), truth);
+    const ok = exact || sameResultLenient(rowsOf(out), truth);
+    return { ...base, status: ok ? "pass" : "wrong", exact, detail: ok ? "" : `got ${JSON.stringify(rowsOf(out).slice(0, 2))}`.slice(0, 200) };
   }
 
   async function run(current, cases) {

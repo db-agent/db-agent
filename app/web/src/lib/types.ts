@@ -190,6 +190,7 @@ export interface ScanResult {
     columns: number;
     describedColumns: number;
     describedShare: number;
+    describedInDatabaseShare: number;
     foreignKeys: number;
     tablesWithoutPrimaryKey: number;
     sensitiveColumns: number;
