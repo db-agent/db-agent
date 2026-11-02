@@ -8,10 +8,12 @@ import { fileURLToPath } from "node:url";
 const base = (process.argv[2] || "http://localhost:3001").replace(/\/$/, "");
 const cases = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "cases.json"), "utf8"));
 const existing = await (await fetch(`${base}/api/benchmarks`)).json();
-const have = new Set(existing.map((c) => c.question.toLowerCase()));
+// The same question with different SQL (the bundled SQLite examples ask some of these too) is still added.
+const key = (q, sql) => `${q.toLowerCase()}\u0001${sql.trim().toLowerCase()}`;
+const have = new Set(existing.map((c) => key(c.question, c.groundTruthSql)));
 let added = 0;
 for (const c of cases) {
-  if (have.has(c.question.toLowerCase())) continue;
+  if (have.has(key(c.question, c.groundTruthSql))) continue;
   const res = await fetch(`${base}/api/benchmarks`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ question: c.question, groundTruthSql: c.groundTruthSql }) });
   if (!res.ok) console.error(`skipped "${c.question}": ${(await res.json()).error}`);
   else added++;

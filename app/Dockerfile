@@ -24,6 +24,8 @@ COPY memoryBackends ./memoryBackends
 COPY data ./data
 COPY scripts ./scripts
 COPY gateway ./gateway
+COPY ontology ./ontology
 COPY bin ./bin
+COPY docker ./docker
 EXPOSE 3001
 CMD ["node", "server.js"]

@@ -1,0 +1,84 @@
+# AdventureWorks demo: two db-agent instances on one Postgres, one model. One has no ontology (so you can show
+# the scan and build it live), the other has the fully curated ontology. A compare page asks both the same question.
+#
+#   docker compose -f docker-compose.adventureworks.yml up --build     # first start loads the data, about 2 minutes
+#   open http://localhost:3000    side by side
+#   open http://localhost:3001    db-agent without the ontology (Ontology > Scan database)
+#   open http://localhost:3002    db-agent with the curated ontology
+#
+# Model: Ollama on the host by default. Pull qwen2.5-coder:7b first. For an OpenAI-compatible endpoint:
+#   DEMO_LLM_BASE_URL=... DEMO_LLM_API_KEY=... DEMO_LLM_MODEL=...
+# Ports are 3000 (compare), 3001, 3002 and 5457: override with COMPARE_PORT, PLAIN_PORT, CURATED_PORT, AW_DB_PORT.
+# Reset the "without" instance after a live demo (drops what you saved):
+#   docker compose -f docker-compose.adventureworks.yml up -d --force-recreate agent-plain
+# Details: docs/adventureworks-demo.md
+
+name: dbagent-aw
+
+x-agent: &agent
+  build: .
+  entrypoint: ["sh", "docker/adventureworks/agent-entrypoint.sh"]
+  environment: &agent-env
+    SQL_ENGINE: postgres
+    DB_URL: postgresql://dbagent_ro:dbagent_ro@db:5432/adventureworks
+    PG_SSL: "false"
+    PG_SCHEMA: humanresources,person,production,purchasing,sales
+    LLM_BASE_URL: ${DEMO_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+    LLM_API_KEY: ${DEMO_LLM_API_KEY:-ollama}
+    LLM_MODEL: ${DEMO_LLM_MODEL:-qwen2.5-coder:7b}
+    MEMORY_ENABLED: "false"
+    MEMORY_BACKEND: local
+    KNOWLEDGE_FILE: /app/data/knowledge.json
+    GATEWAY_DB: /app/data/gateway.db
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    build: ./docker/adventureworks/postgres
+    environment:
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - awdata:/var/lib/postgresql/data
+    ports:
+      - "${AW_DB_PORT:-5457}:5432"
+    healthcheck:
+      # Ready only when the data is loaded, not just when Postgres answers.
+      test: ["CMD-SHELL", "psql -U postgres -d adventureworks -tAc 'select 1 from sales.salesorderheader limit 1' | grep -q 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  agent-plain:
+    <<: *agent
+    ports:
+      - "${PLAIN_PORT:-3001}:3001"
+
+  agent-curated:
+    <<: *agent
+    environment:
+      <<: *agent-env
+      CURATED: "true"
+    ports:
+      - "${CURATED_PORT:-3002}:3001"
+
+  compare:
+    build: .
+    entrypoint: ["node", "docker/adventureworks/compare/server.js"]
+    environment:
+      PORT: "3000"
+      PLAIN_URL: http://agent-plain:3001
+      CURATED_URL: http://agent-curated:3001
+      PUBLIC_PLAIN_PORT: ${PLAIN_PORT:-3001}
+      PUBLIC_CURATED_PORT: ${CURATED_PORT:-3002}
+    ports:
+      - "${COMPARE_PORT:-3000}:3000"
+    depends_on:
+      - agent-plain
+      - agent-curated
+
+volumes:
+  awdata:
