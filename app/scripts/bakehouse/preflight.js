@@ -30,11 +30,16 @@ await check("Ollama", async () => {
 for (const [name, url, expectOntology] of [["without ontology", plain, false], ["with ontology", curated, true]]) {
   await check(`${name} (${url})`, async () => {
     const cfg = await get(`${url}/api/config`);
-    line(cfg.sqlEngineInfo?.type === "databricks-sql" ? "OK" : "FAIL", `${name}: engine`, cfg.sqlEngineInfo?.type || "unknown");
+    const engine = cfg.sqlEngineInfo?.type || "unknown";
+    line(engine === "databricks-sql" ? "OK" : "FAIL", `${name}: engine`, engine === "databricks-sql" ? engine :
+      `${engine}. This port is not serving the bakehouse demo. If the AdventureWorks demo is still running, stop it ` +
+      "(docker compose -f docker-compose.adventureworks.yml down) and start the bakehouse one.");
     line(cfg.llmModel === model ? "OK" : "WARN", `${name}: model`, cfg.llmModel);
     const schema = await get(`${url}/api/schema`, 120000);
     const tables = Object.keys(schema);
-    line(tables.length >= 5 ? "OK" : "FAIL", `${name}: Databricks schema reachable`, `${tables.length} tables`);
+    const bakehouse = tables.includes("sales_transactions") && tables.includes("sales_franchises");
+    line(bakehouse ? "OK" : "FAIL", `${name}: bakehouse tables found`,
+      bakehouse ? `${tables.length} tables` : `${tables.length} tables but no sales_transactions: wrong database or schema (DEMO_BAKEHOUSE_CATALOG / DEMO_BAKEHOUSE_SCHEMA)`);
     const onto = await get(`${url}/api/ontology`);
     const notes = Object.keys(onto.knowledge.descriptions).length;
     if (expectOntology) line(notes >= 30 ? "OK" : "FAIL", `${name}: prepared ontology loaded`, `${notes} notes, ${Object.keys(onto.knowledge.expressions).length} definitions, ${onto.knowledge.instructions.length} rules`);

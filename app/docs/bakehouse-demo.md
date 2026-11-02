@@ -18,7 +18,8 @@ The data is `main.bakehouse_seed` (made by `scripts/seed-bakehouse.js` from `sam
    fail with a generic `400`. `DATABRICKS_HOST`, `DATABRICKS_HTTP_PATH` and `DATABRICKS_TOKEN` must be in `app/.env`
    (or your shell). Use a token you can revoke: it is passed to both containers as an environment variable.
 2. **Model:** `ollama pull qwen2.5-coder:7b`, and keep Ollama running. The 7b model needs about 5 GB of memory: close heavy apps.
-3. **Ports:** stop anything else using 3001 or 3002 (another db-agent, for example).
+3. **Ports:** stop anything else using 3001 or 3002: another db-agent, and the AdventureWorks demo
+   (`docker compose -f docker-compose.adventureworks.yml down`). Check with `docker ps`: only `dbagent-bakehouse-*` containers should be running.
 4. **Start:**
    ```bash
    cd app
