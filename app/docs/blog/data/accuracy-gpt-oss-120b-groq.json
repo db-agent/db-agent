@@ -1,0 +1,422 @@
+{
+  "id": "ed4651e2",
+  "status": "done",
+  "model": "openai/gpt-oss-120b",
+  "startedAt": "2026-11-02T19:47:22.040Z",
+  "finishedAt": "2026-11-02T19:50:37.142Z",
+  "total": 17,
+  "done": 17,
+  "current": null,
+  "results": [
+    {
+      "id": "c5d4c93d-dd84-4400-824e-657fba9e5f06",
+      "question": "How many customers are there?",
+      "groundTruthSql": "SELECT count(*) FROM sales_customers",
+      "off": {
+        "sql": "SELECT COUNT(*) AS customer_count FROM sales_customers",
+        "ms": 1739,
+        "tokens": 895,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      },
+      "on": {
+        "sql": "SELECT COUNT(*) AS customer_count FROM sales_customers",
+        "ms": 1592,
+        "tokens": 1414,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      }
+    },
+    {
+      "id": "8037844e-8d48-4ef2-afb7-0e1d2a993915",
+      "question": "How many franchises are there?",
+      "groundTruthSql": "SELECT count(*) FROM sales_franchises",
+      "off": {
+        "sql": "SELECT COUNT(DISTINCT franchiseID) AS franchise_count FROM sales_franchises",
+        "ms": 5939,
+        "tokens": 906,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      },
+      "on": {
+        "sql": "SELECT COUNT(*) AS franchise_count FROM sales_franchises",
+        "ms": 1514,
+        "tokens": 1421,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      }
+    },
+    {
+      "id": "64cb7a03-5cc1-4446-816f-eb8b318bb38c",
+      "question": "How many suppliers are approved?",
+      "groundTruthSql": "SELECT count(*) FROM sales_suppliers WHERE approved = 'Y'",
+      "off": {
+        "sql": "SELECT COUNT(*) AS approved_supplier_count FROM sales_suppliers WHERE approved ILIKE '%yes%'",
+        "ms": 2297,
+        "tokens": 1003,
+        "repairs": 0,
+        "status": "wrong",
+        "exact": false,
+        "detail": "got [[0]]"
+      },
+      "on": {
+        "sql": "SELECT COUNT(*) AS approved_supplier_count FROM sales_suppliers WHERE approved = 'Y'",
+        "ms": 1404,
+        "tokens": 1356,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      }
+    },
+    {
+      "id": "86b949e8-5067-4739-843b-3befccd24cdb",
+      "question": "How many franchises are in Japan?",
+      "groundTruthSql": "SELECT count(*) FROM sales_franchises WHERE country = 'Japan'",
+      "off": {
+        "sql": "SELECT COUNT(*) AS franchise_count FROM sales_franchises WHERE country ILIKE '%japan%'",
+        "ms": 1975,
+        "tokens": 844,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      },
+      "on": {
+        "sql": "SELECT count(*) AS franchise_count FROM sales_franchises WHERE country = 'Japan'",
+        "ms": 1642,
+        "tokens": 1437,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      }
+    },
+    {
+      "id": "ea8c9a5c-bd83-4eee-bb35-3e3546a7125b",
+      "question": "How many customers are in the USA?",
+      "groundTruthSql": "SELECT count(*) FROM sales_customers WHERE country = 'USA'",
+      "off": {
+        "sql": "SELECT COUNT(*) AS customer_count FROM sales_customers WHERE country ILIKE '%USA%'",
+        "ms": 1833,
+        "tokens": 874,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      },
+      "on": {
+        "sql": "SELECT COUNT(*) AS usa_customers FROM sales_customers WHERE country = 'USA'",
+        "ms": 3756,
+        "tokens": 1447,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      }
+    },
+    {
+      "id": "7e717c80-9d2d-451f-89ef-44bd1e78161a",
+      "question": "How many transactions were paid with visa?",
+      "groundTruthSql": "SELECT count(*) FROM sales_transactions WHERE paymentMethod = 'visa'",
+      "off": {
+        "sql": "SELECT COUNT(*) AS visa_transactions FROM sales_transactions WHERE paymentMethod ILIKE '%visa%'",
+        "ms": 5991,
+        "tokens": 858,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      },
+      "on": {
+        "sql": "SELECT count(*) AS visa_transactions FROM sales_transactions WHERE paymentMethod = 'visa'",
+        "ms": 11964,
+        "tokens": 1450,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      }
+    },
+    {
+      "id": "967abf9f-89a4-4c40-b643-3b550fb7733a",
+      "question": "What is the total revenue?",
+      "groundTruthSql": "SELECT sum(totalPrice) FROM sales_transactions",
+      "off": {
+        "sql": "SELECT SUM(totalPrice) AS total_revenue FROM sales_transactions",
+        "ms": 1384,
+        "tokens": 847,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      },
+      "on": {
+        "sql": "SELECT SUM(totalPrice) AS total_revenue FROM sales_transactions",
+        "ms": 9659,
+        "tokens": 1176,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      }
+    },
+    {
+      "id": "44ff01b3-f9c8-45cc-8bd0-92178c8ba402",
+      "question": "How many units were sold in 2024?",
+      "groundTruthSql": "SELECT sum(quantity) FROM sales_transactions WHERE year(dateTime) = 2024",
+      "off": {
+        "sql": "SELECT SUM(quantity) AS total_units_sold FROM sales_transactions WHERE year(dateTime) = 2024",
+        "ms": 1941,
+        "tokens": 942,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      },
+      "on": {
+        "sql": "SELECT SUM(quantity) AS units_sold FROM sales_transactions WHERE year(dateTime) = 2024",
+        "ms": 3624,
+        "tokens": 1199,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      }
+    },
+    {
+      "id": "ff234e1f-ac74-40af-be23-faf590d4a3fb",
+      "question": "What is the revenue per product?",
+      "groundTruthSql": "SELECT product, sum(totalPrice) FROM sales_transactions GROUP BY product",
+      "off": {
+        "sql": "SELECT product, SUM(totalPrice) AS revenue FROM sales_transactions GROUP BY product",
+        "ms": 11262,
+        "tokens": 929,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      },
+      "on": {
+        "sql": "SELECT product, SUM(totalPrice) AS revenue FROM sales_transactions GROUP BY product",
+        "ms": 1542,
+        "tokens": 1240,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      }
+    },
+    {
+      "id": "656e7427-a31a-48ad-b9a0-4fc31e8b314a",
+      "question": "Which product sold the most units?",
+      "groundTruthSql": "SELECT product FROM sales_transactions GROUP BY product ORDER BY sum(quantity) DESC LIMIT 1",
+      "off": {
+        "sql": "SELECT product, SUM(quantity) AS total_units FROM sales_transactions GROUP BY product ORDER BY total_units DESC LIMIT 1",
+        "ms": 1745,
+        "tokens": 903,
+        "repairs": 0,
+        "status": "pass",
+        "exact": false,
+        "detail": ""
+      },
+      "on": {
+        "sql": "SELECT product, SUM(quantity) AS units_sold FROM sales_transactions GROUP BY product ORDER BY units_sold DESC LIMIT 1",
+        "ms": 9535,
+        "tokens": 1289,
+        "repairs": 0,
+        "status": "pass",
+        "exact": false,
+        "detail": ""
+      }
+    },
+    {
+      "id": "caa9214c-dd51-49a9-b4db-cb36722e5d2a",
+      "question": "How many customers are there per continent?",
+      "groundTruthSql": "SELECT continent, count(*) FROM sales_customers GROUP BY continent",
+      "off": {
+        "sql": "SELECT continent, COUNT(*) AS customer_count FROM sales_customers GROUP BY continent",
+        "ms": 7888,
+        "tokens": 832,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      },
+      "on": {
+        "sql": "SELECT continent, COUNT(*) AS customer_count FROM sales_customers GROUP BY continent",
+        "ms": 9770,
+        "tokens": 1463,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      }
+    },
+    {
+      "id": "cc017bdc-e179-4d26-b825-c803e750739a",
+      "question": "What is the revenue for each month in 2025? Show the month as a number from 1 to 12.",
+      "groundTruthSql": "SELECT month(dateTime) AS m, sum(totalPrice) FROM sales_transactions WHERE year(dateTime) = 2025 GROUP BY month(dateTime)",
+      "off": {
+        "sql": "SELECT month(dateTime) AS month, SUM(totalPrice) AS revenue FROM sales_transactions WHERE year(dateTime) = 2025 GROUP BY month(dateTime) ORDER BY month",
+        "ms": 7668,
+        "tokens": 946,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      },
+      "on": {
+        "sql": "SELECT month(dateTime) AS month, SUM(totalPrice) AS revenue FROM sales_transactions WHERE year(dateTime) = 2025 GROUP BY month(dateTime) ORDER BY month",
+        "ms": 9290,
+        "tokens": 1342,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      }
+    },
+    {
+      "id": "ea858de2-ebc4-47cd-9f63-d5de9301276b",
+      "question": "What is the revenue per franchise country?",
+      "groundTruthSql": "SELECT f.country, sum(t.totalPrice) FROM sales_transactions t JOIN sales_franchises f ON f.franchiseID = t.franchiseID GROUP BY f.country",
+      "off": {
+        "sql": "SELECT f.country AS franchise_country, SUM(t.totalPrice) AS revenue FROM sales_transactions t JOIN sales_franchises f ON t.franchiseID = f.franchiseID GROUP BY f.country",
+        "ms": 2618,
+        "tokens": 951,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      },
+      "on": {
+        "sql": "SELECT f.country AS franchise_country, SUM(t.totalPrice) AS revenue FROM sales_transactions t JOIN sales_franchises f ON t.franchiseID = f.franchiseID GROUP BY f.country",
+        "ms": 11016,
+        "tokens": 1560,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      }
+    },
+    {
+      "id": "4eb36476-045e-455d-9aaf-28f3e87be495",
+      "question": "Which 5 franchises have the highest revenue? Show their names.",
+      "groundTruthSql": "SELECT f.name FROM sales_transactions t JOIN sales_franchises f ON f.franchiseID = t.franchiseID GROUP BY f.franchiseID, f.name ORDER BY sum(t.totalPrice) DESC LIMIT 5",
+      "off": {
+        "sql": "SELECT sf.name, SUM(st.totalPrice) AS revenue FROM sales_transactions st JOIN sales_franchises sf USING (franchiseID) GROUP BY sf.name ORDER BY revenue DESC LIMIT 5",
+        "ms": 2997,
+        "tokens": 964,
+        "repairs": 0,
+        "status": "pass",
+        "exact": false,
+        "detail": ""
+      },
+      "on": {
+        "sql": "SELECT sf.name, SUM(st.totalPrice) AS revenue FROM sales_transactions st JOIN sales_franchises sf ON st.franchiseID = sf.franchiseID GROUP BY sf.name ORDER BY revenue DESC LIMIT 5",
+        "ms": 7471,
+        "tokens": 1540,
+        "repairs": 0,
+        "status": "pass",
+        "exact": false,
+        "detail": ""
+      }
+    },
+    {
+      "id": "cdce5c80-f67d-46fd-ac02-20fff77a169f",
+      "question": "What is the revenue from female customers?",
+      "groundTruthSql": "SELECT sum(t.totalPrice) FROM sales_transactions t JOIN sales_customers c ON c.customerID = t.customerID WHERE c.gender = 'female'",
+      "off": {
+        "sql": "SELECT SUM(t.totalPrice) AS revenue FROM sales_transactions t JOIN sales_customers c ON t.customerID = c.customerID WHERE c.gender ILIKE '%female%'",
+        "ms": 3372,
+        "tokens": 967,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      },
+      "on": {
+        "sql": "SELECT SUM(st.totalPrice) AS revenue FROM sales_transactions st JOIN sales_customers sc ON st.customerID = sc.customerID WHERE sc.gender = 'female'",
+        "ms": 7830,
+        "tokens": 1501,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      }
+    },
+    {
+      "id": "8eb81ef8-7ffd-4267-9e82-3f0da9796ec1",
+      "question": "Which ingredient is supplied to the franchises in Tokyo?",
+      "groundTruthSql": "SELECT DISTINCT s.ingredient FROM sales_franchises f JOIN sales_suppliers s ON s.supplierID = f.supplierID WHERE f.city = 'Tokyo'",
+      "off": {
+        "sql": "SELECT DISTINCT s.ingredient FROM sales_suppliers s JOIN sales_franchises f ON s.supplierID = f.supplierID WHERE f.city ILIKE '%Tokyo%'",
+        "ms": 7422,
+        "tokens": 1026,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      },
+      "on": {
+        "sql": "SELECT DISTINCT s.ingredient FROM sales_franchises f JOIN sales_suppliers s ON f.supplierID = s.supplierID WHERE f.city = 'Tokyo'",
+        "ms": 11012,
+        "tokens": 1558,
+        "repairs": 0,
+        "status": "pass",
+        "exact": true,
+        "detail": ""
+      }
+    },
+    {
+      "id": "ac1f469c-0019-4c87-ac6a-bc63d98b179d",
+      "question": "What is the revenue of the franchises in Japan?",
+      "groundTruthSql": "SELECT sum(t.totalPrice) FROM sales_transactions t JOIN sales_franchises f ON f.franchiseID = t.franchiseID WHERE f.country = 'Japan'",
+      "off": {
+        "sql": "SELECT f.franchiseID, f.name, SUM(t.totalPrice) AS revenue FROM sales_transactions t JOIN sales_franchises f ON t.franchiseID = f.franchiseID WHERE f.country = 'Japan' GROUP BY f.franchiseID, f.name",
+        "ms": 7847,
+        "tokens": 1038,
+        "repairs": 0,
+        "status": "wrong",
+        "exact": false,
+        "detail": "got [[3000001,\"Tokyo Treats\",3031347],[3000039,\"Naha Nibbles\",759381]]"
+      },
+      "on": {
+        "sql": "SELECT f.name AS franchise_name, SUM(t.totalPrice) AS revenue FROM sales_transactions t JOIN sales_franchises f ON t.franchiseID = f.franchiseID WHERE f.country = 'Japan' GROUP BY f.name",
+        "ms": 7406,
+        "tokens": 1602,
+        "repairs": 0,
+        "status": "wrong",
+        "exact": false,
+        "detail": "got [[\"Fukuoka Fancies\",1110378],[\"Kobe Konfections\",2259426]]"
+      }
+    }
+  ],
+  "summary": {
+    "off": {
+      "pass": 15,
+      "total": 17,
+      "percent": 88,
+      "held": 0,
+      "tokens": 15725,
+      "avgMs": 4466
+    },
+    "on": {
+      "pass": 16,
+      "total": 17,
+      "percent": 94,
+      "held": 0,
+      "tokens": 23995,
+      "avgMs": 6472
+    },
+    "skipped": 0
+  }
+}
