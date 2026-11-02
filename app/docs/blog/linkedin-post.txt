@@ -11,6 +11,8 @@ I then tried 16 prompts by hand on two running instances. Seven gave a wrong ans
 
 On AdventureWorks the same pattern: 7 of 17 from the schema, 8 with the database's own comments, 14 with a hand-written ontology. Swapping models moved the score by about 2 questions.
 
+The model comparison I have: going from a 1.5B to a 7B model added about 2 correct answers; a SQL-specialist 7B model about 2; the ontology added 3 to 7. A general 7B model with an ontology beat the specialist model without one (14 of 17 against 9 on AdventureWorks). I have not tested a frontier model yet, so I am not claiming a small model beats one.
+
 Two things I did not expect:
 - My first run showed no gain (10 vs 9). The ontology was not reaching the model: notes were only added when the question contained the exact table name. Writing it down is not enough. It has to be found.
 - A SQL-specialist model (sqlcoder-7b) did not benefit from the ontology.

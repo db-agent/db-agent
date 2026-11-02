@@ -1,6 +1,6 @@
-# Your text-to-SQL accuracy problem is probably an ontology problem
+# Ontology for AI Database Agents: Why Model Size Matters Less Than You Think
 
-*What I measured when I gave the same model the same questions with and without a written-down ontology, on AdventureWorks and on a Databricks dataset with no comments at all.*
+*I gave the same models the same questions with and without a written-down ontology, on AdventureWorks and on a Databricks dataset with no comments at all. For text-to-SQL in an AI database agent, the ontology moved accuracy more than the choice of model did.*
 
 Most conversations about text-to-SQL accuracy are about the model: a bigger one, a SQL-specialist one, a better prompt. I ran a set of tests on [db-agent](https://github.com/db-agent/db-agent), an open-source natural-language-to-SQL layer, and the biggest lever I found was none of those. It was a plain text file that says what the data means.
 
@@ -10,6 +10,8 @@ Most conversations about text-to-SQL accuracy are about the model: a bigger one,
 - On a Databricks copy of the Bakehouse sample dataset, which has **no comments at all**, the same model went from **14 of 17 to 17 of 17**. The three it got wrong were not hard SQL. They were value conventions the schema does not contain: `'Y'` instead of `'Yes'`, `visa` instead of `Visa`, `female` instead of `F`.
 - In a separate check of 16 hand-picked prompts, 7 gave a different, wrong-versus-right answer with the ontology and 9 made no difference.
 - In the same tests, swapping the model changed the score by about 2 questions. Adding the ontology changed it by 3 to 7.
+- A general 7B model with an ontology (14 of 17) beat a SQL-specialist 7B model that had only the schema (9 of 17) on AdventureWorks.
+- I tested models from 0.5B to 7B. I did not test a frontier model, so this article does not claim a small model beats one.
 - My first Bakehouse run showed **no gain** (10 correct without, 9 with). The ontology was not reaching the model. Writing it was not enough: it also has to be found.
 - The ontology costs tokens: about 520 extra input tokens per question in my run.
 
@@ -137,6 +139,22 @@ Runs 4 and 5 are identical, which is expected at temperature 0: repeating a run 
 - **A SQL-specialist model.** I tried `sqlcoder-7b-2`. With the schema alone it matched or beat the general model (8 to 9 of 17). Given an ontology it did not improve (9, 8, 8), and it was slower. It also copied the JSON answer template into its SQL until I let it answer with bare SQL. Specialised for SQL is not the same as good at using context.
 - **A bigger model.** Going from 1.5B to 7B changed the schema-only score from 5 to 7. The ontology changed 7 to 14.
 
+## Model size and quality against the ontology
+
+Models are the part everyone tunes, so here are the model comparisons I have, on the same 17 AdventureWorks questions:
+
+| Comparison | Score | Change |
+|---|---|---|
+| 1.5B model, schema only, then 7B model, schema only | 5, then 7 | +2 for a model about 5 times larger |
+| 7B model, schema only, then a SQL-specialist 7B model (sqlcoder), schema only | 7, then 9 | +2 for a model trained for SQL |
+| 7B model, schema only, then the same 7B model with an ontology | 7, then 14 | **+7** |
+| SQL-specialist 7B model, schema only, against the general 7B model with an ontology | 9 against **14** | the general model with the ontology wins |
+| 7B model, schema only, against the 1.5B model with an ontology | 7 against 8 | about equal: the small model with an ontology matched the larger one without |
+
+Every one of these rows is one run on 17 questions, so a difference of one or two questions is noise. What I read from the pattern is that a bigger or better-trained model fixes some errors, and an ontology fixes a different kind: the ones where the answer is a fact about your data, not a skill. A bigger model cannot know that your table stores `'Y'` where it expected `'Yes'`.
+
+What I did not test is a frontier model. A larger model may get more questions right from the schema alone, and may also guess some conventions correctly. Whether a small model with the right ontology can match or beat one is an open question in this article, and the next test I plan to run.
+
 ## What it costs
 
 The ontology is text in the prompt. In the final Bakehouse run the 17 questions used 12,461 tokens without it and 21,352 with it, about 520 more input tokens per question. With the illustrative prices I used for the local model, that is a fraction of a cent per question. On AdventureWorks the effect went the other way (fewer tokens, fewer repairs). It depends on how many repairs the model needs without help.
@@ -145,6 +163,7 @@ The ontology is text in the prompt. In the final Bakehouse run the 17 questions 
 
 I would rather you read these than find them.
 
+- **Models from 0.5B to 7B, plus one SQL-specialist model.** No frontier model was tested.
 - **17 questions per dataset, one model family.** A difference of one or two questions is noise. The pattern across two datasets and several runs is the evidence, not any single number.
 - **I wrote the questions and the ontology.** The ontology defines concepts several questions ask about. This measures what a good ontology can do, not what an average one does, and not the gain on questions nobody anticipated.
 - **I fixed the scoring between runs 1 and 2.** One ground-truth query returned an extra revenue column for a question that only asked for names, and I let answers carry extra columns (a model that answers "which product" with the product and its total is still right). Both changes helped the runs without the ontology as well as the ones with it.
