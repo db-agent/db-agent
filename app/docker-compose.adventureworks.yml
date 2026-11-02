@@ -1,14 +1,13 @@
 # AdventureWorks demo: two db-agent instances on one Postgres, one model. One has no ontology (so you can show
-# the scan and build it live), the other has the fully curated ontology. A compare page asks both the same question.
+# the scan and build it live), the other has the fully curated ontology.
 #
 #   docker compose -f docker-compose.adventureworks.yml up --build     # first start loads the data, about 2 minutes
-#   open http://localhost:3000    side by side
 #   open http://localhost:3001    db-agent without the ontology (Ontology > Scan database)
 #   open http://localhost:3002    db-agent with the curated ontology
 #
 # Model: Ollama on the host by default. Pull qwen2.5-coder:7b first. For an OpenAI-compatible endpoint:
 #   DEMO_LLM_BASE_URL=... DEMO_LLM_API_KEY=... DEMO_LLM_MODEL=...
-# Ports are 3000 (compare), 3001, 3002 and 5457: override with COMPARE_PORT, PLAIN_PORT, CURATED_PORT, AW_DB_PORT.
+# Ports are 3001, 3002 and 5457: override with PLAIN_PORT, CURATED_PORT, AW_DB_PORT.
 # Reset the "without" instance after a live demo (drops what you saved):
 #   docker compose -f docker-compose.adventureworks.yml up -d --force-recreate agent-plain
 # Details: docs/adventureworks-demo.md
@@ -64,21 +63,6 @@ services:
       CURATED: "true"
     ports:
       - "${CURATED_PORT:-3002}:3001"
-
-  compare:
-    build: .
-    entrypoint: ["node", "docker/adventureworks/compare/server.js"]
-    environment:
-      PORT: "3000"
-      PLAIN_URL: http://agent-plain:3001
-      CURATED_URL: http://agent-curated:3001
-      PUBLIC_PLAIN_PORT: ${PLAIN_PORT:-3001}
-      PUBLIC_CURATED_PORT: ${CURATED_PORT:-3002}
-    ports:
-      - "${COMPARE_PORT:-3000}:3000"
-    depends_on:
-      - agent-plain
-      - agent-curated
 
 volumes:
   awdata:
