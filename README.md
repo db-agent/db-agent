@@ -73,7 +73,7 @@ databricks sync . /Workspace/Users/<you>/db-agent-node \
 databricks apps deploy db-agent-node --source-code-path /Workspace/Users/<you>/db-agent-node
 ```
 
-**More:** [ontology and scan](./app/docs/ontology.md) · [MCP gateway](./app/docs/mcp-gateway.md) · [Bakehouse demo (with and without an ontology)](./app/docs/bakehouse-demo.md) · [full configuration](./app/README.md)
+**More:** [ontology and scan](./app/docs/ontology.md) · [MCP gateway](./app/docs/mcp-gateway.md) · [full configuration](./app/README.md)
 
 ---
 
