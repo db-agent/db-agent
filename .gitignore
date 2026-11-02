@@ -209,3 +209,6 @@ claude_desktop_config.json
 app/gateway.json
 app/gateway.json.bak-*
 app/data/gateway-demo.json
+
+# LLM provider keys for the demo compose files
+app/groq.env
