@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>db-agent: ontology flyer</title>
+<style>
+  :root { --azure:#0078d4; --azure-soft:#dcefff; --orange:#d9480f; --navy:#0a2540; --muted:#4a5f75; --bg:#f4f9fd; --line:#cfe0ee; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1200px; height: 627px; }
+  body { font-family: -apple-system, "SF Pro Display", "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: var(--navy); position: relative; overflow: hidden; }
+  .bar { position: absolute; left: 0; top: 0; bottom: 0; width: 14px; background: linear-gradient(var(--azure), var(--azure) 70%, var(--orange) 70%); }
+  .left { position: absolute; left: 64px; top: 44px; width: 650px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .logo { width: 64px; height: 64px; overflow: hidden; flex: none; }
+  .brand .logo img { width: 134px; height: 134px; margin: -36px 0 0 -34px; display: block; }
+  .brand b { font-size: 24px; letter-spacing: .2px; }
+  .brand span { font-size: 14px; color: var(--muted); margin-left: 6px; }
+  .kick { margin-top: 30px; display: flex; gap: 10px; }
+  .chip { font-size: 14px; font-weight: 700; letter-spacing: 1.2px; padding: 6px 12px; border-radius: 999px; background: var(--azure-soft); color: #00508f; }
+  .chip.o { background: #ffe4da; color: #9a3412; }
+  h1 { margin-top: 22px; font-size: 68px; line-height: 1.04; font-weight: 800; letter-spacing: -1.5px; }
+  h1 em { font-style: normal; color: var(--azure); }
+  .sub { margin-top: 22px; font-size: 25px; line-height: 1.35; color: var(--muted); max-width: 600px; }
+  .code { margin-top: 26px; width: 600px; border: 1px solid var(--line); border-radius: 12px; background: #fff; overflow: hidden; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 19px; }
+  .code div { display: flex; justify-content: space-between; padding: 11px 18px; }
+  .code div + div { border-top: 1px solid var(--line); }
+  .code .bad b { color: var(--orange); } .code .good b { color: var(--azure); }
+  .code .lbl { font-family: -apple-system, Arial, sans-serif; font-size: 13px; letter-spacing: 1px; font-weight: 700; color: var(--muted); }
+  .right { position: absolute; right: 56px; top: 70px; width: 372px; display: flex; flex-direction: column; gap: 18px; }
+  .card { border-radius: 18px; padding: 24px 28px; background: #fff; border: 2px solid var(--line); }
+  .card.on { background: var(--azure); border-color: var(--azure); color: #fff; box-shadow: 0 10px 30px rgba(0,120,212,.28); }
+  .card small { display: block; font-size: 15px; font-weight: 700; letter-spacing: 1.4px; opacity: .8; }
+  .card .n { font-size: 96px; font-weight: 800; line-height: 1; letter-spacing: -3px; margin-top: 6px; }
+  .card .n span { font-size: 40px; letter-spacing: 0; opacity: .75; font-weight: 700; }
+  .card p { margin-top: 6px; font-size: 16px; opacity: .85; }
+  .foot { position: absolute; left: 64px; right: 56px; bottom: 26px; display: flex; justify-content: space-between; align-items: center; font-size: 17px; color: var(--muted); }
+  .foot b { color: var(--navy); }
+  .foot .tiny { font-size: 14px; }
+</style></head>
+<body>
+  <div class="bar"></div>
+  <div class="left">
+    <div class="brand"><div class="logo"><img src="logo.png" alt="db-agent logo"></div><b>db-agent</b><span>open source</span></div>
+    <div class="kick"><span class="chip">ONTOLOGY</span><span class="chip">TEXT-TO-SQL</span><span class="chip o">AI AGENTS</span></div>
+    <h1>Same model.<br>Same data.<br><em>14 &rarr; 17</em> correct.</h1>
+    <p class="sub">What changed: a short written ontology that tells the model what your data means.</p>
+  </div>
+  <div class="right">
+    <div class="card"><small>SCHEMA ONLY</small><div class="n">14<span>/17</span></div><p>approved = 'Yes' returns 0</p></div>
+    <div class="card on"><small>WITH THE ONTOLOGY</small><div class="n">17<span>/17</span></div><p>approved = 'Y' returns 27</p></div>
+  </div>
+  <div class="foot">
+    <div><b>github.com/db-agent/db-agent</b></div>
+    <div class="tiny">Databricks &middot; qwen2.5-coder 7B &middot; 17 questions, one model. Full write-up in the article.</div>
+  </div>
+</body></html>
