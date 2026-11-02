@@ -1,10 +1,6 @@
-// server.js — Node.js/Express port of the same text-to-SQL agent as the
-// Streamlit app (../app.py, ../pipeline.py, ../core/*), built to compare how
-// the UI feels on a real frontend stack vs. Streamlit. Scope is intentionally
-// narrower than the Python app: SQLite only, single LLM (no failover chain,
-// no Databricks backend) — same prompt → SQL → safety-check → execute →
-// results loop, plus the SQL repair loop and cross-platform memory feature
-// ported from core/pipeline.py and core/memory.py.
+// server.js — Node.js/Express text-to-SQL agent: prompt → SQL → safety-check →
+// cost-check → execute → results, plus the SQL repair loop and cross-platform
+// memory feature.
 
 import "dotenv/config";
 import express from "express";
@@ -39,7 +35,7 @@ const PORT = process.env.DATABRICKS_APP_PORT || process.env.PORT || 3001;
 // app has no path dependency outside its own deployed source tree — required
 // since Databricks Apps deploys app/ as its own isolated source root,
 // not the whole repo. DB_PATH can still override to ../data/demo.db for
-// local dev that shares the root Python app's seeded DB.
+// local dev that shares a seeded DB elsewhere in the repo.
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "data", "demo.db");
 const LLM_BASE_URL = process.env.LLM_BASE_URL || "https://api.openai.com/v1";
 // .trim(): a secret pushed via `echo "$TOKEN" | databricks secrets

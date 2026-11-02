@@ -20,53 +20,50 @@
 
 DB Agent is a minimal **natural-language-to-SQL system**. A user asks a question in plain English; DB Agent retrieves relevant schema context, prompts an LLM to generate a SQL query, validates the query against a SELECT-only safety layer, executes it against the target database, and returns the results with every intermediate step visible. The primary implementation is a **Node.js/React app** that runs locally in one command or deploys natively to **Databricks Apps**.
 
+
 ---
+
 ## Features
 
 - **Text-to-SQL** — natural language to SELECT queries via any LLM
 - **Safety layer** — blocks all write/admin SQL before it reaches the database
 - **Explainability** — schema context, generated SQL, and validation all visible
 - **Any OpenAI-compatible LLM** — Databricks Model Serving, OpenAI, Groq, Ollama, LM Studio
-- **SQL backends** — SQLite out of the box in the Node app; PostgreSQL, MySQL, Lakebase, and Unity Catalog via the legacy app's SQLAlchemy/Databricks SQL backends
-- **Agentic Memory** — redacted, cross-agent memory over a shared store (local JSONL or AWS S3 Vectors), so an OLTP-facing agent and an OLAP-facing agent can share context without sharing data
-- **Knowledge file** — per-deployment descriptions, synonyms, example queries, and instructions injected into the prompt
+- **SQL backends** — Databricks SQL (Unity Catalog), PostgreSQL (including Lakebase), SQLite, and DuckDB over MinIO
+- **Two bills, both visible** — per-answer LLM token cost and warehouse compute cost (`EXPLAIN` / `EXPLAIN COST`), with approval for expensive queries
+- **Ontology (knowledge file)** — descriptions, synonyms, example queries, and rules injected into the prompt; `db-agent scan` drafts one from your schema, and an accuracy test scores answers with and without it
+- **MCP gateway** — Claude Desktop, VS Code, and Claude Code query the same database through one set of rules, with per-caller keys, budgets, and an audit log
+- **Agentic Memory** — redacted, cross-agent memory over a shared store (local JSONL or AWS S3 Vectors)
 - **Benchmarks** — question + ground-truth SQL pairs scored on result sets, with UI and CI integration
+
 ---
 
 ### Architecture
 
 ![DB Agent architecture](./assets/app-architecture-july-2026.png)
 
+## Quick start
 
-## Deployment modes
-
-| | Local ([`app/`](./app)) | Databricks Apps ([`app/`](./app)) |
+| | Local | Databricks Apps |
 |---|---|---|
-| **Stack** | Node.js + Express + React | Node.js + Express + React (native Databricks App) |
-| **Best for** | Trying it in one command, local dev | Enterprise Databricks deployments |
-| **Auth** | `.env` | Databricks Apps runtime + secrets |
-| **SQL target** | Databricks SQL warehouse (default) | Unity Catalog / Lakebase via env |
-| **LLM endpoint** | Ollama or any OpenAI-compatible | Databricks Model Serving or any OpenAI-compatible |
-| **Memory backend** | Local JSONL or AWS S3 Vectors | Lakebase  pgvector |
+| **Stack** | Node.js + Express + React | Same app, native Databricks App |
+| **LLM** | Ollama or any OpenAI-compatible | Databricks Model Serving or any OpenAI-compatible |
+| **Memory** | Local JSONL or AWS S3 Vectors | Lakebase pgvector |
 
-**Run it locally** (Databricks SQL + local Ollama):
+**Run locally** (Databricks SQL + Ollama):
 
 ```bash
 cd app
 cp .env.example .env    # set DATABRICKS_* warehouse credentials
-ollama pull qwen2.5-coder:0.5b
+ollama pull qwen2.5-coder:7b
 ./run_local.sh
 ```
 
-Open `http://localhost:3001`. Generated SQL is analyzed with warehouse `EXPLAIN COST` (estimated bytes / rows). Any OpenAI-compatible endpoint works instead of Ollama — see [`app/.env.example`](./app/.env.example).
+Open `http://localhost:3001`. Any OpenAI-compatible endpoint works instead of Ollama; see [`app/.env.example`](./app/.env.example).
 
-**Docker one-click** (Ollama + agent; Databricks stays in the cloud):
+**Docker, no cloud account** (Postgres demo data): see [`app/README.md`](./app/README.md#docker-demo-postgres-no-cloud-account).
 
-```bash
-docker compose up --build
-```
-
-**Deploy to Databricks Apps:**
+**Databricks Apps:**
 
 ```bash
 cd app
@@ -76,45 +73,13 @@ databricks sync . /Workspace/Users/<you>/db-agent-node \
 databricks apps deploy db-agent-node --source-code-path /Workspace/Users/<you>/db-agent-node
 ```
 
-Databricks installs dependencies and builds the frontend automatically. See [`app/README.md`](./app/README.md) for `app.yaml` configuration (LLM endpoint, secrets, embeddings model for the memory feature).
-
-**Running multiple instances** (for cross-agent memory — see Agentic Memory above): each running instance is tagged via `DBAGENT_ID`, so you can spin up as many as you like, locally or on Databricks, and they'll share suggestions with each other through a common memory store.
-
-```bash
-# Instance 1 — e.g. an OLTP-facing agent, local Ollama
-DBAGENT_ID=oltp-sqlserver ./run_local.sh
-
-# Instance 2 — e.g. an OLAP-facing agent, same or a different machine
-DBAGENT_ID=olap-databricks PORT=3002 ./run_local.sh
-```
-
-By default each instance stores memory in its own local file, so two local instances only share memory if pointed at the same `MEMORY_STORE_PATH`. To share memory across genuinely separate machines/deployments (e.g. one instance local, one on Databricks Apps), set `MEMORY_BACKEND=s3vectors` on every instance that should share — see [`app/README.md`](./app/README.md) for the S3 Vectors setup, including the important detail that every sharing instance must use the *same embedding model* (chat/SQL-generation models can still differ freely per instance).
+**More:** [ontology and scan](./app/docs/ontology.md) · [MCP gateway](./app/docs/mcp-gateway.md) · [Bakehouse demo (with and without an ontology)](./app/docs/bakehouse-demo.md) · [full configuration](./app/README.md)
 
 ---
-
-
-## Learning the concepts
-
-New to AI agents? Work through the learning modules in order — each one builds on the last. They now live in the [becloudready/workshops](https://github.com/becloudready/workshops/tree/master/workshops/databricks-genie-ai-agents/fundamentals) repo as the notebook track of the Databricks Genie & AI Agents workshop; this repo stays focused on the agent itself.
-
-| Module | Concept | What you build |
-|--------|---------|---------------|
-| [01 — LLM Basics](https://github.com/becloudready/workshops/tree/master/workshops/databricks-genie-ai-agents/fundamentals/01_llm_basics) | What is an LLM API call? | Notebook: raw API call, messages, temperature |
-| [02 — Structured Output](https://github.com/becloudready/workshops/tree/master/workshops/databricks-genie-ai-agents/fundamentals/02_structured_output) | How to get reliable JSON from an LLM | Notebook: JSON mode + Pydantic validation |
-| [03 — Tool Use](https://github.com/becloudready/workshops/tree/master/workshops/databricks-genie-ai-agents/fundamentals/03_tool_use) | LLM calls functions instead of generating text | Agent that decides when to query the DB |
-| [04 — Agentic Loop](https://github.com/becloudready/workshops/tree/master/workshops/databricks-genie-ai-agents/fundamentals/04_agentic_loop) | Retry, reflect, recover from errors | Agent with max-steps guard and error recovery |
-| [05 — MCP Server](https://github.com/becloudready/workshops/tree/master/workshops/databricks-genie-ai-agents/fundamentals/05_mcp_server) | Expose tools via a standard protocol | MCP server connectable to Claude Desktop |
-
----
-
 
 ## Workshops & Training
 
-The team behind DB Agent teaches production text-to-SQL and Databricks patterns through hands-on bootcamps.
-
-- **Private team workshops** — Virtual workshops on AI Agents, Claude Code, MS Copilot, text-to-SQL agents, SQL safety guardrails, and Databricks deployment patterns. Contact [BeCloudReady](https://calendly.com/kchandank/30-mins-meeting) (Databricks Registered Partner).
-
-Community: [TorontoAI](https://toronto-ai.org/) — 10,000+ data and AI practitioners across Toronto, the GTA, and the US East Coast.
+Hands-on bootcamps on text-to-SQL agents, ontologies, and Databricks deployment patterns. Private team workshops: contact [BeCloudReady](https://calendly.com/kchandank/30-mins-meeting) (Databricks Registered Partner). Community: [TorontoAI](https://toronto-ai.org/), 10,000+ data and AI practitioners.
 
 ---
 
@@ -122,4 +87,4 @@ Community: [TorontoAI](https://toronto-ai.org/) — 10,000+ data and AI practiti
 
 [BeCloudReady](https://becloudready.com/) — Databricks Registered Partner. Organizers of [TorontoAI](https://toronto-ai.org/).
 
-[Book a discovery call](https://calendly.com/kchandank/30-mins-meeting) for Customized training/consulting engagement 
+[Book a discovery call](https://calendly.com/kchandank/30-mins-meeting) for customized training and consulting.

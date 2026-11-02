@@ -1,14 +1,10 @@
 # DB Agent (Node)
 
-A Node.js/Express prototype of the same text-to-SQL agent as the root
-Streamlit app — built to compare how the UI feels on a real frontend stack
-(React + Tailwind + shadcn/ui) versus Streamlit's rerun-on-every-interaction
-model and widget styling. See the root `README.md` for background on the
-project.
+A Node.js/Express text-to-SQL agent with a React + Tailwind + shadcn/ui
+frontend. See the root `README.md` for background on the project.
 
-Scope is intentionally narrower than the Python app in one respect: a
-single LLM (no model failover chain). It does carry over the SQL
-repair-on-failure loop and the cross-platform contextual memory feature.
+It uses a single LLM (no model failover chain), a SQL repair-on-failure
+loop, and cross-platform contextual memory.
 The SQL layer itself is pluggable (`sqlEngines/`, same registry pattern as
 the memory backends): `databricks-sql` (default — Unity Catalog warehouse),
 `sqlite` (optional local file), `minio-duckdb` (Parquet in MinIO via DuckDB),
@@ -331,7 +327,7 @@ the GitHub Actions workflow does). `server.js` also defensively `.trim()`s
   identifiers) and writes it to a shared store. Other `DBAGENT_ID` instances
   pointed at the same store surface it as "Suggested from other agents" in
   the sidebar. Set `DBAGENT_ID` per instance (`run_local.sh` supports
-  `DBAGENT_ID=oltp-sqlserver ./run_local.sh`, same as the Python app).
+  `DBAGENT_ID=oltp-sqlserver ./run_local.sh`).
   Pluggable backends (`memoryBackends/`, same registry pattern as the SQL
   engines above), selected via `MEMORY_BACKEND`:
   - `local` (default) — JSONL + cosine similarity, no cloud setup.
@@ -435,5 +431,5 @@ the GitHub Actions workflow does). `server.js` also defensively `.trim()`s
   itself on purpose — diff the timestamps yourself to see where time is
   actually going (LLM call vs. query execution vs. repairs), since that's
   more trustworthy than a single self-reported number would be.
-- No streaming, no auth — this is a UI comparison prototype, not a
-  production alternative to the Streamlit app.
+- No streaming and no built-in auth for the web UI (the MCP gateway has
+  per-caller keys).

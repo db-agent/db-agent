@@ -65,7 +65,6 @@ coverage.xml
 # The bundled demo seed DB is intentionally committed (README promises a
 # self-contained app; git-based deploys like Render need it in the repo)
 !app/data/demo.db
-legacy/streamlit-app/data/memory_store.jsonl
 app/data/memory_store.jsonl
 app/data/feedback.jsonl
 app/data/benchmark-cases.json
@@ -117,13 +116,6 @@ Desktop.ini
 *.log.*
 logs/
 application.log
-
-# ── Streamlit ─────────────────────────────────────────────────────────────────
-# Block runtime caches and the real secrets file, but keep the committed
-# config.toml and the secrets.toml.example template.
-.streamlit/*
-!.streamlit/config.toml
-!.streamlit/secrets.toml.example
 
 # ── AWS SAM ───────────────────────────────────────────────────────────────────
 .aws-sam/
