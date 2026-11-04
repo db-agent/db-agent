@@ -70,7 +70,7 @@ Open `http://localhost:3001`. Any OpenAI-compatible endpoint works instead of Ol
 ```powershell
 # 1. Install prerequisites & labagent
 winget install Python.Python.3.14
-Invoke-WebRequest -Uri [https://bootstrap.pypa.io/get-pip.py](https://bootstrap.pypa.io/get-pip.py) -OutFile get-pip.py
+Invoke-WebRequest -Uri https://bootstrap.pypa.io/get-pip.py -OutFile get-pip.py
 python get-pip.py
 pip install labagent
 
