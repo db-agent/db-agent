@@ -255,7 +255,7 @@ export function createGateway({ config, store, pipeline, approvalTtlMinutes = 60
       if (!analysis) {
         return result(false, "This database engine cannot estimate cost before running. No estimate available.", { status: "ok", sql: text });
       }
-      const reason = pipeline.approvalReason(analysis);
+      const reason = pipeline.approvalReason(analysis, text);
       const body = { sql: text, cost: costSummary(analysis), wouldNeedApproval: Boolean(reason), reason: reason || undefined };
       return result(false, JSON.stringify(body, bigintSafe, 2), {
         status: "ok", sql: text, estBytes: analysis.sizeInBytes, estRows: analysis.rowCount,

@@ -13,7 +13,8 @@ import { createMemoryBackend, listMemoryBackends } from "./memoryBackends/index.
 import { createSqlEngine, listSqlEngines } from "./sqlEngines/index.js";
 import { formatKnowledge, loadKnowledge, selectRelevantKnowledge } from "./knowledge.js";
 import { validateSql } from "./sqlSafety.js";
-import { needsCostAnalysis } from "./queryShape.js";
+import { collapsesRows, needsCostAnalysis } from "./queryShape.js";
+import { APP_VERSION } from "./version.js";
 import { sqlFitsSchema } from "./exampleFit.js";
 import { createAbRunner } from "./abTest.js";
 import { readMetadata, scanMetadata } from "./ontology/scan.js";
@@ -455,7 +456,7 @@ const COST_ANALYSIS = (process.env.COST_ANALYSIS || "auto").toLowerCase();
 const ANALYZE_SKIP_LIMIT = Number(process.env.ANALYZE_SKIP_LIMIT ?? 1000);
 const APPROVAL_ALWAYS = (process.env.APPROVAL_ALWAYS || "false").toLowerCase() === "true";
 
-function approvalReason(analysis) {
+function approvalReason(analysis, sql) {
   if (APPROVAL_ALWAYS) return "Approval required for every query (APPROVAL_ALWAYS).";
   if (!analysis || analysis.error) {
     return `Cost estimate unavailable${analysis?.error ? ` (${analysis.error})` : ""}, so the query was not run automatically.`;
@@ -466,7 +467,8 @@ function approvalReason(analysis) {
   if (APPROVAL_MAX_BYTES > 0 && analysis.sizeInBytes != null && analysis.sizeInBytes > APPROVAL_MAX_BYTES) {
     return `Estimated data size ${analysis.sizeLabel || analysis.sizeInBytes + " B"} exceeds the ${(APPROVAL_MAX_BYTES / 1024 ** 2).toFixed(0)} MB limit.`;
   }
-  if (APPROVAL_MAX_ROWS > 0 && analysis.rowCount != null && analysis.rowCount > APPROVAL_MAX_ROWS) {
+  // The row estimate is only trusted for queries that return roughly one row per input row (SELECT *, plain filters).
+  if (APPROVAL_MAX_ROWS > 0 && analysis.rowCount != null && analysis.rowCount > APPROVAL_MAX_ROWS && !(sql && collapsesRows(sql))) {
     return `Estimated ${Math.round(analysis.rowCount).toLocaleString()} rows exceeds the ${APPROVAL_MAX_ROWS.toLocaleString()} row limit.`;
   }
   const c = analysis.cost;
@@ -597,7 +599,7 @@ async function runPipeline(question, { rawSql = null, allowTable = null, guardSq
             output.analysis = { error: describeError(analyzeErr), rawPlan: null };
             warn(`[ask] EXPLAIN COST failed (non-fatal): ${output.analysis.error}`);
           }
-          const reason = approvalReason(output.analysis);
+          const reason = approvalReason(output.analysis, currentSql);
           log(
             `[ask] EXPLAIN COST: size=${output.analysis.sizeLabel ?? "n/a"} ` +
               `rows=${output.analysis.rowCount ?? "n/a"}` +
@@ -737,6 +739,7 @@ app.get("/api/config", (req, res) => {
   res.json({
     llmBaseUrl: LLM_BASE_URL,
     llmModel: LLM_MODEL,
+    version: APP_VERSION,
     dbPath: path.basename(DB_PATH),
     sqlEngine: activeSqlEngineName,
     sqlEngineInfo: info,

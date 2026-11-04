@@ -104,6 +104,14 @@ export function Sidebar({
       <p className="text-xs text-muted-foreground">
         Ask your database questions in plain English
       </p>
+      {config?.version && (
+        <p
+          className="mt-0.5 text-[11px] text-muted-foreground"
+          title={config.version.commit ?? "commit unknown"}
+        >
+          version <code className="rounded bg-muted px-1 py-0.5">{config.version.short}</code>
+        </p>
+      )}
 
       <button
         type="button"
