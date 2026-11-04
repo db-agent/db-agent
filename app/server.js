@@ -156,8 +156,22 @@ function logWebRequest(mcpTool, out, { question = null, durationMs = null } = {}
   }
 }
 
-const llm = new OpenAI({ baseURL: LLM_BASE_URL, apiKey: LLM_API_KEY });
-const embeddingClient = new OpenAI({ baseURL: EMBEDDING_BASE_URL, apiKey: EMBEDDING_API_KEY });
+// The chat endpoint, model and key can be changed at runtime from the UI (PUT /api/llm). The key lives in memory
+// only, is never sent back, and applies to everyone using this server. LLM_SETTINGS_LOCK=true refuses changes.
+const llmSettings = { baseUrl: LLM_BASE_URL, model: LLM_MODEL, apiKey: LLM_API_KEY };
+const LLM_SETTINGS_LOCKED = (process.env.LLM_SETTINGS_LOCK || "false").toLowerCase() === "true";
+let llm = new OpenAI({ baseURL: llmSettings.baseUrl, apiKey: llmSettings.apiKey });
+// Embeddings follow the chat endpoint and key unless EMBEDDING_BASE_URL / EMBEDDING_API_KEY are set.
+let embeddingClient = new OpenAI({ baseURL: EMBEDDING_BASE_URL, apiKey: EMBEDDING_API_KEY });
+function rebuildLlmClients() {
+  llm = new OpenAI({ baseURL: llmSettings.baseUrl, apiKey: llmSettings.apiKey });
+  embeddingClient = new OpenAI({
+    baseURL: process.env.EMBEDDING_BASE_URL || llmSettings.baseUrl,
+    apiKey: (process.env.EMBEDDING_API_KEY || "").trim() || llmSettings.apiKey,
+  });
+  MEMORY.embeddingClient = embeddingClient;
+  MEMORY.llmModel = llmSettings.model;
+}
 
 const MEMORY = {
   memoryEnabled: (process.env.MEMORY_ENABLED ?? "true").toLowerCase() !== "false",
@@ -285,7 +299,7 @@ const LLM_MAX_TOKENS = Number(process.env.LLM_MAX_TOKENS) || 1024;
 // Servers that do not report usage leave `missing` > 0 so the numbers are not mistaken for zero.
 async function callLlm(systemPrompt, userPrompt, usage = null) {
   const response = await llm.chat.completions.create({
-    model: LLM_MODEL,
+    model: llmSettings.model,
     temperature: 0,
     max_tokens: LLM_MAX_TOKENS,
     messages: [
@@ -544,7 +558,7 @@ async function runPipeline(question, { rawSql = null, allowTable = null, guardSq
     status: null,
     approvalReason: null,
     // Tokens spent on this answer (SQL generation and repairs; embeddings for example selection are not counted).
-    usage: { model: LLM_MODEL, calls: 0, inputTokens: 0, outputTokens: 0, missing: 0 },
+    usage: { model: llmSettings.model, calls: 0, inputTokens: 0, outputTokens: 0, missing: 0 },
   };
 
   try {
@@ -760,11 +774,36 @@ app.put("/api/cost-guard", (req, res) => {
   res.json(costGuardView());
 });
 
+// Body: any of baseUrl, model, apiKey. An empty apiKey leaves the current key alone.
+app.put("/api/llm", (req, res) => {
+  if (LLM_SETTINGS_LOCKED) return res.status(403).json({ error: "The LLM settings are locked (LLM_SETTINGS_LOCK=true) and can only be changed in the environment." });
+  const body = req.body || {};
+  const next = { ...llmSettings };
+  if (body.baseUrl !== undefined) {
+    const url = String(body.baseUrl).trim().replace(/\/+$/, "");
+    if (!/^https?:\/\/[^\s]+$/i.test(url)) return res.status(400).json({ error: "The endpoint must be a URL starting with http:// or https://." });
+    next.baseUrl = url;
+  }
+  if (body.model !== undefined) {
+    const model = String(body.model).trim();
+    if (!model) return res.status(400).json({ error: "The model name cannot be empty." });
+    next.model = model;
+  }
+  const key = String(body.apiKey ?? "").trim();
+  if (key) next.apiKey = key;
+  Object.assign(llmSettings, next);
+  rebuildLlmClients();
+  console.log(`[llm] now ${llmSettings.baseUrl} (${llmSettings.model}), key ${key ? "updated" : "unchanged"}`);
+  res.json({ baseUrl: llmSettings.baseUrl, model: llmSettings.model, keyConfigured: llmSettings.apiKey !== "no-key" && llmSettings.apiKey !== "", locked: LLM_SETTINGS_LOCKED });
+});
+
 app.get("/api/config", (req, res) => {
   const info = sqlEngine.describe();
   res.json({
-    llmBaseUrl: LLM_BASE_URL,
-    llmModel: LLM_MODEL,
+    llmBaseUrl: llmSettings.baseUrl,
+    llmModel: llmSettings.model,
+    llmKeyConfigured: llmSettings.apiKey !== "no-key" && llmSettings.apiKey !== "",
+    llmLocked: LLM_SETTINGS_LOCKED,
     version: APP_VERSION,
     costGuard: costGuardView(),
     dbPath: path.basename(DB_PATH),
@@ -1074,14 +1113,14 @@ const abRunner = createAbRunner({
   sqlFits: sqlFitsSchema,
   runPipeline: (question, opts) => runPipeline(question, opts),
   runQuery: (sql) => runQuery(sql),
-  model: LLM_MODEL,
+  model: () => llmSettings.model,
 });
 
 app.get("/api/ab/status", (req, res) => res.json(abRunner.status()));
 app.get("/api/ab/cases", async (req, res) => {
   try {
     const cases = await abRunner.eligibleCases();
-    res.json({ model: LLM_MODEL, total: benchmarkStore.listCases().length, eligible: cases.map((c) => ({ id: c.id, question: c.question })) });
+    res.json({ model: llmSettings.model, total: benchmarkStore.listCases().length, eligible: cases.map((c) => ({ id: c.id, question: c.question })) });
   } catch (exc) {
     res.status(500).json({ error: describeError(exc) });
   }
@@ -1155,7 +1194,7 @@ if (runDirectly) app.listen(PORT, () => {
     `SQL engine: ${engineInfo.type} -> ${engineInfo.location}` +
       (engineInfo.endpoint ? ` (endpoint: ${engineInfo.endpoint})` : "")
   );
-  log(`LLM: ${LLM_BASE_URL} (${LLM_MODEL})`);
+  log(`LLM: ${llmSettings.baseUrl} (${llmSettings.model})`);
 });
 
 // The pipeline pieces the MCP gateway reuses, so the web UI and MCP share one code path.
@@ -1169,5 +1208,5 @@ export const pipeline = {
   getKnowledge: () => loadKnowledge(KNOWLEDGE_PATH),
   analyzeQuery: (sql) => (typeof sqlEngine.analyzeQuery === "function" ? sqlEngine.analyzeQuery(sql) : null),
   describeEngine: () => sqlEngine.describe(),
-  llmModel: LLM_MODEL,
+  get llmModel() { return llmSettings.model; },
 };

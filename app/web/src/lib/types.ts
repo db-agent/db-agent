@@ -121,6 +121,8 @@ export interface CostGuard {
 export interface AppConfig {
   llmBaseUrl: string;
   llmModel: string;
+  llmKeyConfigured?: boolean;
+  llmLocked?: boolean;
   costGuard?: CostGuard;
   version?: { commit: string | null; short: string; source: string };
   dbPath: string;

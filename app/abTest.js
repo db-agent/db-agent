@@ -70,7 +70,7 @@ export function createAbRunner({ listCases, getSchema, sqlFits, runPipeline, run
       const cases = await this.eligibleCases(ids);
       if (cases.length === 0) throw new Error("No benchmark question fits the connected database. Add questions with their correct SQL first.");
       cancelled = false;
-      job = { id: crypto.randomBytes(4).toString("hex"), status: "running", model, startedAt: new Date(now()).toISOString(), finishedAt: null, total: cases.length, done: 0, current: null, results: [], summary: summarize([]) };
+      job = { id: crypto.randomBytes(4).toString("hex"), status: "running", model: typeof model === "function" ? model() : model, startedAt: new Date(now()).toISOString(), finishedAt: null, total: cases.length, done: 0, current: null, results: [], summary: summarize([]) };
       void run(job, cases);
       return { id: job.id, total: job.total };
     },

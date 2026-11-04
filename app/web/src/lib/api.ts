@@ -203,3 +203,19 @@ export async function saveCostGuard(limits: Partial<CostGuardLimits>): Promise<C
   if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
   return body;
 }
+
+export async function saveLlm(settings: { baseUrl?: string; model?: string; apiKey?: string }): Promise<{
+  baseUrl: string;
+  model: string;
+  keyConfigured: boolean;
+  locked: boolean;
+}> {
+  const res = await fetch("/api/llm", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+  return body;
+}
