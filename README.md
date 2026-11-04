@@ -63,29 +63,56 @@ Open `http://localhost:3001`. Any OpenAI-compatible endpoint works instead of Ol
 
 **Docker, no cloud account** (Postgres demo data): see [`app/README.md`](./app/README.md#docker-demo-postgres-no-cloud-account).
 
-**Databricks Apps:**
+**Databricks Apps, one command with [labagent](https://github.com/becloudready/labagent)** (Databricks Free Edition works). Step-by-step with screenshots: [workshop guide](./app/docs/workshop/run-text-to-sql-agent-databricks-free-edition.md).
 
-## Deploy db-agent in Databricks with labagent on Windows
+macOS:
 
-```powershell
-# 1. Install prerequisites & labagent
-winget install Python.Python.3.14
-Invoke-WebRequest -Uri https://bootstrap.pypa.io/get-pip.py -OutFile get-pip.py
-python get-pip.py
-pip install labagent
-
-# 2. Install Databricks CLI
-winget install Databricks.DatabricksCLI
-
-# 3. Authenticate Databricks
-$env:DATABRICKS_AUTH_STORAGE="plaintext"
+```bash
+brew tap databricks/tap && brew trust databricks/tap && brew install databricks   # Databricks CLI
+brew install pipx && pipx ensurepath && pipx install labagent
 databricks auth login
-
-# 4. Launch DB Agent
-labagent launch db-agent --name demo-1 --param profile=DEFAULT
+labagent launch db-agent --name demo
 ```
 
-**More:** [ontology and scan](./app/docs/ontology.md) · [MCP gateway](./app/docs/mcp-gateway.md) · [full configuration](./app/README.md)
+Windows (PowerShell):
+
+```powershell
+winget install Databricks.DatabricksCLI
+winget install Python.Python.3.14
+winget install Git.Git
+# open a new PowerShell window, then:
+python -m pip install labagent
+$env:DATABRICKS_AUTH_STORAGE="plaintext"   # only if the login does not stay saved
+databricks auth login
+labagent launch db-agent --name demo --param profile=DEFAULT
+```
+
+Remove it with `labagent destroy db-agent --name demo`.
+
+**Databricks Apps, manual deploy:**
+
+```bash
+cd app
+databricks apps create db-agent-node --description "DB Agent"
+databricks sync . /Workspace/Users/<you>/db-agent-node \
+  --exclude "node_modules/**" --exclude "web/node_modules/**" --exclude "web/dist/**"
+databricks apps deploy db-agent-node --source-code-path /Workspace/Users/<you>/db-agent-node
+```
+
+**Run locally on Windows** (PowerShell, no bash): install Node.js and Ollama (`winget install OpenJS.NodeJS.LTS` and `winget install Ollama.Ollama`), then:
+
+```powershell
+cd app
+copy .env.example .env      # set DATABRICKS_HOST, DATABRICKS_HTTP_PATH, DATABRICKS_TOKEN
+ollama pull qwen2.5-coder:7b   # then set LLM_MODEL=qwen2.5-coder:7b in .env
+npm install
+npm run build
+npm start
+```
+
+Open `http://localhost:3001`. The server reads `.env` itself, so `run_local.sh` is not needed.
+
+**More:** [workshop guide](./app/docs/workshop/run-text-to-sql-agent-databricks-free-edition.md) · [ontology and scan](./app/docs/ontology.md) · [MCP gateway](./app/docs/mcp-gateway.md) · [full configuration](./app/README.md)
 
 ---
 
