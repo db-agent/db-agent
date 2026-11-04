@@ -181,6 +181,13 @@ changes from the UI, which you should do wherever the gateway is shared, since a
 **Small data:** the Databricks `samples.bakehouse` data has only a few thousand rows, so `SELECT *` runs under the default row limit.
 To show the guard on it, turn the row limit down to 1000 in the UI.
 
+## LLM settings
+
+Sidebar, **LLM settings**: endpoint, model and API key for any OpenAI-compatible service (default `https://api.openai.com/v1`,
+`gpt-4o-mini`). The key is kept in the server's memory only, is never returned by the API, and applies to everyone using that
+server until it restarts, so on a shared or public deployment treat it as one shared key. Set `LLM_SETTINGS_LOCK=true` to refuse
+changes from the UI. The sidebar also has the Databricks connection form, which works from the bundled SQLite demo database too.
+
 ## Version
 
 The sidebar shows the commit this copy runs (`version abc1234`, hover for the full hash; `-dirty` means uncommitted changes).

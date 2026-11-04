@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { LlmSettings } from "@/components/LlmSettings";
 import { CostGuardSettings } from "@/components/CostGuardSettings";
 import { getSqlEngineIcon } from "@/components/SqlEngineIcon";
 import { saveSqlConnection } from "@/lib/api";
@@ -67,7 +68,10 @@ export function Sidebar({
   }, [config?.databricks]);
 
   const showDatabricksForm =
-    !config?.sqlEngine || config.sqlEngine === "databricks-sql" || Boolean(config.databricks);
+    !config?.sqlEngine ||
+    config.sqlEngine === "databricks-sql" ||
+    config.sqlEngine === "sqlite" ||
+    Boolean(config.databricks);
 
   async function handleSaveConnection() {
     setSaving(true);
@@ -324,6 +328,18 @@ export function Sidebar({
             ) : (
               <p className="text-xs text-muted-foreground">Loading…</p>
             )}
+          </AccordionContent>
+        </AccordionItem>
+        <AccordionItem value="llm-settings">
+          <AccordionTrigger className="py-1 text-xs font-medium">
+            <span className="flex items-center gap-1.5">
+              <Server className="size-3.5" />
+              LLM settings
+              {config && config.llmKeyConfigured === false && <AlertTriangle className="size-3.5 text-destructive" />}
+            </span>
+          </AccordionTrigger>
+          <AccordionContent>
+            <LlmSettings config={config} onSaved={onConnectionSaved} />
           </AccordionContent>
         </AccordionItem>
         <AccordionItem value="cost-guard">

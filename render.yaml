@@ -5,10 +5,11 @@
 # the next request). The bundled SQLite demo DB ships in the repo; memory and
 # feedback writes go to ephemeral disk and reset on each deploy — fine for a demo.
 #
-# LLM_* values below are placeholders so the app boots and serves the UI and
-# schema browser without any real key; /api/ask returns an error until a real
-# OpenAI-compatible endpoint is configured in the Render dashboard
-# (Environment → edit LLM_BASE_URL / LLM_API_KEY / LLM_MODEL).
+# The app starts on the bundled SQLite demo database and the OpenAI endpoint (gpt-4o-mini). It holds no API key:
+# open the sidebar, LLM settings, and paste one (kept in server memory, applies to everyone using this
+# service, gone on restart). The same sidebar has a Databricks connection form to point it at a warehouse.
+# For an always-on key, add LLM_API_KEY in the Render dashboard (Environment).
+# Nothing here points at any Databricks workspace.
 services:
   - type: web
     name: db-agent-demo
@@ -20,12 +21,15 @@ services:
     healthCheckPath: /api/config
     autoDeploy: true
     envVars:
+      # node:sqlite needs Node 22.5 or newer.
+      - key: NODE_VERSION
+        value: "22"
+      - key: SQL_ENGINE
+        value: sqlite
       - key: LLM_BASE_URL
-        value: "https://placeholder.invalid/v1"
-      - key: LLM_API_KEY
-        value: "placeholder-set-me-in-dashboard"
+        value: "https://api.openai.com/v1"
       - key: LLM_MODEL
-        value: "placeholder"
+        value: "gpt-4o-mini"
       # Public single-instance demo: cross-agent memory does nothing useful here
       # and would double LLM calls per question once a real key is added.
       - key: MEMORY_ENABLED
