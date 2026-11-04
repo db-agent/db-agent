@@ -13,7 +13,8 @@ import { createMemoryBackend, listMemoryBackends } from "./memoryBackends/index.
 import { createSqlEngine, listSqlEngines } from "./sqlEngines/index.js";
 import { formatKnowledge, loadKnowledge, selectRelevantKnowledge } from "./knowledge.js";
 import { validateSql } from "./sqlSafety.js";
-import { needsCostAnalysis } from "./queryShape.js";
+import { collapsesRows, needsCostAnalysis } from "./queryShape.js";
+import { APP_VERSION } from "./version.js";
 import { sqlFitsSchema } from "./exampleFit.js";
 import { createAbRunner } from "./abTest.js";
 import { readMetadata, scanMetadata } from "./ontology/scan.js";
@@ -445,9 +446,15 @@ function buildMergedKnowledge(schema, { includeBenchmarks = true } = {}) {
 // engine's estimate is known and under ALL limits (bytes, rows, and
 // APPROVAL_MAX_COST_USD, which uses the high end of the cost range); 0 disables that limit.
 // APPROVAL_ALWAYS=true restores "ask for every query".
-const APPROVAL_MAX_BYTES = Number(process.env.APPROVAL_MAX_BYTES ?? 100 * 1024 ** 2);
-const APPROVAL_MAX_ROWS = Number(process.env.APPROVAL_MAX_ROWS ?? 100000);
-const APPROVAL_MAX_COST_USD = Number(process.env.APPROVAL_MAX_COST_USD ?? 0.25);
+// The limits start from the environment and can be changed at runtime from the UI (PUT /api/cost-guard).
+// A change lasts until the process restarts and applies to the MCP gateway too, so COST_GUARD_LOCK=true refuses changes.
+const COST_GUARD_DEFAULTS = {
+  maxBytes: Number(process.env.APPROVAL_MAX_BYTES ?? 100 * 1024 ** 2),
+  maxRows: Number(process.env.APPROVAL_MAX_ROWS ?? 100000),
+  maxCostUsd: Number(process.env.APPROVAL_MAX_COST_USD ?? 0.25),
+};
+const costGuard = { ...COST_GUARD_DEFAULTS };
+const COST_GUARD_LOCKED = (process.env.COST_GUARD_LOCK || "false").toLowerCase() === "true";
 // COST_ANALYSIS=auto (default): only analyze queries that may return a large
 // result (see queryShape.js); bounded ones (small LIMIT, single-row
 // aggregates) run straight away. "always" analyzes every query.
@@ -455,7 +462,7 @@ const COST_ANALYSIS = (process.env.COST_ANALYSIS || "auto").toLowerCase();
 const ANALYZE_SKIP_LIMIT = Number(process.env.ANALYZE_SKIP_LIMIT ?? 1000);
 const APPROVAL_ALWAYS = (process.env.APPROVAL_ALWAYS || "false").toLowerCase() === "true";
 
-function approvalReason(analysis) {
+function approvalReason(analysis, sql) {
   if (APPROVAL_ALWAYS) return "Approval required for every query (APPROVAL_ALWAYS).";
   if (!analysis || analysis.error) {
     return `Cost estimate unavailable${analysis?.error ? ` (${analysis.error})` : ""}, so the query was not run automatically.`;
@@ -463,16 +470,17 @@ function approvalReason(analysis) {
   if (analysis.sizeInBytes == null && analysis.rowCount == null) {
     return "Optimizer returned no size or row estimate, so the query was not run automatically.";
   }
-  if (APPROVAL_MAX_BYTES > 0 && analysis.sizeInBytes != null && analysis.sizeInBytes > APPROVAL_MAX_BYTES) {
-    return `Estimated data size ${analysis.sizeLabel || analysis.sizeInBytes + " B"} exceeds the ${(APPROVAL_MAX_BYTES / 1024 ** 2).toFixed(0)} MB limit.`;
+  if (costGuard.maxBytes > 0 && analysis.sizeInBytes != null && analysis.sizeInBytes > costGuard.maxBytes) {
+    return `Estimated data size ${analysis.sizeLabel || analysis.sizeInBytes + " B"} exceeds the ${(costGuard.maxBytes / 1024 ** 2).toFixed(0)} MB limit.`;
   }
-  if (APPROVAL_MAX_ROWS > 0 && analysis.rowCount != null && analysis.rowCount > APPROVAL_MAX_ROWS) {
-    return `Estimated ${Math.round(analysis.rowCount).toLocaleString()} rows exceeds the ${APPROVAL_MAX_ROWS.toLocaleString()} row limit.`;
+  // The row estimate is only trusted for queries that return roughly one row per input row (SELECT *, plain filters).
+  if (costGuard.maxRows > 0 && analysis.rowCount != null && analysis.rowCount > costGuard.maxRows && !(sql && collapsesRows(sql))) {
+    return `Estimated ${Math.round(analysis.rowCount).toLocaleString()} rows exceeds the ${costGuard.maxRows.toLocaleString()} row limit.`;
   }
   const c = analysis.cost;
   const worst = c && !c.error ? (c.usdHigh ?? c.usd) : null;
-  if (APPROVAL_MAX_COST_USD > 0 && worst != null && worst > APPROVAL_MAX_COST_USD) {
-    return `Estimated compute cost up to $${worst.toFixed(2)} exceeds the $${APPROVAL_MAX_COST_USD.toFixed(2)} limit.`;
+  if (costGuard.maxCostUsd > 0 && worst != null && worst > costGuard.maxCostUsd) {
+    return `Estimated compute cost up to $${worst.toFixed(2)} exceeds the $${costGuard.maxCostUsd.toFixed(2)} limit.`;
   }
   return null;
 }
@@ -597,7 +605,7 @@ async function runPipeline(question, { rawSql = null, allowTable = null, guardSq
             output.analysis = { error: describeError(analyzeErr), rawPlan: null };
             warn(`[ask] EXPLAIN COST failed (non-fatal): ${output.analysis.error}`);
           }
-          const reason = approvalReason(output.analysis);
+          const reason = approvalReason(output.analysis, currentSql);
           log(
             `[ask] EXPLAIN COST: size=${output.analysis.sizeLabel ?? "n/a"} ` +
               `rows=${output.analysis.rowCount ?? "n/a"}` +
@@ -732,11 +740,33 @@ app.get("/api/example-questions", async (req, res) => {
   }
 });
 
+const costGuardView = () => ({
+  limits: { ...costGuard }, defaults: { ...COST_GUARD_DEFAULTS }, locked: COST_GUARD_LOCKED,
+});
+
+// Body: any of maxBytes (bytes), maxRows, maxCostUsd. 0 turns that limit off.
+app.put("/api/cost-guard", (req, res) => {
+  if (COST_GUARD_LOCKED) return res.status(403).json({ error: "The cost guard is locked (COST_GUARD_LOCK=true) and can only be changed in the environment." });
+  const body = req.body || {};
+  const next = { ...costGuard };
+  for (const key of ["maxBytes", "maxRows", "maxCostUsd"]) {
+    if (body[key] === undefined) continue;
+    const n = Number(body[key]);
+    if (!Number.isFinite(n) || n < 0) return res.status(400).json({ error: `${key} must be a number, 0 or more (0 turns the limit off).` });
+    next[key] = n;
+  }
+  Object.assign(costGuard, next);
+  console.log(`[cost-guard] limits now bytes=${costGuard.maxBytes} rows=${costGuard.maxRows} costUsd=${costGuard.maxCostUsd}`);
+  res.json(costGuardView());
+});
+
 app.get("/api/config", (req, res) => {
   const info = sqlEngine.describe();
   res.json({
     llmBaseUrl: LLM_BASE_URL,
     llmModel: LLM_MODEL,
+    version: APP_VERSION,
+    costGuard: costGuardView(),
     dbPath: path.basename(DB_PATH),
     sqlEngine: activeSqlEngineName,
     sqlEngineInfo: info,

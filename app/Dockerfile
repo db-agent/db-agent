@@ -12,6 +12,9 @@ RUN npm run build
 
 FROM node:22-bookworm-slim
 WORKDIR /app
+# Commit shown in the UI: docker build --build-arg GIT_COMMIT=$(git rev-parse HEAD) (compose passes it from the shell).
+ARG GIT_COMMIT=
+ENV GIT_COMMIT=$GIT_COMMIT
 ENV NODE_ENV=production
 ENV PORT=3001
 COPY package.json package-lock.json ./

@@ -1,4 +1,4 @@
-import type { AbStatus, AppConfig, BenchmarkCase, Knowledge, MemoryRecord, OntologyState, PipelineOutput, ScanResult, Schema } from "./types";
+import type { AbStatus, AppConfig, CostGuard, CostGuardLimits, BenchmarkCase, Knowledge, MemoryRecord, OntologyState, PipelineOutput, ScanResult, Schema } from "./types";
 
 export async function fetchConfig(): Promise<AppConfig> {
   const res = await fetch("/api/config");
@@ -191,4 +191,15 @@ export async function fetchAbStatus(): Promise<AbStatus> {
 
 export async function cancelAbTest(): Promise<void> {
   await fetch("/api/ab/cancel", { method: "POST" });
+}
+
+export async function saveCostGuard(limits: Partial<CostGuardLimits>): Promise<CostGuard> {
+  const res = await fetch("/api/cost-guard", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(limits),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+  return body;
 }

@@ -162,6 +162,10 @@ jobs:
           echo "WORKSPACE_PATH=$PATH_FROM_APP" >> "$GITHUB_ENV"
           echo "Workspace source path: $PATH_FROM_APP"
 
+      # Databricks Apps has no git, so the commit shown in the UI comes from this file (see app/version.js).
+      - name: Stamp the commit shown in the UI
+        run: echo "$GITHUB_SHA" > app/VERSION
+
       - name: Sync app/ source to workspace
         run: |
           databricks workspace mkdirs "$WORKSPACE_PATH"
