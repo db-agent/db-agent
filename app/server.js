@@ -10,7 +10,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { fetchRelevantMemories, invalidateFollowup, writeMemory } from "./memory.js";
 import { createMemoryBackend, listMemoryBackends } from "./memoryBackends/index.js";
-import { createSqlEngine, listSqlEngines } from "./sqlEngines/index.js";
+import { createSqlEngine, defaultSqlEngine, listSqlEngines } from "./sqlEngines/index.js";
 import { formatKnowledge, loadKnowledge, selectRelevantKnowledge } from "./knowledge.js";
 import { validateSql } from "./sqlSafety.js";
 import { collapsesRows, needsCostAnalysis } from "./queryShape.js";
@@ -84,7 +84,7 @@ const memoryBackend = createMemoryBackend(process.env.MEMORY_BACKEND, {
 // sqlEngines/index.js — default is "databricks-sql". Mutable so the sidebar
 // can reconnect via POST /api/sql-connection without restarting the process.
 const DATA_DIR = path.join(__dirname, "data");
-let activeSqlEngineName = (process.env.SQL_ENGINE || "databricks-sql").toLowerCase();
+let activeSqlEngineName = defaultSqlEngine(process.env);
 let sqlEngine = createSqlEngine(activeSqlEngineName, {
   env: process.env,
   dataDir: DATA_DIR,

@@ -107,6 +107,15 @@ export function listSqlEngines() {
 // an explicit param (rather than each engine computing its own
 // __dirname-relative path) so it's resolved the same way regardless of
 // engine, same reasoning as memoryBackends/index.js's createMemoryBackend.
+// The engine to use when the caller does not name one: SQL_ENGINE if set, else Databricks SQL when its five
+// connection variables are all present, else the bundled SQLite demo database. The last case is what a fresh
+// deploy with no credentials (Render, a bare clone) gets, instead of a crash at startup.
+export function defaultSqlEngine(env = process.env) {
+  if (env.SQL_ENGINE) return env.SQL_ENGINE.toLowerCase();
+  const databricks = ["DATABRICKS_HOST", "DATABRICKS_HTTP_PATH", "DATABRICKS_TOKEN", "DATABRICKS_CATALOG", "DATABRICKS_SCHEMA"];
+  return databricks.every((k) => env[k]) ? "databricks-sql" : "sqlite";
+}
+
 export function createSqlEngine(name, { env = process.env, dataDir } = {}) {
   // Default is Databricks SQL; set SQL_ENGINE=sqlite|postgres|minio-duckdb to override.
   const key = (name || "databricks-sql").toLowerCase();
