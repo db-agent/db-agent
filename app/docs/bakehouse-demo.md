@@ -23,7 +23,7 @@ The data is `main.bakehouse_seed` (made by `scripts/seed-bakehouse.js` from `sam
 4. **Start:**
    ```bash
    cd app
-   docker compose -f docker-compose.bakehouse.yml up --build -d
+   GIT_COMMIT=$(git rev-parse HEAD) docker compose -f docker-compose.bakehouse.yml up --build -d
    ```
    The first build takes a few minutes. Later starts take seconds.
 5. **Check everything:**

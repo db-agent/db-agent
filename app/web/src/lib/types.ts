@@ -109,6 +109,7 @@ export interface DatabricksConfig {
 export interface AppConfig {
   llmBaseUrl: string;
   llmModel: string;
+  version?: { commit: string | null; short: string; source: string };
   dbPath: string;
   sqlEngine: string;
   sqlEngineInfo: SqlEngineInfo;

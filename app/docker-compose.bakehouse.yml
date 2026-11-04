@@ -19,7 +19,10 @@
 name: dbagent-bakehouse
 
 x-agent: &agent
-  build: .
+  build:
+    context: .
+    args:
+      GIT_COMMIT: ${GIT_COMMIT:-}   # GIT_COMMIT=$(git rev-parse HEAD) docker compose ... up --build
   entrypoint: ["sh", "docker/bakehouse/agent-entrypoint.sh"]
   environment: &agent-env
     SQL_ENGINE: databricks-sql
@@ -43,11 +46,11 @@ x-agent: &agent
     GATEWAY_CONFIG: /app/gateway.example.json
     # Loose matching finds notes for "customers" in sales_customers.
     KNOWLEDGE_MATCH: loose
-    # Cost guard relaxed for this demo: Databricks estimates 4,000,000 rows for a GROUP BY that returns 6, so with the
-    # defaults (100 MB, 100,000 rows) even "revenue per product" waits for approval and the accuracy test cannot run it.
-    # The cost-guard demo uses the default limits elsewhere.
+    # Cost guard for this demo: Databricks reports the whole table (461 MiB, 4,000,000 rows) for a GROUP BY that returns 6,
+    # so the byte limit is raised above the table size or "revenue per product" would wait for approval and the accuracy
+    # test could not run it. The row limit stays at its default of 100,000, and applies to queries that return rows
+    # one for one (SELECT *), so "SELECT * FROM sales_transactions" still waits for approval.
     APPROVAL_MAX_BYTES: "2147483648"
-    APPROVAL_MAX_ROWS: "0"
     GATEWAY_DB: /app/data/gateway.db
   extra_hosts:
     - "host.docker.internal:host-gateway"

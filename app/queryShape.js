@@ -53,6 +53,16 @@ export function isBoundedQuery(sql, { skipLimit = 1000 } = {}) {
   return items.length > 0 && items.every((x) => AGG_ITEM.test(x));
 }
 
+// True when the SELECT folds many input rows into few output rows (GROUP BY, DISTINCT, HAVING or a one-row
+// aggregate). For those the optimizer's row estimate describes the table it scans, not what comes back
+// (Databricks reports 4,000,000 rows for a GROUP BY that returns 6), so the row limit should not apply.
+export function collapsesRows(sql) {
+  const t = topLevel(sql);
+  if (!t) return false;
+  if (/\bGROUP\s+BY\b|\bDISTINCT\b|\bHAVING\b/i.test(t)) return true;
+  return isBoundedQuery(t, { skipLimit: 0 });
+}
+
 export function needsCostAnalysis(sql, opts) {
   return !isBoundedQuery(sql, opts);
 }
