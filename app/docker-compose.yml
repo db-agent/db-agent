@@ -45,7 +45,10 @@ services:
     restart: "no"
 
   app:
-    build: .
+    build:
+      context: .
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-}   # GIT_COMMIT=$(git rev-parse HEAD) docker compose up --build
     ports:
       - "${APP_PORT:-3001}:3001"
     environment:

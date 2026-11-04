@@ -164,6 +164,36 @@ a legal HTTP header value`. Use `printf %s "$TOKEN" | ...` instead (what
 the GitHub Actions workflow does). `server.js` also defensively `.trim()`s
 `LLM_API_KEY`/`EMBEDDING_API_KEY` regardless of how they were set.
 
+## Cost guard
+
+Before a query runs, the engine estimates it (`EXPLAIN` or `EXPLAIN COST`). A query waits for approval when the estimate is
+over any limit that is on, or when no estimate is available.
+
+| Limit | Default | Environment variable | Meaning |
+|---|---|---|---|
+| Rows | 100,000 | `APPROVAL_MAX_ROWS` | Estimated rows. Applies to queries that return row for row (`SELECT *`, plain filters). `GROUP BY`, `DISTINCT`, `HAVING` and one-row aggregates are exempt, because the optimizer's row estimate describes the table it scans, not the result. |
+| Data scanned | 100 MB | `APPROVAL_MAX_BYTES` | Estimated size of the data, in bytes. |
+| Warehouse cost | $0.25 | `APPROVAL_MAX_COST_USD` | High end of the estimated compute cost. |
+
+`0` turns a limit off. Queries with a small `LIMIT` and one-row aggregates skip the estimate (`COST_ANALYSIS=always` to
+estimate everything). The same limits apply to the web UI and the MCP gateway.
+
+**Change them in the UI:** sidebar, **Cost guard**. Each limit has an on/off box and a number. A change applies to the next question
+and lasts until the app restarts (set the environment variables for a permanent change). Set `COST_GUARD_LOCK=true` to refuse
+changes from the UI, which you should do wherever the gateway is shared, since anyone who can open the UI could otherwise raise the limits.
+
+**Small data:** the Databricks `samples.bakehouse` data has only a few thousand rows, so `SELECT *` runs under the default row limit.
+To show the guard on it, turn the row limit down to 1000 in the UI.
+
+## Version
+
+The sidebar shows the commit this copy runs (`version abc1234`, hover for the full hash; `-dirty` means uncommitted changes).
+It comes from `GIT_COMMIT`, then `git` in a checkout, then an `app/VERSION` file, and shows `unknown` if none is available.
+
+- Docker: `GIT_COMMIT=$(git rev-parse HEAD) docker compose up --build`
+- Databricks Apps (no git inside the app): the deploy workflow writes `app/VERSION`. For a manual deploy run `git rev-parse HEAD > VERSION` in `app/` before `databricks sync`, and do not commit that file.
+- Databricks Apps deployed by `labagent` shows the version only after labagent's pinned db-agent commit includes this feature.
+
 ## Notes
 
 - Uses Node's built-in `node:sqlite` module (stable in Node ≥ 22.5) — no
