@@ -106,9 +106,22 @@ export interface DatabricksConfig {
   tokenConfigured: boolean;
 }
 
+export interface CostGuardLimits {
+  maxBytes: number;
+  maxRows: number;
+  maxCostUsd: number;
+}
+
+export interface CostGuard {
+  limits: CostGuardLimits;
+  defaults: CostGuardLimits;
+  locked: boolean;
+}
+
 export interface AppConfig {
   llmBaseUrl: string;
   llmModel: string;
+  costGuard?: CostGuard;
   version?: { commit: string | null; short: string; source: string };
   dbPath: string;
   sqlEngine: string;

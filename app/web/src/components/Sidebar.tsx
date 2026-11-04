@@ -8,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { CostGuardSettings } from "@/components/CostGuardSettings";
 import { getSqlEngineIcon } from "@/components/SqlEngineIcon";
 import { saveSqlConnection } from "@/lib/api";
 import type { AppConfig, Conversation, Schema } from "@/lib/types";
@@ -323,6 +324,17 @@ export function Sidebar({
             ) : (
               <p className="text-xs text-muted-foreground">Loading…</p>
             )}
+          </AccordionContent>
+        </AccordionItem>
+        <AccordionItem value="cost-guard">
+          <AccordionTrigger className="py-1 text-xs font-medium">
+            <span className="flex items-center gap-1.5">
+              <AlertTriangle className="size-3.5" />
+              Cost guard
+            </span>
+          </AccordionTrigger>
+          <AccordionContent>
+            <CostGuardSettings guard={config?.costGuard} />
           </AccordionContent>
         </AccordionItem>
       </Accordion>
