@@ -63,7 +63,7 @@ Open `http://localhost:3001`. Any OpenAI-compatible endpoint works instead of Ol
 
 **Docker, no cloud account** (Postgres demo data): see [`app/README.md`](./app/README.md#docker-demo-postgres-no-cloud-account).
 
-**Databricks Apps, one command with [labagent](https://github.com/becloudready/labagent)** (Databricks Free Edition works). Step-by-step with screenshots: [workshop guide](./app/docs/workshop/run-text-to-sql-agent-databricks-free-edition.md).
+**Databricks Apps, one command with [labagent](https://github.com/becloudready/labagent)** (Databricks Free Edition works). Step-by-step with screenshots: [workshop guide](https://becloudready.com/blog/run-text-to-sql-ai-agent-databricks-free-edition-setup-guide).
 
 macOS:
 
@@ -112,7 +112,7 @@ npm start
 
 Open `http://localhost:3001`. The server reads `.env` itself, so `run_local.sh` is not needed.
 
-**More:** [workshop guide](./app/docs/workshop/run-text-to-sql-agent-databricks-free-edition.md) · [ontology and scan](./app/docs/ontology.md) · [MCP gateway](./app/docs/mcp-gateway.md) · [full configuration](./app/README.md)
+**More:** [workshop guide](https://becloudready.com/blog/run-text-to-sql-ai-agent-databricks-free-edition-setup-guide) · [ontology and scan](./app/docs/ontology.md) · [MCP gateway](./app/docs/mcp-gateway.md) · [full configuration](./app/README.md)
 
 ---
 
