@@ -13,7 +13,7 @@
 **Featured In**
 
 - **AAAI-25 Workshop on Open-Source AI for Mainstream Use** (Philadelphia, March 2025) — DB Agent presented as a reference implementation for production text-to-SQL agents. [Workshop program](https://the-ai-alliance.github.io/AAAI-25-Workshop-on-Open-Source-AI-for-Mainstream-Use/program/) · [Paper](./assets/OSAI4MU-25_submission_paper_v2_format.pdf)
-- **AWS User group Toronto** (Toronto, Nov 2026) - DB agent workshop highlighting Databricks App usecase along with Ontology and alternative open model choice. [Workshop Slides] (./assets/AWS-user-group-toronto-db0-agent-Nov-2026.pdf)
+- **AWS User group Toronto** (Toronto, Nov 2026) - DB agent workshop highlighting Databricks App usecase along with Ontology and alternative open model choice. [Workshop Slides](./assets/AWS-user-group-toronto-db0-agent-Nov-2026.pdf)
 
 ---
 
