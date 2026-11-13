@@ -53,12 +53,21 @@ const bool = (v, fallback) => {
 };
 
 // varbinary/image columns come back as Buffers; show them as 0x… hex like SSMS does.
-function normalizeRow(row) {
-  for (const key of Object.keys(row)) {
-    const v = row[key];
-    if (Buffer.isBuffer(v)) row[key] = `0x${v.toString("hex").toUpperCase()}`;
-  }
-  return row;
+const normalizeValue = (v) => (Buffer.isBuffer(v) ? `0x${v.toString("hex").toUpperCase()}` : v);
+
+// SQL Server leaves computed columns without an alias unnamed (SELECT COUNT(*) has
+// column name ""), and allows the same name twice. Give every column a usable,
+// unique name: unnamed ones become column1, column2, … by position (as SSMS shows
+// "(No column name)"), and repeats get a _2, _3 suffix instead of overwriting.
+export function columnNames(rawNames) {
+  const used = new Set();
+  return rawNames.map((raw, i) => {
+    const base = raw ? String(raw) : `column${i + 1}`;
+    let name = base;
+    for (let k = 2; used.has(name); k += 1) name = `${base}_${k}`;
+    used.add(name);
+    return name;
+  });
 }
 
 // Runs `sqlText` on a streaming mssql Request. Without onBatch, collects up to
@@ -69,6 +78,7 @@ function normalizeRow(row) {
 export function streamRequest(request, sqlText, { maxRows = Infinity, batchSize = Infinity, onBatch = null } = {}) {
   return new Promise((resolve, reject) => {
     request.stream = true;
+    request.arrayRowMode = true; // rows as arrays, so unnamed/duplicate columns keep their values
     let columns = [];
     let rows = [];
     let total = 0;
@@ -86,12 +96,16 @@ export function streamRequest(request, sqlText, { maxRows = Infinity, batchSize 
 
     request.on("recordset", (cols) => {
       if (columns.length) return;
-      columns = Object.values(cols || {}).sort((a, b) => a.index - b.index).map((c) => c.name);
+      const list = Array.isArray(cols) ? cols : Object.values(cols || {});
+      columns = columnNames([...list].sort((a, b) => a.index - b.index).map((c) => c.name));
     });
 
-    request.on("row", (row) => {
+    request.on("row", (values) => {
       if (cancelled) return;
-      rows.push(normalizeRow(row));
+      const row = {};
+      if (Array.isArray(values)) columns.forEach((name, i) => { row[name] = normalizeValue(values[i]); });
+      else for (const [k, v] of Object.entries(values || {})) row[k] = normalizeValue(v);
+      rows.push(row);
       total += 1;
       if (onBatch && rows.length >= batchSize) {
         const batch = rows;
@@ -134,7 +148,7 @@ export function streamRequest(request, sqlText, { maxRows = Infinity, batchSize 
 export class MssqlEngine {
   constructor({
     connectionString, server, port, instanceName, database, user, password,
-    encrypt, trustServerCertificate, schema, maxRows, requestTimeoutMs,
+    encrypt, trustServerCertificate, schema, maxRows, requestTimeoutMs, connectTimeoutMs,
   }) {
     const s = parseSchemaSetting(schema);
     this.allSchemas = s.allSchemas;
@@ -143,11 +157,18 @@ export class MssqlEngine {
     this.schemaName = this.allSchemas ? "*" : this.schemaNames[0];
     this.maxRows = Number(maxRows) || 1000;
     const requestTimeout = Number(requestTimeoutMs) || 120000;
+    // Azure SQL serverless / free tier pauses when idle and can take close to a
+    // minute to resume, longer than the driver's 15 s default connect timeout.
+    const connectionTimeout = Number(connectTimeoutMs) || 60000;
     const schemaLabel = this.allSchemas ? "*" : this.schemaNames.join(",");
 
     if (connectionString) {
       const parsed = sql.ConnectionPool.parseConnectionString(connectionString);
-      this.config = { ...parsed, requestTimeout: parsed.requestTimeout ?? requestTimeout };
+      this.config = {
+        ...parsed,
+        requestTimeout: parsed.requestTimeout ?? requestTimeout,
+        connectionTimeout: parsed.connectionTimeout ?? connectionTimeout,
+      };
       this.displayLocation = `${redactMssqlConnectionString(connectionString)} (schema=${schemaLabel})`;
     } else {
       this.config = {
@@ -157,6 +178,7 @@ export class MssqlEngine {
         user,
         password,
         requestTimeout,
+        connectionTimeout,
         options: {
           encrypt: bool(encrypt, true),
           trustServerCertificate: bool(trustServerCertificate, false),

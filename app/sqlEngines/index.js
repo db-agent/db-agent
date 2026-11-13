@@ -95,6 +95,7 @@ const REGISTRY = {
         schema: env.MSSQL_SCHEMA || "dbo",
         maxRows: env.MSSQL_MAX_ROWS,
         requestTimeoutMs: env.MSSQL_REQUEST_TIMEOUT_MS,
+        connectTimeoutMs: env.MSSQL_CONNECT_TIMEOUT_MS,
       });
     },
   },

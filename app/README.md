@@ -116,6 +116,11 @@ listed in `.env.example`.
   streams the full result.
 - `db-agent scan` reads `MS_Description` extended properties, primary and foreign keys,
   and row estimates from `sys.partitions`.
+- Azure SQL serverless and free-tier databases pause when idle; the first connection
+  can take up to a minute while they resume, so the connect timeout defaults to 60 s
+  (`MSSQL_CONNECT_TIMEOUT_MS`).
+- Computed columns without an alias are named `column1`, `column2`, … by position, and
+  a repeated column name gets a `_2` suffix, so no value is lost.
 - The cost guard (plan check before running) is not available for SQL Server yet, so
   queries run directly, as with SQLite.
 
