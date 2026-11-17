@@ -23,6 +23,7 @@
     "@zilliz/milvus2-sdk-node": "^3.0.3",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
+    "mssql": "^11.0.2",
     "openai": "^4.67.0",
     "pg": "^8.22.0",
     "zod": "^3.25.76"

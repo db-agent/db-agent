@@ -88,6 +88,42 @@ turn into an index scan:
 
 `docker compose down -v` removes the data.
 
+## Microsoft SQL Server
+
+`SQL_ENGINE=mssql` connects to SQL Server 2016+, Azure SQL Database or Azure SQL
+Managed Instance through the `mssql` driver (pure JavaScript, no ODBC driver needed).
+
+```env
+SQL_ENGINE=mssql
+MSSQL_SERVER=myserver.database.windows.net   # or a hostname / IP
+MSSQL_DATABASE=AdventureWorks
+MSSQL_USER=db_agent_reader
+MSSQL_PASSWORD=...
+MSSQL_SCHEMA=dbo               # or Sales,Production, or * for every schema
+# MSSQL_TRUST_SERVER_CERT=true # on-prem server with a self-signed certificate
+```
+
+Or set one `MSSQL_URL` connection string instead
+(`Server=host,1433;Database=db;User Id=u;Password=p;Encrypt=true`). All settings are
+listed in `.env.example`.
+
+- Give the login read access only (`ALTER ROLE db_datareader ADD MEMBER db_agent_reader`).
+  The app also only accepts single SELECT statements and runs each one in a transaction
+  that is rolled back.
+- Table names are schema-qualified (`Sales.Customer`) unless the schema is just `dbo`,
+  so queries resolve whatever the login's default schema is.
+- Results shown in the UI are capped at `MSSQL_MAX_ROWS` (default 1000); CSV export
+  streams the full result.
+- `db-agent scan` reads `MS_Description` extended properties, primary and foreign keys,
+  and row estimates from `sys.partitions`.
+- Azure SQL serverless and free-tier databases pause when idle; the first connection
+  can take up to a minute while they resume, so the connect timeout defaults to 60 s
+  (`MSSQL_CONNECT_TIMEOUT_MS`).
+- Computed columns without an alias are named `column1`, `column2`, … by position, and
+  a repeated column name gets a `_2` suffix, so no value is lost.
+- The cost guard (plan check before running) is not available for SQL Server yet, so
+  queries run directly, as with SQLite.
+
 ## MCP gateway
 
 Claude Desktop, GitHub Copilot and any MCP client can query the database through db-agent with per-caller API keys,

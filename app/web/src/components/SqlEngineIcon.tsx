@@ -34,6 +34,10 @@ const REGISTRY: Record<string, SqlEngineIconEntry> = {
     icon: <Database className="size-3.5 text-[var(--brand-orange)]" />,
     label: "Postgres (or Databricks Lakebase)",
   },
+  mssql: {
+    icon: <Database className="size-3.5 text-[var(--brand-azure)]" />,
+    label: "Microsoft SQL Server",
+  },
 };
 
 const FALLBACK: SqlEngineIconEntry = {

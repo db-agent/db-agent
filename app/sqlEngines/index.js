@@ -17,6 +17,7 @@ import { SQLiteEngine } from "./sqlite.js";
 import { MinioDuckDBEngine } from "./minioDuckdb.js";
 import { PostgresEngine } from "./postgres.js";
 import { DatabricksSqlEngine } from "./databricksSql.js";
+import { MssqlEngine } from "./mssql.js";
 
 
 const REGISTRY = {
@@ -68,6 +69,33 @@ const REGISTRY = {
         schema: env.PG_SCHEMA || "public",
         maxRows: env.PG_MAX_ROWS,
         largeTableRows: env.PG_LARGE_TABLE_ROWS,
+      });
+    },
+  },
+  mssql: {
+    description:
+      "Microsoft SQL Server (2016+, Azure SQL Database, Azure SQL Managed Instance), via the mssql/tedious driver.",
+    create: (env) => {
+      if (!env.MSSQL_URL && !(env.MSSQL_SERVER && env.MSSQL_DATABASE)) {
+        throw new Error(
+          "SQL_ENGINE=mssql requires either MSSQL_URL (a full connection string) " +
+            "or MSSQL_SERVER + MSSQL_DATABASE (see .env.example)."
+        );
+      }
+      return new MssqlEngine({
+        connectionString: env.MSSQL_URL || undefined,
+        server: env.MSSQL_SERVER,
+        port: env.MSSQL_PORT || "1433",
+        instanceName: env.MSSQL_INSTANCE || undefined,
+        database: env.MSSQL_DATABASE,
+        user: env.MSSQL_USER,
+        password: env.MSSQL_PASSWORD,
+        encrypt: env.MSSQL_ENCRYPT,
+        trustServerCertificate: env.MSSQL_TRUST_SERVER_CERT,
+        schema: env.MSSQL_SCHEMA || "dbo",
+        maxRows: env.MSSQL_MAX_ROWS,
+        requestTimeoutMs: env.MSSQL_REQUEST_TIMEOUT_MS,
+        connectTimeoutMs: env.MSSQL_CONNECT_TIMEOUT_MS,
       });
     },
   },

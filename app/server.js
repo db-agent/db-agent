@@ -219,6 +219,12 @@ const DIALECT_RULES = {
     "- The database is Databricks SQL (Spark SQL) — use Databricks functions (date_sub(current_date(), 30),\n" +
     "  date_trunc, ilike, ||/concat), backtick-quote identifiers if needed, and reference tables by\n" +
     "  their bare name (the catalog and schema are already selected).",
+  mssql:
+    "- The database is Microsoft SQL Server (T-SQL). Use SELECT TOP (n) to limit rows, never LIMIT\n" +
+    "  (with ORDER BY ... OFFSET n ROWS FETCH NEXT m ROWS ONLY for paging). Use GETDATE(), DATEADD,\n" +
+    "  DATEDIFF, DATEFROMPARTS, YEAR()/MONTH(), CAST/CONVERT, CONCAT or + for strings, LEN not LENGTH,\n" +
+    "  ISNULL/COALESCE. Quote identifiers with [brackets] if needed, give every computed column an\n" +
+    "  alias, and reference tables exactly as they are named in the schema (schema.table when shown).",
 };
 const SQLITE_DIALECT_RULE =
   "- The database is SQLite — use SQLite date/string functions (date('now','-1 month')),\n" +
